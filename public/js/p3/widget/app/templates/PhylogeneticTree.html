@@ -21,7 +21,7 @@
       <div style="display: none;">
         <input data-dojo-type="dijit/form/NumberTextBox" value="0" required="false" data-dojo-attach-point="inGroupNumGenomes" data-dojo-props="constraints:{min:0,max:100}," />
         <input data-dojo-type="dijit/form/NumberTextBox" value="0" required="false" data-dojo-attach-point="outGroupNumGenomes" data-dojo-props="constraints:{min:0,max:5}," />
-        <input data-dojo-type="dijit/form/NumberTextBox" value="0" required="false" data-dojo-attach-point="codonGroupNumGenomes" data-dojo-props="constraints:{min:4,max:200}," />
+        <input data-dojo-type="dijit/form/NumberTextBox" value="0" required="false" data-dojo-attach-point="codonGroupNumGenomes" data-dojo-props="constraints:{min:4,max:1000}," />
       </div>
       <div id="startWithBox" style="width:400px; display:none" class="appBox appShadow">
         <div class="headerrow">
@@ -174,16 +174,55 @@
         </div>
         <div data-dojo-attach-point="codonOtherInputs">
           <div class="appRow">
-            <label class="paramlabel">Number of Genes:</label>
-            <div name="number_of_genes" class="medInput">
-              <select data-dojo-attach-point="number_of_genes"
+            <div name="number_of_genes" class="appRowSegment" style="width:40%;margin-left: 0px; text-align:left;">
+              <label class="paramlabel">Number of Genes:</label>
+              <select data-dojo-attach-point="number_of_genes" data-dojo-attach-event="onChange:setMaxGenomes"
                 data-dojo-type="dijit/form/Select" name="number_of_genes" required="false">
+                <option value="1">1</option>
+                <option value="2">2</option>
+                <option value="3">3</option>
+                <option value="4">4</option>
+                <option value="5">5</option>
                 <option value="10">10</option>
                 <option value="20">20</option>
                 <option value="50">50</option>
                 <option value="100" selected="selected">100</option>
                 <option value="500">500</option>
                 <option value="1000">1000</option>
+                <option value="2500">2500</option>
+                <option value="5000">5000</option>
+              </select>
+            </div>
+            <div name="protein_sub_model" class="appRowSegment" style="width:40%;margin-left: 20px; text-align:left;">
+              <label class="paramlabel">Protein Substitution Model:</label>
+              <select data-dojo-attach-point="protein_sub_model"
+                data-dojo-type="dijit/form/Select" name="protein_sub_model" required="false">
+                <option value="auto">AUTO</option>
+                <option value="dayhoff">DAYHOFF</option>
+                <option value="dcmut">DCMUT</option>
+                <option value="jtt">JTT</option>
+                <option value="mtrev">MTREV</option>
+                <option value="wag">WAG</option>
+                <option value="rtrev">RTREV</option>
+                <option value="cprev">CPREV</option>
+                <option value="vt">VT</option>
+                <option value="blosum62">BLOSUM62</option>
+                <option value="lg">LG</option>
+                <option value="mtart">MTART</option>
+                <option value="mtzoa">MTZOA</option>
+                <option value="pmb">PMB</option>
+                <option value="hivb">HIVB</option>
+                <option value="hivw">HIVW</option>
+                <option value="jttdcmut">JTTDCMUT</option>
+                <option value="flu">FLU</option>
+                <option value="stmtrev">STMTREV</option>
+                <option value="dummy">DUMMY</option>
+                <option value="dummy2">DUMMY2</option>
+                <option value="lg4m">LG4M</option>
+                <option value="lg4x">LG4X</option>
+                <option value="prot_file">PROT_FILE</option>
+                <option value="gtr_unlinked">GTR_UNLINKED</option>
+                <option value="gtr">GTR</option>
               </select>
             </div>
           </div>

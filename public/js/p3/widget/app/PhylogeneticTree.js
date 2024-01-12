@@ -45,8 +45,8 @@ define([
       this.codonGroup.genomeToAttachPt = ['codon_genome_id'];
       this.codonGroup.genomeGroupToAttachPt = ['codon_genomes_genomegroup'];
       this.codonGroup.maxGenomes = 200;
-      this.codonGroup.minGenomes = 0;
-      this.minGenomes = 4;
+      this.codonGroup.minGenomes = 4;
+      // this.minGenomes = 4;
       this.genome_groups = [];
       this.num_group_genomes = 0;
       this.selectedTR = []; // list of selected TR for ingroup and outgroup, used in onReset()
@@ -101,7 +101,16 @@ define([
 
     validate: function () {
       // check the minimum number of genomes (4) is satisfied
-      if (this.codonGroup.addedNum < this.minGenomes) {
+      if (this.codonGroup.addedNum < this.codonGroup.minGenomes) {
+        this.submitButton.set('disabled', true);
+        return false;
+      }
+      if ((this.codonGroup.addedNum > 200) && (parseInt(this.number_of_genes.get('displayedValue')) > 20)) {
+        this.submitButton.set('disabled', true);
+        return false;
+      }
+      if ((this.codonGroup.addedNum > 30) && (parseInt(this.number_of_genes.get('displayedValue')) > 1000)) {
+        this.submitButton.set('disabled', true);
         return false;
       }
       return this.inherited(arguments);
@@ -413,10 +422,14 @@ define([
               domConstruct.create('td', { innerHTML: "<div class='emptyrow'></div>" }, ntr);
             }
             handle.remove();
+            this.setGenesDropdown();
+            this.setMaxGenomes();
           }));
           lrec.handle = handle;
           this.selectedTR.push(lrec);
           this.increaseGenome(groupType, newGenomeIds);
+          this.setGenesDropdown();
+          this.setMaxGenomes();
         }
         // }
       }));
@@ -567,10 +580,14 @@ define([
               domConstruct.create('td', { innerHTML: "<div class='emptyrow'></div>" }, ntr);
             }
             handle.remove();
+            this.setGenesDropdown();
+            this.setMaxGenomes();
           }));
           lrec.handle = handle;
           this.selectedTR.push(lrec);
           this.increaseGenomeGroup(group_path, genome_id_list.length);
+          this.setGenesDropdown();
+          this.setMaxGenomes();
         }
       }
       else {
@@ -593,6 +610,57 @@ define([
           this.genomegroup_message.innerHTML = '';
         }), 5000);
       }
+    },
+
+    setGenesDropdown: function () {
+      var numGenes = [1, 2, 3, 4, 5, 10, 20, 50, 100, 500, 1000, 2500, 5000]
+      var new_opts = [];
+      var previous_selected = parseInt(this.number_of_genes.get('displayedValue'));
+      if ((this.codonGroup.addedNum > 30) && (previous_selected > 1000)) {
+        previous_selected = 100;
+        var error_msg = 'Changing number of genes to 100, for more than 30 genomes maximum number is 1000';
+        this.genomegroup_message.innerHTML = error_msg;
+        setTimeout(lang.hitch(this, function () {
+          this.genomegroup_message.innerHTML = '';
+        }), 5000);
+        this.number_of_genes.reset();
+      }
+      numGenes.forEach(lang.hitch(this, function (val) {
+        var disable = false;
+        var selected = false;
+        if ((val > 1000) && (this.codonGroup.addedNum >= 30)) {
+          disable = true;
+        }
+        if (val === previous_selected) {
+          selected = true;
+        }
+        var obj = {
+          label: val.toString(),
+          value: val.toString(),
+          disabled: disable,
+          selected: selected
+        };
+        new_opts.push(obj);
+      }));
+      this.number_of_genes.set('options', new_opts);
+      this.validate();
+    },
+
+    setMaxGenomes: function () {
+      var numberOfGenes = parseInt(this.number_of_genes.get('value'));
+      if (numberOfGenes <= 20) {
+        this.codonGroup.maxGenomes = 1000;
+      } else {
+        this.codonGroup.maxGenomes = 200;
+      }
+      if ((this.codonGroup.addedNum > 200) && (numberOfGenes > 20)) {
+        var error_msg = 'Too many genomes, for more than 20 genes maximum number is 1000';
+        this.genomegroup_message.innerHTML = error_msg;
+        setTimeout(lang.hitch(this, function () {
+          this.genomegroup_message.innerHTML = '';
+        }), 5000);
+      }
+      this.validate();
     },
 
     onReset: function (evt) {
@@ -892,10 +960,14 @@ define([
               domConstruct.create('td', { innerHTML: "<div class='emptyrow'></div>" }, ntr);
             }
             handle.remove();
+            this.setGenesDropdown();
+            this.setMaxGenomes();
           }));
           lrec.handle = handle;
           this.selectedTR.push(lrec);
           this.increaseGenome(groupType, genome_id_list);
+          this.setGenesDropdown();
+          this.setMaxGenomes();
         }
       }
       else {
@@ -913,7 +985,6 @@ define([
     // Some discrepancies:
     addGenomesFormFill: function (genome_id_list) {
       var genome_ids = genome_id_list;
-      // debugger;
       if (genome_ids.length == 0) {
         return;
       }
@@ -946,10 +1017,14 @@ define([
               domConstruct.create('td', { innerHTML: "<div class='emptyrow'></div>" }, ntr);
             }
             handle.remove();
+            this.setGenesDropdown();
+            this.setMaxGenomes();
           }));
           lrec.handle = handle;
           this.selectedTR.push(lrec);
           this.increaseGenome(groupType, [newGenomeIds]);
+          this.setGenesDropdown();
+          this.setMaxGenomes();
         }));
       }));
     }
