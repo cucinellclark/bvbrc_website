@@ -27,7 +27,6 @@ define([
           var resData = JSON.parse(response.data);
           var plfam_data = resData['plfam'];
           var pgfam_data = resData['pgfam'];
-          // TODO: figfam data
           var genome_ids = resData['genome_ids'];
           this.state.data = {};
           this.state.data['plfam'] = plfam_data;
@@ -42,6 +41,9 @@ define([
           if (resData.genome_groups) {
             this.state.genome_group_dict = Object.fromEntries(this.state.genome_ids.map((key, index) => [key, resData.genome_groups[index]]));
           }
+          // add nwk file state
+          var codon_output = state.path + '/.codon_tree/codon_tree_tree.nwk';
+          this.state.nwk_file = codon_output;
           this.loaded = true;
           this.state = state;
           this.serviceContainer.setLoaded();

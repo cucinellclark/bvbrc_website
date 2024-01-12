@@ -3,16 +3,16 @@ define([
   'dojo/on', 'dojo/topic', 'dojo/dom-construct', 'dojo/dom', 'dojo/query', 'dojo/when', 'dojo/request',
   'dijit/layout/ContentPane', 'dijit/layout/BorderContainer', 'dijit/TooltipDialog', 'dijit/Dialog', 'dijit/popup',
   'dijit/TitlePane', 'dijit/registry', 'dijit/form/Form', 'dijit/form/RadioButton', 'dijit/form/Select', 'dijit/form/Button',
-  './ContainerActionBar', './SelectionToGroup', '../util/PathJoin', 'FileSaver',
-  './HeatmapContainerNew', 'heatmap/dist/hotmap', 'dojo/dom-class', './Confirmation'
+  './ContainerActionBar', './SelectionToGroup', '../util/PathJoin', 'FileSaver', '../WorkspaceManager',
+  './HeatmapContainerNew', 'heatmap/dist/hotmap', 'dojo/dom-class', './Confirmation', 'phyloview/TreeNavSVG',
 
 ], function (
   declare, lang,
   on, Topic, domConstruct, dom, Query, when, request,
   ContentPane, BorderContainer, TooltipDialog, Dialog, popup,
   TitlePane, registry, Form, RadioButton, Select, Button,
-  ContainerActionBar, SelectionToGroup, PathJoin, saveAs,
-  HeatmapContainerNew, Hotmap, domClass, Confirmation
+  ContainerActionBar, SelectionToGroup, PathJoin, saveAs, WorkspaceManager,
+  HeatmapContainerNew, Hotmap, domClass, Confirmation, d3Tree
 ) {
 
   return declare([BorderContainer, HeatmapContainerNew], {
@@ -21,6 +21,13 @@ define([
     visible: false,
     pfState: null,
     containerActions: [
+      [
+        'Tree',
+        'fa icon-tree2 fa-2x',
+        { label: 'Tree', multiple: false, validTypes: ['*'] },
+        'codonTree',
+        true
+      ],
       [
         'Switch Label',
         'fa icon-pencil-square fa-2x',
@@ -173,9 +180,15 @@ define([
       ]
     ],
     constructor: function (options) {
+
       this.dialog = new Dialog({});
 
       this.topicId = options.topicId;
+
+      this.treeDiv = null;
+      this.treeVisible = false;
+      this.nwk_file = options.extra.nwk;
+
       // subscribe
       Topic.subscribe(this.topicId, lang.hitch(this, function () {
         var key = arguments[0],
@@ -811,6 +824,61 @@ define([
           content: err.text || err
         }).show();
       });
+    },
+
+    codonTree: function (selection, container, button) {
+      if (this.panelDiv) {
+        if (this.treeVisible) { // hide the tree
+          this.treeVisible = false;
+          this.panelDiv.style.display = 'none';
+        } else { // show the tree
+          this.treeVisible = true;
+          this.panelDiv.style.display = 'block';
+        }
+      } else {
+        this.queryTreeData();
+      }
+    },
+
+    queryTreeData: function () {
+      // TODO: loading wheel
+      if (this.nwk_file) {
+        WorkspaceManager.getObject(this.nwk_file).then(lang.hitch(this, function (response) {
+          this.buildTreeDiv(response.data);
+        }), function (err) {
+          console.log('nwk file retrieval error, throw error:', err);
+        });
+      } else {
+        console.log('throw error');
+      }
+    },
+
+    buildTreeDiv: function (nwk_data) {
+      // create tree side panel area
+      var panel_style = 'width: 200px; height: 100%; top:56px; background: white;'
+      panel_style += 'position: absolute; left: 0px; border-right: 1px solid lightgrey; border-top: 1px solid lightgrey';
+      var panel_div = domConstruct.create('div', {
+        style: panel_style
+      }, this.containerNode);
+      this.panelDiv = panel_div;
+
+      // container for tree
+      this.treeContainer = new BorderContainer({
+        'region': 'center'
+      });
+
+      // Div for tree
+      this.treeDiv = domConstruct.create('div', { id: this.id + 'tree-container' }, this.panelDiv);
+
+      // create d3Tree
+
+      // "#uniqName_26_0tree-container"
+      // put tree into side panel
+      this.tree = new d3Tree({ selectionTarget: this.treeContainer });
+      this.tree.d3Tree('#' + this.id + 'tree-container', { phylogram: false, fontSize: 12 });
+      this.tree.setTree(nwk_data);
+
+      this.treeVisible = true;
     },
 
     hmapUpdate: function () {

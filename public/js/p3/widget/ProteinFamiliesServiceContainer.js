@@ -151,11 +151,13 @@ define([
       // TODO: remove getGenome call, use genome_names in job data
       // DataAPI.getGenome(this.state.data.genome_ids).then(lang.hitch(this, function (res) {
       // this.state.data.genome_data = res;
+      var nwk_file = this.state.nwk_file ? this.state.nwk_file : null;
       this.heatmapContainer = new HeatmapContainer({
         title: 'Heatmap',
         type: 'webGLHeatmap',
         topicId: this.topicId,
-        content: 'Heatmap'
+        content: 'Heatmap',
+        extra: { 'nwk': nwk_file }
       });
       this.mainGridContainer = new MainGridContainer({
         title: 'Table',

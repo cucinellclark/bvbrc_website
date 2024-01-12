@@ -18,47 +18,6 @@ define([
   return declare([HeatmapContainerNew], {
 
     calledConfirmationPopup: false,
-    /*
-    setCurrentData: function (data) {
-      this.currentData = data;
-    },
-
-    constructor: function (options) {
-      this.dialog = new Dialog({});
-      console.log('heatmap options',options);
-      this.topicId = options.topicId;
-      // subscribe
-      Topic.subscribe(this.topicId, lang.hitch(this, function () {
-        var key = arguments[0],
-          value = arguments[1];
-        console.log('key, ', key, ': value, ', value);
-
-        switch (key) {
-          case 'updatePfState':
-            this.pfState = value;
-            this.hmapUpdate();
-            break;
-          case 'refreshHeatmap':
-            this.hmapUpdate();
-            console.log('heatmap Refresh pfState: ', this.pfState);
-            Topic.publish(this.topicId, 'requestHeatmapData', this.pfState);
-            break;
-          case 'updateHeatmapData':
-            this.currentData = value;
-            this.hmapUpdate();
-            Topic.publish(this.topicId, 'hideLoadingMask');
-            break;
-          default:
-            break;
-        }
-      }));
-    },
-
-    update: function () {
-      console.log('pfstate = ', this.pfstate);
-      Topic.publish(this.topicId, 'refreshHeatmap');
-    }
-    */
 
     createConfirmationPopup: function (label) {
       if (!this.calledConfirmationPopup) {
