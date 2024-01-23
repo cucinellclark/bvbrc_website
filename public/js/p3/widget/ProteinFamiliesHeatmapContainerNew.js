@@ -844,7 +844,10 @@ define([
       // TODO: loading wheel
       if (this.nwk_file) {
         WorkspaceManager.getObject(this.nwk_file).then(lang.hitch(this, function (response) {
-          this.buildTreeDiv(response.data);
+          // this.buildTreeDiv(response.data);
+          var leaves = this.extractLeafNames(response.data);
+          debugger;
+          console.log('here');
         }), function (err) {
           console.log('nwk file retrieval error, throw error:', err);
         });
@@ -856,7 +859,7 @@ define([
     buildTreeDiv: function (nwk_data) {
       // create tree side panel area
       var panel_style = 'width: 200px; height: 100%; top:56px; background: white;'
-      panel_style += 'position: absolute; left: 0px; border-right: 1px solid lightgrey; border-top: 1px solid lightgrey';
+      panel_style += 'position: absolute; z-index:1000;right: 0px; border-right: 1px solid lightgrey; border-top: 1px solid lightgrey';
       var panel_div = domConstruct.create('div', {
         style: panel_style
       }, this.containerNode);
@@ -879,6 +882,42 @@ define([
       this.tree.setTree(nwk_data);
 
       this.treeVisible = true;
+    },
+
+    extractLeafNames: function (newick) {
+      const names = [];
+      let currentName = '';
+      let readingName = false;
+
+      for (let i = 0; i < newick.length; i++) {
+        const char = newick[i];
+
+        if (char === '(' || char === ',' || char === ')') {
+          // Branch points or delimiters
+          if (readingName) {
+            currentName = '';
+            readingName = false;
+          }
+        } else if (char === ':') {
+          // End of a branch, stop reading the name
+          names.push(currentName);
+        } else if (char !== ';' && !char.match(/\s/)) {
+          // Part of a name
+          if (!readingName && char.match(/[A-Za-z0-9]/)) {
+            currentName = char;
+            readingName = true;
+          } else if (readingName) {
+            currentName += char;
+          }
+        }
+      }
+
+      // Add the last name if the string doesn't end with a semicolon
+      if (readingName) {
+        names.push(currentName);
+      }
+
+      return names;
     },
 
     hmapUpdate: function () {
