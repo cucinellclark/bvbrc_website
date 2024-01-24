@@ -4,7 +4,7 @@ define([
   'dijit/layout/ContentPane', 'dijit/layout/BorderContainer', 'dijit/TooltipDialog', 'dijit/Dialog', 'dijit/popup',
   'dijit/TitlePane', 'dijit/registry', 'dijit/form/Form', 'dijit/form/RadioButton', 'dijit/form/Select', 'dijit/form/Button',
   './ContainerActionBar', './SelectionToGroup', '../util/PathJoin', 'FileSaver', '../WorkspaceManager',
-  './HeatmapContainerNew', 'heatmap/dist/hotmap', 'dojo/dom-class', './Confirmation', 'phyloview/TreeNavSVG',
+  './HeatmapContainerNew', 'heatmap/dist/hotmap', 'dojo/dom-class', './Confirmation', 'phyloview/TreeNavSVG', 'phyloview/PhyloTree'
 
 ], function (
   declare, lang,
@@ -844,10 +844,16 @@ define([
       // TODO: loading wheel
       if (this.nwk_file) {
         WorkspaceManager.getObject(this.nwk_file).then(lang.hitch(this, function (response) {
-          // this.buildTreeDiv(response.data);
-          var leaves = this.extractLeafNames(response.data);
-          debugger;
-          console.log('here');
+          var phylotree = new PhyloTree.PhyloTree(response.data);
+          // debugger;
+          var leaves = phylotree.getTipLabels();
+          console.log('phylogenetic order: ', leaves);
+          // TODO: move tree div to left side, try to move sliding bars to right side
+          this.buildTreeDiv(response.data);
+          this.pfState.genomeIds = leaves;
+          var genome_names = leaves.map(gid => this.pfState.genomeFilterStatus[gid].label);
+          console.log('phylogenetic names: ', genome_names);
+          Topic.publish(this.topicId, 'applyGenomeSelector', this.pfState);
         }), function (err) {
           console.log('nwk file retrieval error, throw error:', err);
         });

@@ -512,6 +512,7 @@ define([
       if (mytree) {
         try {
           forester.midpointRoot(mytree);
+          debugger;
           // console.log('before launch mytree nodeVisualizations: ', nodeVisualizations);
           // console.log('processTree this ', this);
           // console.log('processTree before launch mytree ', mytree);
