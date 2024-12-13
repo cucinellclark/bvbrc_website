@@ -12,7 +12,7 @@ define([
     'dojo/on',
     'dojo/topic',
     'dojo/_base/lang',
-    './CopilotAPI'
+    './CopilotApi'
 ], function (
     declare,
     _WidgetBase,

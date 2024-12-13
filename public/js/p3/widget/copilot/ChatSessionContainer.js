@@ -9,7 +9,7 @@ define([
     'dijit/Dialog',
     './CopilotDisplay',
     './CopilotInput',
-    './CopilotAPI',
+    './CopilotApi',
     '../../store/ChatSessionMemoryStore',
     'dojo/topic',
     'dojo/_base/lang',
