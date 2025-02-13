@@ -75,7 +75,7 @@ define([
         // Create bottom div for displaying text
         this.bottomDiv = domConstruct.create('div', {
             class: 'bottomSection',
-            style: 'display: flex; justify-content: flex-start; align-items: flex-start; background-color: #f5f5f5; height: 50%; padding: 20px;'
+            style: 'display: block; background-color: #f5f5f5; height: 50%; padding: 20px; overflow-y: auto; width: 100%;'
         }, this.domNode);
 
         // Configure markdown-it options with breaks enabled
@@ -125,7 +125,8 @@ define([
       displayText: function(text) {
         // Replace literal \n with actual newlines before rendering
         text = text.replace(/\\n/g, '\n');
-        this.bottomDiv.innerHTML = this.md.render(text);
+        // Wrap the markdown content in a div with message class
+        this.bottomDiv.innerHTML = '<div class="message">' + this.md.render(text) + '</div>';
       },
 
       addMarkdownStyles: function() {
@@ -133,40 +134,54 @@ define([
           var style = domConstruct.create('style', {
             id: 'markdown-styles',
             innerHTML: `
+              .bottomSection {
+                scroll-behavior: smooth;
+                width: 100%;
+                overflow-y: auto;
+                overflow-x: hidden;
+              }
               .message {
                 max-width: 100%;
                 overflow-wrap: break-word;
+                word-wrap: break-word;
+                word-break: break-word;
+                padding-right: 40px;
+                width: 94%;
               }
               .message * {
                 max-width: 100%;
-              }
-              .message img {
-                height: auto;
+                width: auto !important;
+                white-space: pre-wrap;
+                overflow-wrap: break-word;
+                word-wrap: break-word;
+                word-break: break-word;
               }
               .message pre {
                 background-color: #f8f8f8;
                 padding: 10px;
                 border-radius: 4px;
-                overflow-x: auto;
+                overflow-x: hidden;
                 white-space: pre-wrap;
                 word-wrap: break-word;
+                width: 100% !important;
               }
               .message code {
                 background-color: #f8f8f8;
                 padding: 2px 4px;
                 border-radius: 3px;
                 word-wrap: break-word;
+                white-space: pre-wrap;
               }
               .message table {
                 width: 100%;
                 display: block;
-                overflow-x: auto;
+                overflow-x: hidden;
+                table-layout: fixed;
               }
-              .message p {
-                margin: 0 0 10px 0;
-              }
-              .message p:last-child {
-                margin-bottom: 0;
+              .message td, .message th {
+                word-wrap: break-word;
+                overflow-wrap: break-word;
+                word-break: break-word;
               }
             `
           }, document.head);
