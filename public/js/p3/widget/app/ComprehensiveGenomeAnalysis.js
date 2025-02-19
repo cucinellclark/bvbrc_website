@@ -411,6 +411,10 @@ define([
       this._autoTaxSet = false;
     },
 
+    onGenomeSizeUnitsChange: function () {
+      console.log('onGenomeSizeUnitsChange');
+    },
+
     updateOutputName: function () {
       var charError = document.getElementsByClassName('charError')[0];
       charError.innerHTML = '&nbsp;';
