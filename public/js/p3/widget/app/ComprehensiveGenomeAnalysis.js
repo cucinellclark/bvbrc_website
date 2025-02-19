@@ -108,16 +108,30 @@ define([
       // moved common fields to standard function
       values = this.checkBaseParameters(values);
 
-      // trim and normalize values
-      if (this.trim.value == 'on') {
-        values.trim = true;
-      } else {
-        values.trim = false;
+
+      if (Object.prototype.hasOwnProperty.call(values, 'trim') && values.trim) {
+        values.trim = (values.trim[0] === 'on');
       }
-      if (this.normalize.value = 'on') {
-        values.normalize = true;
-      } else {
-        values.normalize = false;
+      if (Object.prototype.hasOwnProperty.call(values, 'normalize') && values.normalize) {
+        values.normalize = (values.normalize[0] === 'on');
+      }
+      if (Object.prototype.hasOwnProperty.call(values, 'filter') && values.filter) {
+        values.filtlong = (values.filter[0] === 'on');
+      }
+      if (Object.prototype.hasOwnProperty.call(values, 'coverage') && values.coverage) {
+        values.target_depth = values.coverage;
+      }
+      if (Object.prototype.hasOwnProperty.call(values, 'expected_genome_size') && values.expected_genome_size) {
+        var expected_genome_size = parseInt(values.expected_genome_size);
+        var genome_size_units = values.genome_size_units;
+        var genome_size_value = 0;
+        if (genome_size_units == 'M') {
+          genome_size_value = 1000000;
+        }
+        else {
+          genome_size_value = 1000;
+        }
+        values.genome_size = genome_size_value * expected_genome_size;
       }
 
       return values;
