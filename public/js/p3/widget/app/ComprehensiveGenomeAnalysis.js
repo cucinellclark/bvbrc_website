@@ -426,7 +426,17 @@ define([
     },
 
     onGenomeSizeUnitsChange: function () {
-      console.log('onGenomeSizeUnitsChange');
+      console.log('genome_size_units = ', this.genome_size_units.value);
+      if (this.genome_size_units.value == 'M') {
+        this.expected_genome_size.set('constraints', { min: 1, max: 10, places: 0, smallDelta: 1 });
+        this.expected_genome_size.set('value', 5);
+        this.expected_genome_size.set('smallDelta', 1);
+      }
+      else { // K
+        this.expected_genome_size.set('constraints', { min: 100, max: 10000, places: 0 });
+        this.expected_genome_size.set('value', 500);
+        this.expected_genome_size.set('smallDelta', 100);
+      }
     },
 
     updateOutputName: function () {
