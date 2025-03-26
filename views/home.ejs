@@ -24,113 +24,120 @@
         <div class="grid-container">
             <div class="home-main home-main-left">
                 <div class="bv-brc-info card">
-                    <h1>BACTERIAL AND VIRAL BIOINFORMATICS RESOURCE CENTER</h1>
+                    <h1 style="
+                        font-family: 'Manrope', sans-serif;
+                        font-weight: 700;
+                        color: #2A3D4E;
+                        font-size: 2rem;
+                        ">
+                        Midwest Alliance for Applied Genomic Epidemiology
+                    </h1>
                     <p>
-                        Welcome to the Bacterial and Viral Bioinformatics Resource Center (BV-BRC), a comprehensive
-                        resource for bacterial and viral infectious disease research. BV-BRC provides integrated data,
+                        Welcome to the Midwest Alliance for Applied Genomic Epidemiology (MAAGE), a comprehensive
+                        resource for bacterial and viral infectious disease research. MAAGE provides integrated data,
                         advanced bioinformatics tools, and workflows to support the scientific community in
                         understanding and combating infectious diseases. Explore our <a
-                                href="https://www.bv-brc.org/docs/quick_start/index.html" target="_blank"
-                                style="font-weight: bold;">Quick Start Guide</a> to learn more about the platform’s
-                        features and capabilities. For questions or assistance, please don’t hesitate to <a
-                                href="mailto:help@bv-brc.org" style="font-weight: bold;">contact us</a>.
+                                href="https://www.maage.org/docs/quick_start/index.html" target="_blank"
+                                style="font-weight: bold;">Quick Start Guide</a> to learn more about the platform's
+                                features and capabilities. For questions or assistance, please don't hesitate to <a
+                                href="mailto:help@maage.org" style="font-weight: bold;">contact us</a>.
                     </p>
-                    <div class="search">
-                        <h3>SEARCH</h3>
-                        <div class="global-search">
-                            <div style="padding: 6px 0px 2px 2px; flex-grow: 1">
-                                <input style="width:100%;font-size:1em;" class="showOnLoad dijitHidden"
-                                       data-dojo-type="p3/widget/GlobalSearch"/>
+
+                    <!-- Search Section Component -->
+                    <div class="search-section">
+                        <div class="search-header">
+                            <span class="search-icon">🔍</span>
+                            <h2>Search Data</h2>
+                        </div>
+
+                        <div class="search-input-container">
+                            <input
+                                type="text"
+                                placeholder="Search genes, genomes, proteins, pathways..."
+                                class="search-input"
+                            />
+                            <button class="search-button">Search 🔍</button>
+                        </div>
+
+                        <div class="search-tags">
+                            <span class="tags-label">Popular:</span>
+                            <div class="tags-container">
+                                <button class="tag-button">SARS-CoV-2</button>
+                                <button class="tag-button">Mpox</button>
+                                <button class="tag-button">H5N1</button>
+                                <button class="tag-button">Flu Surveillance</button>
                             </div>
                         </div>
                     </div>
-                    <div class="browse">
-                        <h3>BROWSE</h3>
-                        <!--<div class="browse-options" style="display: flex; flex-grow: 1; justify-content: space-between;">-->
-                        <div class="browse-options">
-                            <a href="/view/Bacteria/2" class="btn btn-blue">BACTERIA</a>
-                            <a href="/view/Taxonomy/2157" class="btn btn-blue">ARCHAEA</a>
-                            <a href="/view/Virus/10239" class="btn btn-blue">VIRUSES</a>
-                            <a href="/view/Host/?eq(taxon_lineage_ids,2759)#view_tab=genomes" class="btn btn-blue"
-                               id="eukaryoticHosts">EUKARYOTIC HOSTS</a>
-                        </div>
+                    <!-- End Search Section Component -->
+
+                    <div class="corner-image">
+                        <img src="/patric/images/maage/background-icon2.png" alt="MAAGE Logo">
                     </div>
                 </div>
 
-                <div class="bv-brc-mid"><!-- style="grid-row: 3/6"-->
-                    <div class="title">
-                        <h2>ANALYZE DATA IN BV-BRC</h2>
-                    </div>
-                    <div id="analyze-section">
-                        <div class="analyze bv-brc-mid-content card">
-                            <p>Upload and analyze your data in the private workspace. <span class="HideWithAuth"><a
-                                            href="/register" style="font-weight: bold;">Register</a> or <a href="/login"
-                                                                                                           style="font-weight: bold;">Login</a> to get started.</span>
-                            </p>
+                <div class="bv-brc-mid"> <!-- style="grid-row: 3/6"-->
+                    <div class="analyze-data-section">
+                        <div class="analyze-data-header">
+                            <span class="analyze-icon">🧪</span>
+                            <h2>Analyze Data</h2>
+                        </div>
+                        <p class="analyze-description">
+                            Upload and analyze your genomic data in a secure private workspace with our comprehensive suite of tools.
+                        </p>
 
-                            <div class="bv-brc-mid-content-links">
-                                <div class="mid-content-section">
-                                    <h3>SEARCH</h3>
-                                    <div class="mid-links">
-                                        <a href="/searches/TaxaSearch" class="navigationLink">Taxa</a>
-                                        <a href="/searches/GenomeSearch" class="navigationLink">Genomes</a>
-                                        <a href="/searches/ProteinSearch" class="navigationLink">Proteins</a>
-                                        <a href="/searches/SpecialtyGeneSearch" class="navigationLink">Specialty
-                                            Genes</a>
-                                        <a href="/searches" style="text-decoration: underline;">All Searches...</a>
-                                    </div>
-                                </div>
-                                <div class="mid-content-section">
-                                    <h3>ANALYZE</h3>
-                                    <div class="mid-links">
-                                        <a href="/app/Assembly2" class="navigationLink">Assembly</a>
-                                        <a href="/app/Annotation" class="navigationLink">Annotation</a>
-                                        <a href="/app/Homology" class="navigationLink">BLAST</a>
-                                        <a href="/app/MSA" class="navigationLink">MSA</a>
-                                        <a href="/tools" style="text-decoration: underline;">All Tools &amp;
-                                            Services...</a>
-                                    </div>
-                                </div>
-                                <div class="mid-content-section">
-                                    <h3>MANAGE DATA</h3>
-                                    <div class="mid-links">
-                                        <a href="https://bv-brc.org/docs/quick_references/workspaces/workspace.html"
-                                           target="=_blank">Access Private Workspace</a>
-                                        <a href="https://bv-brc.org/docs/quick_references/workspaces/groups.html"
-                                           target="=_blank">Save Search Results</a>
-                                        <a href="https://bv-brc.org/docs/quick_references/workspaces/data_upload.html"
-                                           target="=_blank">Upload Data</a>
-                                        <a href="https://bv-brc.org/docs/quick_references/workspaces/jobs.html"
-                                           target="=_blank">Access Analysis Jobs</a>
-                                        <a href="https://bv-brc.org/docs/quick_references/workspaces/workspace.html#creating-and-sharing-workspaces"
-                                           target="=_blank">Share and Publish</a>
-                                    </div>
-                                </div>
-                                <div class="mid-content-section">
-                                    <h3>BATCH ACCESS</h3>
-                                    <div class="mid-links">
-                                        <a href="https://bv-brc.org/docs/cli_tutorial/index.html" target="=_blank">Command-Line
-                                            Interface</a>
-                                        <a href="https://bv-brc.org/api/doc/" target="=_blank">Data API</a>
-                                        <a href="https://bv-brc.org/docs/quick_references/ftp.html"
-                                           target="=_blank">FTP</a>
-                                    </div>
-                                </div>
+                        <div class="analyze-cards-container">
+                            <div class="analyze-card">
+                                <h3>🔍 Search</h3>
+                                <ul class="analyze-card-list">
+                                    <li><a href="/searches/TaxaSearch" class="navigationLink">Taxa</a></li>
+                                    <li><a href="/searches/GenomeSearch" class="navigationLink">Genomes</a></li>
+                                    <li><a href="/searches/FeatureSearch" class="navigationLink">Features</a></li>
+                                    <li><a href="/searches/SpecialtyGeneSearch" class="navigationLink">Specialty Genes</a></li>
+                                    <li class="view-all"><a href="/searches" class="navigationLink">View All →</a></li>
+                                </ul>
+                            </div>
+
+                            <div class="analyze-card">
+                                <h3>🧬 Analyze</h3>
+                                <ul class="analyze-card-list">
+                                    <li><a href="/app/Assembly2" class="navigationLink">Assembly</a></li>
+                                    <li><a href="/app/Annotation" class="navigationLink">Annotation</a></li>
+                                    <li><a href="/app/Homology" class="navigationLink">BLAST</a></li>
+                                    <li><a href="/app/MSA" class="navigationLink">MSA</a></li>
+                                    <li class="view-all"><a href="/tools" class="navigationLink">View All →</a></li>
+                                </ul>
+                            </div>
+
+                            <div class="analyze-card">
+                                <h3>🗃️ Data</h3>
+                                <ul class="analyze-card-list">
+                                    <li><a href="https://bv-brc.org/docs/quick_references/workspaces/workspace.html" target="_blank">Workspace</a></li>
+                                    <li><a href="https://bv-brc.org/docs/quick_references/workspaces/groups.html" target="_blank">Save Results</a></li>
+                                    <li><a href="https://bv-brc.org/docs/quick_references/workspaces/data_upload.html" target="_blank">Upload Data</a></li>
+                                    <li><a href="https://bv-brc.org/docs/quick_references/workspaces/jobs.html" target="_blank">Analysis Jobs</a></li>
+                                    <li class="view-all"><a href="https://bv-brc.org/docs/quick_references/workspaces/workspace.html#creating-and-sharing-workspaces" target="_blank">Share & Publish</a></li>
+                                </ul>
+                            </div>
+
+                            <div class="analyze-card">
+                                <h3>🔗 Access</h3>
+                                <ul class="analyze-card-list">
+                                    <li><a href="https://bv-brc.org/docs/cli_tutorial/index.html" target="_blank">CLI</a></li>
+                                    <li><a href="https://bv-brc.org/api/doc/" target="_blank">API</a></li>
+                                    <li><a href="https://bv-brc.org/docs/quick_references/ftp.html" target="_blank">FTP</a></li>
+                                    <li class="view-all"><a href="https://bv-brc.org/docs/quick_references/index.html" target="_blank">View All →</a></li>
+                                </ul>
                             </div>
                         </div>
-                        <div class="mid-content-bottom">
-                            <div class="mid-content-buttons">
-                                <a href="https://bv-brc.org/docs/quick_start/index.html"
-                                   class="btn btn-blue navigationLinkOut">QUICK START</a>
-                                <a href="https://bv-brc.org/docs/tutorial/index.html"
-                                   class="btn btn-blue navigationLinkOut">TUTORIALS</a>
-                                <a href="https://bv-brc.org/docs/quick_references/index.html"
-                                   class="btn btn-blue navigationLinkOut" id="referenceGuides">REFERENCE GUIDES</a>
-                            </div>
+
+                        <div class="analyze-buttons">
+                            <a href="https://bv-brc.org/docs/quick_start/index.html" class="analyze-button navigationLinkOut">Quick Start</a>
+                            <a href="https://bv-brc.org/docs/quick_references/index.html" class="analyze-button navigationLinkOut">Reference Guides</a>
+                            <a href="https://bv-brc.org/docs/tutorial/index.html" class="analyze-button navigationLinkOut">Tutorials</a>
                         </div>
                     </div>
                 </div>
-
 
                 <div class="bv-brc-bottom">
                     <div class="title">
@@ -210,5 +217,228 @@
   .home-main-left h1,
   .home-main-left h2 {
     margin-bottom: 0;
+  }
+
+  /* New styles for the corner image */
+  .bv-brc-info {
+    position: relative;
+    overflow: hidden; /* This ensures the image doesn't overflow the container */
+  }
+
+  .corner-image {
+    position: absolute;
+    top: 10px;
+    right: 10px;
+    z-index: 0; /* Lower z-index to place behind content */
+  }
+
+  .corner-image img {
+    max-width: 250px;
+    height: auto;
+    opacity: 0.2; /* Optional: make the image slightly transparent */
+  }
+
+  /* Add z-index to text content to ensure it appears above the image */
+  .bv-brc-info h1,
+  .bv-brc-info p,
+  .bv-brc-info .search,
+  .bv-brc-info .browse {
+    position: relative;
+    z-index: 1; /* Higher z-index to place content above the image */
+  }
+
+  /* Search Section Styles */
+  .search-section {
+    border: 1px solid #e0e0e0;
+    border-radius: 8px;
+    padding: 16px;
+    background-color: #f9fdfc;
+    margin-top: 20px;
+    position: relative;
+    z-index: 1;
+  }
+
+  .search-header {
+    display: flex;
+    align-items: center;
+    margin-bottom: 12px;
+  }
+
+  .search-icon {
+    font-size: 20px;
+    font-weight: 600;
+    margin-right: 8px;
+  }
+
+  .search-header h2 {
+    margin: 0;
+    font-size: 18px;
+  }
+
+  .search-input-container {
+    display: flex;
+    margin-bottom: 12px;
+  }
+
+  .search-input {
+    flex: 1;
+    padding: 10px;
+    font-size: 14px;
+    border: 1px solid #ccc;
+    border-top-left-radius: 4px;
+    border-bottom-left-radius: 4px;
+  }
+
+  .search-button {
+    padding: 10px 16px;
+    background-color: #2b5c7b;
+    color: #fff;
+    border: none;
+    border-top-right-radius: 4px;
+    border-bottom-right-radius: 4px;
+    cursor: pointer;
+  }
+
+  .search-tags {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+
+  .tags-label {
+    font-weight: 500;
+  }
+
+  .tags-container {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+
+  .tag-button {
+    background-color: #f0f0f0;
+    border: 1px solid #ccc;
+    border-radius: 16px;
+    padding: 4px 12px;
+    font-size: 13px;
+    cursor: pointer;
+    transition: background-color 0.2s;
+  }
+
+  .tag-button:hover {
+    background-color: #e0e0e0;
+  }
+
+  /* Analyze Data Section Styles */
+  .analyze-data-section {
+    border: 1px solid #e0e0e0;
+    border-radius: 8px;
+    padding: 24px;
+    background-color: #f9fdfc;
+    margin-bottom: 20px;
+  }
+
+  .analyze-data-header {
+    display: flex;
+    align-items: center;
+    margin-bottom: 8px;
+  }
+
+  .analyze-icon {
+    font-size: 22px;
+    font-weight: 600;
+    margin-right: 8px;
+  }
+
+  .analyze-data-header h2 {
+    margin: 0;
+    font-size: 20px;
+  }
+
+  .analyze-description {
+    font-size: 14px;
+    color: #555;
+    margin-bottom: 24px;
+  }
+
+  .analyze-cards-container {
+    display: flex;
+    gap: 16px;
+    flex-wrap: nowrap;
+    margin-bottom: 24px;
+  }
+
+  .analyze-card {
+    flex: 1 1 200px;
+    background-color: #f5faf7;
+    padding: 16px;
+    border-radius: 8px;
+    border: 1px solid #ddd;
+    min-width: 100px;
+  }
+
+  .analyze-card h3 {
+    font-size: 16px;
+    margin-bottom: 8px;
+  }
+
+  .analyze-card-list {
+    list-style: none;
+    padding: 0;
+    margin: 0;
+    font-size: 14px;
+  }
+
+  .analyze-card-list li {
+    margin-bottom: 4px;
+  }
+
+  .analyze-card-list li a {
+    text-decoration: none;
+    color: inherit;
+  }
+
+  .analyze-card-list li a:hover {
+    text-decoration: underline;
+  }
+
+  .analyze-card-list .view-all {
+    margin-top: 8px;
+  }
+
+  .analyze-card-list .view-all a {
+    color: #2b5c7b;
+    cursor: pointer;
+  }
+
+  .analyze-buttons {
+    display: flex;
+    gap: 12px;
+    flex-wrap: wrap;
+  }
+
+  .analyze-button {
+    padding: 8px 16px;
+    font-size: 14px;
+    border: 1px solid #ccc;
+    border-radius: 6px;
+    background-color: #fff;
+    cursor: pointer;
+    text-decoration: none;
+    color: inherit;
+    display: inline-block;
+    transition: background-color 0.2s;
+  }
+
+  .analyze-button:hover {
+    background-color: #f0f0f0;
+  }
+
+  /* Media queries for better responsiveness */
+  @media (max-width: 768px) {
+    .analyze-card {
+      flex: 1 1 100%;
+    }
   }
 </style>
