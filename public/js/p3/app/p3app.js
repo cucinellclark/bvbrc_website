@@ -558,7 +558,7 @@ define([
             }
           }, false)
           // show the upload and jobs widget
-          window.App.uploadJobsWidget('show');
+          // window.App.uploadJobsWidget('show');
           window.App.checkSU();
           window.App.alreadyLoggedIn = true;
         } else {
