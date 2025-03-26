@@ -140,44 +140,76 @@
                 </div>
 
                 <div class="bv-brc-bottom">
-                    <div class="title">
-                        <h2>OUTBREAKS</h2>
-                    </div>
-                    <div class="outbreaks">
-                        <div class="bv-brc-bottom-left card" style="flex-basis: 100% ">
-                            <div class="content">
-                                <h2><a href="/outbreaks/Mpox/#view_tab=overview">Mpox 2024</a></h2>
-                                <div class="content-description">
-                                    <div class="content-image">
-                                        <img src="https://www.bv-brc.org/api/content/images/outbreaks/mpox/poxviridae_virion_image_single.png"
-                                             alt="Influenza Virion">
-                                    </div>
-                                    <p>
-                                        Monkeypox virus, the cause of Mpox, is a zoonotic disease endemic to Africa.
-                                        There are two primary clades: Clade I and Clade II. Since Jan 2022, over 99,000
-                                        global Mpox cases have been reported, mainly from Clade II.b. However, Clade I
-                                        remains a concern with increasing outbreaks in Central Africa and recent cases
-                                        outside its traditional range.
-                                    </p>
-                                </div>
+                    <div class="active-outbreaks-section">
+                        <div class="outbreaks-header">
+                            <div class="outbreaks-title">
+                                <span class="outbreaks-icon">🦠</span>
+                                <h2>Active Outbreaks</h2>
                             </div>
+                            <a href="#" class="view-all-link">View All →</a>
                         </div>
 
-                        <div class="bv-brc-bottom-right card" style="flex-basis: 100% ">
-                            <div class="content">
-                                <h2><a href="/outbreaks/H5N1/#view_tab=overview">Influenza H5N1 2024</a></h2>
-                                <div class="content-description">
-                                    <div class="content-image">
-                                        <img src="https://www.bv-brc.org/api/content/images/outbreaks/H5N1/influenza_virion_image.png"
-                                             alt="Influenza Virion">
+                        <div class="outbreaks-cards-container">
+                            <div class="outbreak-card" style="background-color: #5c7da4;">
+                                <div class="outbreak-card-header">
+                                    <h3>Mpox</h3>
+                                    <span class="status-badge">High Alert</span>
+                                </div>
+
+                                <div class="outbreak-card-content">
+                                    <div class="outbreak-stats-container">
+                                        <div class="outbreak-stat">
+                                            <strong>New Cases</strong><br />+124 <span class="trend-up">+15%</span>
+                                        </div>
+                                        <div class="outbreak-stat">
+                                            <strong>Regions</strong><br />12 states
+                                        </div>
                                     </div>
-                                    <p>
-                                        The H5N1 virus, known as bird flu, poses serious risks to wildlife, agriculture,
-                                        and humans. Since 2020, the 2.3.4.4b strain has spread globally, with rare but
-                                        severe human cases linked to infected poultry and cattle. The BV-BRC offers the
-                                        latest data, outbreak maps, and resources to support research and response
-                                        efforts. Learn more about the evolving outbreak and its impact.
-                                    </p>
+                                    <a href="#" class="dashboard-link" style="color: #8c7fc1;">
+                                        View Dashboard →
+                                    </a>
+                                </div>
+                            </div>
+
+                            <div class="outbreak-card" style="background-color: #d5a56d;">
+                                <div class="outbreak-card-header">
+                                    <h3>A/H5N1</h3>
+                                    <span class="status-badge">Moderate</span>
+                                </div>
+
+                                <div class="outbreak-card-content">
+                                    <div class="outbreak-stats-container">
+                                        <div class="outbreak-stat">
+                                            <strong>New Cases</strong><br />+87 <span class="trend-up">+8%</span>
+                                        </div>
+                                        <div class="outbreak-stat">
+                                            <strong>Regions</strong><br />9 states
+                                        </div>
+                                    </div>
+                                    <a href="#" class="dashboard-link" style="color: #d29b4e;">
+                                        View Dashboard →
+                                    </a>
+                                </div>
+                            </div>
+
+                            <div class="outbreak-card" style="background-color: #5d9f89;">
+                                <div class="outbreak-card-header">
+                                    <h3>SARS-CoV-2</h3>
+                                    <span class="status-badge">Ongoing</span>
+                                </div>
+
+                                <div class="outbreak-card-content">
+                                    <div class="outbreak-stats-container">
+                                        <div class="outbreak-stat">
+                                            <strong>New Cases</strong><br />+215 <span class="trend-up">+3%</span>
+                                        </div>
+                                        <div class="outbreak-stat">
+                                            <strong>Regions</strong><br />All states
+                                        </div>
+                                    </div>
+                                    <a href="#" class="dashboard-link" style="color: #6ba0b6;">
+                                        View Dashboard →
+                                    </a>
                                 </div>
                             </div>
                         </div>
@@ -438,6 +470,123 @@
   /* Media queries for better responsiveness */
   @media (max-width: 768px) {
     .analyze-card {
+      flex: 1 1 100%;
+    }
+  }
+
+  /* Active Outbreaks Section Styles */
+  .active-outbreaks-section {
+    border: 1px solid #e0e0e0;
+    border-radius: 8px;
+    padding: 24px;
+    background-color: #f9fdfc;
+    margin-bottom: 20px;
+  }
+
+  .outbreaks-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 20px;
+  }
+
+  .outbreaks-title {
+    display: flex;
+    align-items: center;
+  }
+
+  .outbreaks-icon {
+    font-size: 22px;
+    margin-right: 8px;
+  }
+
+  .outbreaks-header h2 {
+    margin: 0;
+    font-size: 20px;
+  }
+
+  .view-all-link {
+    color: #2b5c7b;
+    font-size: 14px;
+    text-decoration: none;
+  }
+
+  .view-all-link:hover {
+    text-decoration: underline;
+  }
+
+  .outbreaks-cards-container {
+    display: flex;
+    gap: 16px;
+    flex-wrap: nowrap;
+  }
+
+  .outbreak-card {
+    flex: 1 1 240px;
+    color: #fff;
+    padding: 16px;
+    border-radius: 8px;
+    min-width: 100px;
+  }
+
+  .outbreak-card-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+  }
+
+  .outbreak-card-header h3 {
+    margin: 0;
+    font-size: 16px;
+  }
+
+  .status-badge {
+    font-size: 12px;
+    background-color: rgba(255,255,255,0.2);
+    padding: 2px 8px;
+    border-radius: 12px;
+  }
+
+  .outbreak-card-content {
+    background-color: #fff;
+    color: #333;
+    border-radius: 6px;
+    margin-top: 12px;
+    padding: 12px;
+  }
+
+  .outbreak-stats-container {
+    display: flex;
+    justify-content: space-between;
+    margin-bottom: 8px;
+  }
+
+  .outbreak-stat {
+    font-size: 13px;
+  }
+
+  .trend-up {
+    color: #28a745;
+  }
+
+  .trend-down {
+    color: #dc3545;
+  }
+
+  .dashboard-link {
+    font-size: 13px;
+    text-decoration: none;
+    display: inline-block;
+    margin-top: 8px;
+  }
+
+  .dashboard-link:hover {
+    text-decoration: underline;
+  }
+
+  /* Media queries for better responsiveness */
+  @media (max-width: 768px) {
+    .outbreak-card {
       flex: 1 1 100%;
     }
   }
