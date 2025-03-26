@@ -12,7 +12,7 @@
   --vipr-yellow: #f1bf48;
   --main-blue: #5375b9;
 
-  --blue: #015994;
+  --blue: #B7D1C4;
   --blue-tint: #e5eef4;
   --blue-shade: #004776;
   --green: #009190;
@@ -27,6 +27,8 @@
 
   --border-gray: #a0a0a0;
   --border-blue: var(--blue);
+
+  --maage-green: #B7D1C4;
 }
 
 #bv-brc-home,
@@ -104,6 +106,11 @@
 #bv-brc-header-container .nav-links a:hover,
 #bv-brc-header-container .nav-links a:focus {
   text-decoration: underline;
+}
+
+#bv-brc-header-container span, a {
+  font-family: 'Inter', sans-serif;
+  color: #37474F;
 }
 
 #bv-brc-page-container {
@@ -185,12 +192,12 @@
 #bv-brc-home .card {
   border: 0.1px solid #e3e3e3;
   box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+  border-radius: 8px;
 }
 
 #bv-brc-home .bv-brc-info {
   text-align: center;
-  background-color: var(--blue-light-bg);
-  border-bottom: 4px solid var(--border-blue);
+  background: linear-gradient(to right,#E5F4F0, #DCEBF2);
 }
 
 #bv-brc-home .home-main,
@@ -664,9 +671,9 @@
 }
 
 .auth-button {
-  padding: 2px 4px;
-  color: #000;
-  border: 1px solid #759dc0;
+  padding: 4px 10px;
+  color: #37474F;
+  border: 1px solid #ffffffe9;
   border-radius: 4px;
   align-self: center;
   text-align: center;
@@ -675,7 +682,7 @@
 .auth-button,
 .patric.claro .authLinks .dijitButtonNode,
 .patric.claro .authLinks .dijitButtonNode {
-  background: #e5eef4 none;
+  background: #ffffffe9 none;
 }
 
 @media (min-width: 768px) {
