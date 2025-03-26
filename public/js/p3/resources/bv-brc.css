@@ -438,7 +438,7 @@
 }
 
 #bv-brc-footer {
-  background-image: linear-gradient(#09456f, #34698e);
+  background: rgb(60, 103, 126);
 }
 
 #bv-brc-footer-container {
@@ -603,7 +603,7 @@
 }
 
 #bv-brc-footer {
-  background: linear-gradient(#015994, #018a81);
+  background: rgb(60, 103, 126);
   padding-bottom: 20px;
 }
 
