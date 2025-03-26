@@ -198,6 +198,36 @@
 #bv-brc-home .bv-brc-info {
   text-align: center;
   background: linear-gradient(to right,#E5F4F0, #DCEBF2);
+  display: flex;
+  flex-direction: column;
+  padding: 20px 25px;
+  height: auto;
+  width: auto;
+}
+
+#bv-brc-home .bv-brc-info h1 {
+  margin-top: 10px;
+  margin-bottom: 15px;
+}
+
+#bv-brc-home .bv-brc-info p {
+  margin-bottom: 15px;
+}
+
+#bv-brc-home .bv-brc-info .search-section {
+  margin-top: 15px;
+  margin-bottom: 10px;
+  width: auto;
+}
+
+#bv-brc-home .bv-brc-info .corner-image {
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  z-index: 0;
+  max-width: 250px;
+  max-height: 250px;
+  overflow: hidden;
 }
 
 #bv-brc-home .home-main,
@@ -512,7 +542,6 @@
 #bv-brc-home .linkedin-feed {
   background: var(--white-bg);
   padding: 20px;
-  border-bottom: 4px solid var(--green);
 }
 
 #bv-brc-home .announcements h3 {
@@ -1115,4 +1144,248 @@ pre.bv-brc-code-block button:active {
 #help-menu.menu-section .sub-menu ,
 #about-menu.menu-section .menu-items {
   column-count: 2;
+}
+
+/* Upcoming Events Styles */
+.upcoming-events-section {
+  padding: 0;
+}
+
+.events-header {
+  margin-bottom: 12px;
+}
+
+.events-icon {
+  font-size: 18px;
+  margin-right: 8px;
+}
+
+.events-header h2 {
+  margin: 0;
+  font-size: 18px;
+}
+
+.events-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-bottom: 15px;
+}
+
+.event-item {
+  display: flex;
+  padding: 8px;
+  border-radius: 6px;
+  align-items: center;
+}
+
+.event-date {
+  width: 45px;
+  text-align: center;
+  margin-right: 12px;
+  flex-shrink: 0;
+}
+
+.event-details {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+}
+
+.event-item.highlighted {
+  background-color: #eef5f8;
+}
+
+.event-month {
+  font-weight: bold;
+  font-size: 12px;
+  color: #555;
+}
+
+.event-day {
+  font-weight: bold;
+  font-size: 18px;
+}
+
+.event-title {
+  font-weight: 600;
+  font-size: 13px;
+}
+
+.event-info {
+  color: #555;
+  font-size: 12px;
+  margin-top: 2px;
+}
+
+.view-all-events {
+  display: block;
+  text-align: right;
+  color: var(--main-link);
+  font-size: 14px;
+  text-decoration: none;
+  margin-top: 8px;
+}
+
+.view-all-events:hover {
+  text-decoration: underline;
+}
+
+/* Announcements card adjustments */
+#bv-brc-home .announcements {
+  padding: 18px;
+}
+
+/* Adjust the events section to be more compact */
+.upcoming-events-section {
+  padding: 0;
+}
+
+.events-header {
+  display: flex;
+  align-items: center;
+  margin-bottom: 15px;
+}
+
+.events-list {
+  gap: 8px;
+  margin-bottom: 12px;
+}
+
+.event-item {
+  padding: 6px;
+}
+
+.event-date {
+  margin-right: 10px;
+}
+
+/* Make the card fit its content better */
+#bv-brc-home .home-main-right .card {
+  margin-bottom: 20px;
+}
+
+/* Ensure the right column cards are sized appropriately */
+@media (min-width: 1024px) {
+  #bv-brc-home .home-main-right {
+    display: flex;
+    flex-direction: column;
+    gap: 20px;
+  }
+
+  #bv-brc-home .announcements,
+  #bv-brc-home .linkedin-feed {
+    flex: 0 0 auto;
+  }
+}
+
+/* Latest News Styles */
+.latest-news-section {
+  padding: 0;
+}
+
+.news-header {
+  display: flex;
+  align-items: center;
+  margin-bottom: 16px;
+}
+
+.news-icon {
+  font-size: 18px;
+  margin-right: 8px;
+}
+
+.news-header h2 {
+  margin: 0;
+  font-size: 18px;
+}
+
+/* Featured news styles */
+.featured-news {
+  border: 1px solid #cce0d8;
+  background-color: #f2fbf7;
+  border-radius: 8px;
+  padding: 12px;
+  margin-bottom: 20px;
+  font-size: 13px;
+}
+
+.news-meta {
+  font-size: 12px;
+  color: #888;
+}
+
+.news-category {
+  color: #356859;
+}
+
+.news-headline {
+  font-weight: 600;
+  margin: 8px 0 4px;
+}
+
+.news-excerpt {
+  margin: 0;
+  color: #333;
+}
+
+.read-more-link {
+  font-size: 12px;
+  color: #007b7f;
+  display: inline-block;
+  margin-top: 8px;
+  text-decoration: none;
+}
+
+.read-more-link:hover {
+  text-decoration: underline;
+}
+
+/* News list styles */
+.news-list {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.news-item {
+  display: flex;
+  align-items: flex-start;
+}
+
+.news-date {
+  width: 40px;
+  text-align: center;
+  margin-right: 10px;
+  flex-shrink: 0;
+}
+
+.news-month {
+  font-size: 12px;
+  color: #888;
+}
+
+.news-day {
+  font-weight: bold;
+  font-size: 16px;
+}
+
+.news-details {
+  flex: 1;
+}
+
+.news-title {
+  font-weight: 600;
+  font-size: 13px;
+}
+
+.news-summary {
+  color: #555;
+  font-size: 13px;
+  margin-top: 4px;
+}
+
+/* Adjust LinkedIn feed card */
+#bv-brc-home .linkedin-feed {
+  padding: 18px;
 }
