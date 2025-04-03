@@ -368,7 +368,7 @@ table tr.even td {
 }
 
 .ActionBar {
-    background: #B7D1C4;
+    background: #9cc2af;
     border-left: 1px solid #777;
     overflow: hidden;
     padding-top: 6px;
@@ -982,6 +982,7 @@ div.pubmed ul li {
 
 .patric.claro .dijitButtonNode {
     background-image: none;
+    background: #9cc2af;
 }
 
 

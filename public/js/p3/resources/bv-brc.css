@@ -12,7 +12,8 @@
   --vipr-yellow: #f1bf48;
   --main-blue: #5375b9;
 
-  --blue: #B7D1C4;
+  /* --blue: #B7D1C4; */
+  --blue: #9cc2af;
   --blue-tint: #e5eef4;
   --blue-shade: #004776;
   --green: #009190;
@@ -109,8 +110,10 @@
 }
 
 #bv-brc-header-container span, a {
-  font-family: 'Inter', sans-serif;
-  color: #37474F;
+  /* font-family: 'Inter', sans-serif; */
+  font-family: 'Poppins', sans-serif;
+  font-weight: 400;
+  color: #344855;
 }
 
 #bv-brc-page-container {
