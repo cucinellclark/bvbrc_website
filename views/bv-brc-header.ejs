@@ -67,29 +67,33 @@
                             <div class="menuHeader">Bacterial Pathogens</div>
                             <div class="menuItems">
                                 <% for (var i = 0; i < services.length; i++){ %>
-                                <div>
+                                <div onclick="window.location.href='<%- services[i].href %>';" style="cursor: pointer;">
                                     <span class="menuItem">
                                         <a class="" href="<%- services[i].href %>" title="<%- services[i].name %> overview"><%- services[i].name %></a>
                                     </span>
                                 </div>
                                 <% } %>
-                                <span class="menuItem">
-                                    <a class="navigationLink" href="/view/Bacteria/2" title="Overview page for all Bacteria genomes">All Bacteria</a>
-                                </span>
+                                <div onclick="window.location.href='/view/Bacteria/2';" style="cursor: pointer;">
+                                    <span class="menuItem">
+                                        <a class="navigationLink" href="/view/Bacteria/2" title="Overview page for all Bacteria genomes">All Bacteria</a>
+                                    </span>
+                                </div>
                             </div>
 
                             <div class="menuHeader">Featured Viruses</div>
                             <div class="menuItems">
                                 <% for (var i = 0; i < featured_virus.length; i++){ %>
-                                <div>
+                                <div onclick="window.location.href='<%- featured_virus[i].href %>';" style="cursor: pointer;">
                                     <span class="menuItem">
                                         <a class="navigationLink" href="<%- featured_virus[i].href %>" title="<%- featured_virus[i].name %> overview"><%- featured_virus[i].name %></a>
                                     </span>
                                 </div>
                                 <% } %>
-                                <span class="menuItem">
-                                    <a class="navigationLink" href="/view/Taxonomy/10239" title="Overview page for all Viruses">All Viruses</a>
-                                </span>
+                                <div onclick="window.location.href='/view/Taxonomy/10239';" style="cursor: pointer;">
+                                    <span class="menuItem">
+                                        <a class="navigationLink" href="/view/Taxonomy/10239" title="Overview page for all Viruses">All Viruses</a>
+                                    </span>
+                                </div>
                             </div>
 
                             <div class="menuHeader">Metagenomes</div>
@@ -111,20 +115,41 @@
 
                     <div data-dojo-type="p3/widget/TooltipDialog">
                         <div class="menuHeader" style="padding-right: 20px;">Advanced Search</div>
-                        <div><a class="navigationLink" href="/searches/TaxaSearch">Taxa</a></div>
-                        <div><a class="navigationLink" href="/searches/GenomeSearch">Genomes</a></div>
-                        <div><a class="navigationLink" href="/searches/StrainSearch">Strains</a></div>
-                        <div><a class="navigationLink" href="/searches/GenomicFeatureSearch">Features</a></div>
-                        <div><a class="navigationLink" href="/searches/ProteinSearch">Proteins</a></div>
-                        <div><a class="navigationLink" href="/searches/SpecialtyGeneSearch">Specialty Genes</a></div>
-                        <div><a class="navigationLink" href="/searches/DomainAndMotifSearch">Domains and Motifs</a></div>
-                        <div><a class="navigationLink" href="/searches/EpitopeSearch">Epitopes</a></div>
-                        <div><a class="navigationLink" href="/searches/ProteinStructureSearch">Protein Structures</a></div>
-                        <div><a class="navigationLink" href="/searches/PathwaySearch">Pathways</a></div>
-                        <div><a class="navigationLink" href="/searches/SubsystemSearch">Subsystems</a></div>
-                        <div><a class="navigationLink" href="/searches/SurveillanceSearch">Surveillance</a></div>
-                        <div><a class="navigationLink" href="/searches/SerologySearch">Serology</a></div>
-                        <div><a class="navigationLink" href="/searches/SFVTSearch">Sequence Feature Variant Types</a></div>
+                        <div onclick="window.location.href='/searches/TaxaSearch';" style="cursor: pointer;">
+                            <span class="menuItem">
+                                <a class="navigationLink" href="/searches/TaxaSearch" title="Taxa">Taxa</a>
+                            </span>
+                        </div>
+                        <div onclick="window.location.href='/searches/GenomeSearch';" style="cursor: pointer;">
+                            <span class="menuItem">
+                                <a class="navigationLink" href="/searches/GenomeSearch" title="Genomes">Genomes</a>
+                            </span>
+                        </div>
+                        <div onclick="window.location.href='/searches/GenomicFeatureSearch';" style="cursor: pointer;">
+                            <span class="menuItem">
+                                <a class="navigationLink" href="/searches/GenomicFeatureSearch" title="Features">Features</a>
+                            </span>
+                        </div>
+                        <div onclick="window.location.href='/searches/ProteinSearch';" style="cursor: pointer;">
+                            <span class="menuItem">
+                                <a class="navigationLink" href="/searches/ProteinSearch" title="Proteins">Proteins</a>
+                            </span>
+                        </div>
+                        <div onclick="window.location.href='/searches/SpecialtyGeneSearch';" style="cursor: pointer;">
+                            <span class="menuItem">
+                                <a class="navigationLink" href="/searches/SpecialtyGeneSearch" title="Specialty Genes">Specialty Genes</a>
+                            </span>
+                        </div>
+                        <div onclick="window.location.href='/searches/PathwaySearch';" style="cursor: pointer;">
+                            <span class="menuItem">
+                                <a class="navigationLink" href="/searches/PathwaySearch" title="Pathways">Pathways</a>
+                            </span>
+                        </div>
+                        <div onclick="window.location.href='/searches/SubsystemSearch';" style="cursor: pointer;">
+                            <span class="menuItem">
+                                <a class="navigationLink" href="/searches/SubsystemSearch" title="Subsystems">Subsystems</a>
+                            </span>
+                        </div>
                     </div>
                 </div>
 
@@ -136,67 +161,134 @@
                             <div style="vertical-align: top;width:250px;margin-right:5px;display:inline-block">
                                 <div class="menuHeader">Genomics</div>
                                 <div class="menuItems">
-                                    <div><a class="navigationLink" href="/app/Assembly2">Genome Assembly</a></div>
-                                    <div><a class="navigationLink" href="/app/Annotation">Genome Annotation</a></div>
-                                    <div><a class="navigationLink" href="/app/ComprehensiveGenomeAnalysis">Comprehensive Genome Analysis <span style="font-style: italic;">(B)</span></a></div>
-                                    <div><a class="navigationLink" href="/app/Homology">BLAST</a></div>
-                                    <div><a class="navigationLink" href="/app/PrimerDesign">Primer Design</a></div>
-                                    <div><a class="navigationLink" href="/app/GenomeDistance">Similar Genome Finder</a></div>
-                                    <div><a class="navigationLink" href="/app/GenomeAlignment">Genome Alignment</a></div>
-                                    <div><a class="navigationLink" href="/app/Variation">Variation Analysis</a></div>
-                                    <div><a class="navigationLink" href="/app/Tnseq">Tn-Seq Analysis</a></div>
+                                    <div onclick="window.location.href='/app/Assembly2';" style="cursor: pointer;">
+                                        <span class="menuItem">
+                                            <a class="navigationLink" href="/app/Assembly2">Genome Assembly</a>
+                                        </span>
+                                    </div>
+                                    <div onclick="window.location.href='/app/Annotation';" style="cursor: pointer;">
+                                        <span class="menuItem">
+                                            <a class="navigationLink" href="/app/Annotation">Genome Annotation</a>
+                                        </span>
+                                    </div>
+                                    <div onclick="window.location.href='/app/ComprehensiveGenomeAnalysis';" style="cursor: pointer;">
+                                        <span class="menuItem">
+                                            <a class="navigationLink" href="/app/ComprehensiveGenomeAnalysis">Comprehensive Genome Analysis <span style="font-style: italic;">(B)</span></a>
+                                        </span>
+                                    </div>
+                                    <div onclick="window.location.href='/app/Homology';" style="cursor: pointer;">
+                                        <span class="menuItem">
+                                            <a class="navigationLink" href="/app/Homology">BLAST</a>
+                                        </span>
+                                    </div>
+                                    <div onclick="window.location.href='/app/GenomeDistance';" style="cursor: pointer;">
+                                        <span class="menuItem">
+                                            <a class="navigationLink" href="/app/GenomeDistance">Similar Genome Finder</a>
+                                        </span>
+                                    </div>
                                 </div>
                                 <div class="menuHeader">Phylogenomics</div>
                                 <div class="menuItems">
-                                    <div><a class="navigationLink" href="/app/PhylogeneticTree">Bacterial Genome Tree</a></div>
-                                    <div><a class="navigationLink" href="/app/ViralGenomeTree">Viral Genome Tree</a></div>
-                                    <div><a class="navigationLink" href="/app/GeneTree">Gene/Protein Tree</a></div>
+                                    <div onclick="window.location.href='/app/PhylogeneticTree';" style="cursor: pointer;">
+                                        <span class="menuItem">
+                                            <a class="navigationLink" href="/app/PhylogeneticTree">Bacterial Genome Tree</a>
+                                        </span>
+                                    </div>
+                                    <div onclick="window.location.href='/app/ViralGenomeTree';" style="cursor: pointer;">
+                                        <span class="menuItem">
+                                            <a class="navigationLink" href="/app/ViralGenomeTree">Viral Genome Tree</a>
+                                        </span>
+                                    </div>
+                                    <div onclick="window.location.href='/app/GeneTree';" style="cursor: pointer;">
+                                        <span class="menuItem">
+                                            <a class="navigationLink" href="/app/GeneTree">Gene/Protein Tree</a>
+                                        </span>
+                                    </div>
+                                    <div onclick="window.location.href='/app/WholeGenomeSNP';" style="cursor: pointer;">
+                                        <span class="menuItem">
+                                            <a class="navigationLink" href="/app/WholeGenomeSNP">Whole Genome SNP Analysis</a>
+                                        </span>
+                                    </div>
                                 </div>
                                 <div class="menuHeader">Protein Tools</div>
                                 <div class="menuItems">
-                                    <div><a class="navigationLink" href="/app/MSA">MSA and SNP Analysis</a></div>
-                                    <div><a class="navigationLink" href="/app/MetaCATS">Meta-CATS</a></div>
-                                    <div><a class="navigationLink" href="/app/SeqComparison">Proteome Comparison</a></div>
-                                    <div><a class="navigationLink" href="/app/ComparativeSystems">Protein Family Sorter</a></div>
-                                    <div><a class="navigationLink" href="/app/ComparativeSystems">Comparative Systems</a></div>
-                                    <div><a class="navigationLink" href="/app/Docking">Docking</a></div>
+                                    <div onclick="window.location.href='/app/MSA';" style="cursor: pointer;">
+                                        <span class="menuItem">
+                                            <a class="navigationLink" href="/app/MSA">MSA and SNP Analysis</a>
+                                        </span>
+                                    </div>
+                                    <div onclick="window.location.href='/app/SeqComparison';" style="cursor: pointer;">
+                                        <span class="menuItem">
+                                            <a class="navigationLink" href="/app/SeqComparison">Proteome Comparison</a>
+                                        </span>
+                                    </div>
+                                    <div onclick="window.location.href='/app/ComparativeSystems';" style="cursor: pointer;">
+                                        <span class="menuItem">
+                                            <a class="navigationLink" href="/app/ComparativeSystems">Comparative Systems</a>
+                                        </span>
+                                    </div>
+                                    <div onclick="window.location.href='/app/Docking';" style="cursor: pointer;">
+                                        <span class="menuItem">
+                                            <a class="navigationLink" href="/app/Docking">Docking</a>
+                                        </span>
+                                    </div>
                                 </div>
                             </div>
 
                             <div style="vertical-align:top;width:250px;display:inline-block">
                                 <div class="menuHeader">Metagenomics</div>
                                 <div class="menuItems">
-                                    <div><a class="navigationLink" href="/app/TaxonomicClassification">Taxonomic Classification</a></div>
-                                    <div><a class="navigationLink" href="/app/MetagenomicBinning">Metagenomic Binning</a></div>
-                                    <div><a class="navigationLink" href="/app/MetagenomicReadMapping">Metagenomic Read Mapping</a></div>
+                                    <div onclick="window.location.href='/app/TaxonomicClassification';" style="cursor: pointer;">
+                                        <span class="menuItem">
+                                            <a class="navigationLink" href="/app/TaxonomicClassification">Taxonomic Classification</a>
+                                        </span>
+                                    </div>
+                                    <div onclick="window.location.href='/app/MetagenomicBinning';" style="cursor: pointer;">
+                                        <span class="menuItem">
+                                            <a class="navigationLink" href="/app/MetagenomicBinning">Metagenomic Binning</a>
+                                        </span>
+                                    </div>
+                                    <div onclick="window.location.href='/app/MetagenomicReadMapping';" style="cursor: pointer;">
+                                        <span class="menuItem">
+                                            <a class="navigationLink" href="/app/MetagenomicReadMapping">Metagenomic Read Mapping</a>
+                                        </span>
+                                    </div>
                                 </div>
-                              <div class="menuHeader">Transcriptomics</div>
-                              <div class="menuItems">
-                                  <div><a class="navigationLink" href="/app/Rnaseq">RNA-Seq Analysis</a></div>
-                                  <div><a class="navigationLink" href="/app/Expression">Expression Import</a></div>
-                              </div>
-                              <p></p>
-                              <div class="menuHeader">Utilities</div>
-                              <div class="menuItems">
-                                <div><a class="navigationLink" href="/app/FastqUtil">Fastq Utilities</a></div>
-                                <div><a class="navigationLink" href="/app/IDMapper">ID Mapper</a></div>
-                              </div>
-                              <p></p>
-                              <div class="menuHeader">Viral Tools</div>
-                              <div class="menuItems">
-                                <div><a class="navigationLink" href="/app/ComprehensiveSARS2Analysis">SARS-CoV-2 Genome Analysis</a></div>
-                                <div><a class="navigationLink" href="/app/SARS2Wastewater">SARS-CoV-2 Wastewater Analysis</a></div>
-                                <div><a class="navigationLink" href="/app/SequenceSubmission">Influenza Sequence Submission</a></div>
-                                <div><a class="navigationLink" href="/app/HASubtypeNumberingConversion">Influenza HA Subtype Conversion</a></div>
-                                <div><a class="navigationLink" href="/app/SubspeciesClassification">Subspecies Classification</a></div>
-                                <div><a class="navigationLink" href="/app/ViralAssembly">Viral Assembly</a></div>
-                              </div>
-                              <p></p>
-                              <div class="menuHeader">Outbreak Tracker</div>
-                              <div class="menuItems">
-                                <div><b><a class="navigationLink" href="/outbreaks/Mpox/#view_tab=overview">Mpox 2024</a></b></div>
-                                <div><b><a class="navigationLink" href="/outbreaks/H5N1/#view_tab=overview">Influenza H5N1 2024</a></b></div>
-                                <div><b><a class="navigationLink" href="/outbreaks/SARSCoV2/#view_tab=overview">SARS-CoV-2</a></b></div>
+                                <div class="menuHeader">Viral Tools</div>
+                                <div class="menuItems">
+                                    <div onclick="window.location.href='/app/ComprehensiveSARS2Analysis';" style="cursor: pointer;">
+                                        <span class="menuItem">
+                                            <a class="navigationLink" href="/app/ComprehensiveSARS2Analysis">SARS-CoV-2 Genome Analysis</a>
+                                        </span>
+                                    </div>
+                                    <div onclick="window.location.href='/app/SARS2Wastewater';" style="cursor: pointer;">
+                                        <span class="menuItem">
+                                            <a class="navigationLink" href="/app/SARS2Wastewater">SARS-CoV-2 Wastewater Analysis</a>
+                                        </span>
+                                    </div>
+                                    <div onclick="window.location.href='/app/SubspeciesClassification';" style="cursor: pointer;">
+                                        <span class="menuItem">
+                                            <a class="navigationLink" href="/app/SubspeciesClassification">Subspecies Classification</a>
+                                        </span>
+                                    </div>
+                                </div>
+                                <div class="menuHeader">Outbreak Tracker</div>
+                                <div class="menuItems">
+                                    <div onclick="window.location.href='/outbreaks/Mpox/#view_tab=overview';" style="cursor: pointer;">
+                                        <span class="menuItem">
+                                            <a class="navigationLink" href="/outbreaks/Mpox/#view_tab=overview">Mpox 2024</a>
+                                        </span>
+                                    </div>
+                                    <div onclick="window.location.href='/outbreaks/H5N1/#view_tab=overview';" style="cursor: pointer;">
+                                        <span class="menuItem">
+                                            <a class="navigationLink" href="/outbreaks/H5N1/#view_tab=overview">Influenza H5N1 2024</a>
+                                        </span>
+                                    </div>
+                                    <div onclick="window.location.href='/outbreaks/SARSCoV2/#view_tab=overview';" style="cursor: pointer;">
+                                        <span class="menuItem">
+                                            <a class="navigationLink" href="/outbreaks/SARSCoV2/#view_tab=overview">SARS-CoV-2</a>
+                                        </span>
+                                    </div>
                               </div>
                             </div>
                         </div>
@@ -218,7 +310,7 @@
                                                 class="navigationLink" id="YourWorkspaceLink">Workspaces</a></div>
                                     <div id="YourWorkspaces"></div>
                                     <div><a class="navigationLink" href="/workspace/public">Public Workspaces</a></div>
-                                    <div><a class="navigationLink" href="/workspace/public/ARWattam@patricbrc.org/BV-BRC%20Workshop">BV-BRC Workshop</a></div>
+                                    <div><a class="navigationLink" href="/workspace/public/ARWattam@patricbrc.org/MAAGE%20Workspace">MAAGE Workspace</a></div>
                                 </div>
                             </div>
                             <div style="vertical-align:top;display:inline-block" class="ShowWithAuth">
@@ -266,21 +358,42 @@
                 </div>
                 -->
 
-                <div class="topMenuButton showOnLoad dijitHidden" data-dojo-type="dijit/form/DropDownButton">
-                    <span>About</span>
+                <div class="topMenuButton showOnLoad dijitHidden" data-dojo-type="dijit/form/DropDownButton" style="width: 180px">
+                    <span>Resources</span>
 
                     <div data-dojo-type="p3/widget/TooltipDialog">
-                        <div><a class="TopMenuLink" href="/about">About BV-BRC</a></div>
-                        <div><a class="DialogButton" rel="reportProblem:">Contact Us</a></div>
-                        <div><a class="TopMenuLink" href="/team">Our Team</a></div>
-                        <div><a class="TopMenuLink" href="https://www.bv-brc.org/docs/news/index.html" target="_blank">Announcements</a></div>
-                        <div><a class="TopMenuLink" href="/brc-calendar">BRC Calendar</a></div>
-                        <hr>
-                        <div><a class="TopMenuLink" href="/publications">Publications</a></div>
-                        <div><a class="TopMenuLink" href="/citation">Citation</a></div>
-                        <div><a class="TopMenuLink" href="/related-resources">Related Resources</a></div>
-                        <div><a class="TopMenuLink navigationLinkOut" href="https://github.com/BV-BRC" target="_blank" rel="noopener">BV-BRC GitHub</a></div>
-                        <div><a class="TopMenuLink" href="/privacy-policy">Privacy Policy</a></div>
+                        <div class="menuHeader">MAAGE</div>
+                        <div class="menuItems">
+                            <div onclick="window.location.href='/about';" style="cursor: pointer;">
+                                <span class="menuItem">
+                                    <a class="navigationLink" href="/about">About Us</a>
+                                </span>
+                            </div>
+                            <div onclick="window.location.href='/team';" style="cursor: pointer;">
+                                <span class="menuItem">
+                                    <a class="navigationLink" href="/team">Our Team</a>
+                                </span>
+                            </div>
+                            <div onclick="window.location.href='/advisory-boards';" style="cursor: pointer;">
+                                <span class="menuItem">
+                                    <a class="navigationLink" href="/advisory-boards">Advisory Boards</a>
+                                </span>
+                            </div>
+                        </div>
+
+                        <div class="menuHeader">Related Resources</div>
+                        <div class="menuItems">
+                            <div onclick="window.location.href='https://github.com/MAAGE-BRC';" style="cursor: pointer;">
+                                <span class="menuItem">
+                                    <a class="navigationLink" href="https://github.com/MAAGE-BRC" target="_blank">Github</a>
+                                </span>
+                            </div>
+                            <div onclick="window.location.href='/contact';" style="cursor: pointer;">
+                                <span class="menuItem">
+                                    <a class="navigationLink" href="/contact">Contact Us</a>
+                                </span>
+                            </div>
+                        </div>
                     </div>
                 </div>
             </div>

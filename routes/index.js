@@ -4,19 +4,27 @@ var router = express.Router();
 /* GET home page. */
 router.get('/', function (req, res) {
   req.applicationModule = 'p3/app/p3app';
-  res.render('index', { title: 'PATRIC', request: req, response: res });
+  res.render('index', { title: 'MAAGE', request: req, response: res });
 });
 
 /* GET about page. */
 router.get('/about', function (req, res) {
+  console.log('about page');
   req.applicationModule = 'p3/app/p3app';
-  res.render('pages/about', { title: 'PATRIC', request: req, response: res });
+  res.render('pages/about', { title: 'MAAGE', request: req, response: res });
+});
+
+/* GET advisory boards page. */
+router.get('/advisory-boards', function (req, res) {
+  console.log('advisory boards page');
+  req.applicationModule = 'p3/app/p3app';
+  res.render('pages/advisory_board', { title: 'MAAGE', request: req, response: res });
 });
 
 /* GET announcements page. */
 router.get('/announcements', function (req, res) {
   req.applicationModule = 'p3/app/p3app';
-  res.render('pages/announcements', { title: 'PATRIC', request: req, response: res });
+  res.render('pages/announcements', { title: 'MAAGE', request: req, response: res });
 });
 
 /* GET citation page. */

@@ -48,6 +48,16 @@
 
 .menuItem {
     display: inline-block;
+    /* adding stuff for maage styling */
+    padding-top: 6px;
+    padding-bottom: 6px;
+    padding-left: 10px;
+    width: 90%;
+    border-radius: 5px;
+}
+.menuItem:hover {
+    background-color: #e5f1e9;
+    transform: translateX(2px);
 }
 
 .menuItem.half {

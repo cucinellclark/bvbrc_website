@@ -33,14 +33,7 @@
                         Midwest Alliance for Applied Genomic Epidemiology
                     </h1>
                     <p>
-                        Welcome to the Midwest Alliance for Applied Genomic Epidemiology (MAAGE), a comprehensive
-                        resource for bacterial and viral infectious disease research. MAAGE provides integrated data,
-                        advanced bioinformatics tools, and workflows to support the scientific community in
-                        understanding and combating infectious diseases. Explore our <a
-                                href="https://www.maage.org/docs/quick_start/index.html" target="_blank"
-                                style="font-weight: bold;">Quick Start Guide</a> to learn more about the platform's
-                                features and capabilities. For questions or assistance, please don't hesitate to <a
-                                href="mailto:help@maage.org" style="font-weight: bold;">contact us</a>.
+                        The Midwest Alliance for Applied Genomic Epidemiology (MAAGE) aims to develop a genomic surveillance platform to enhance infectious disease detection and tracking while providing educational resources for public health and healthcare professionals.
                     </p>
 
                     <!-- Search Section Component -->
@@ -76,7 +69,6 @@
                 <div class="bv-brc-mid"> <!-- style="grid-row: 3/6"-->
                     <div class="analyze-data-section">
                         <div class="analyze-data-header">
-                            <span class="analyze-icon">🧪</span>
                             <h2>Analyze Data</h2>
                         </div>
                         <p class="analyze-description">
@@ -85,7 +77,7 @@
 
                         <div class="analyze-cards-container">
                             <div class="analyze-card">
-                                <h3>🔍 Search</h3>
+                                <h3>Search</h3>
                                 <ul class="analyze-card-list">
                                     <li><a href="/searches/TaxaSearch" class="navigationLink">Taxa</a></li>
                                     <li><a href="/searches/GenomeSearch" class="navigationLink">Genomes</a></li>
@@ -96,7 +88,7 @@
                             </div>
 
                             <div class="analyze-card">
-                                <h3>🧬 Analyze</h3>
+                                <h3>Analyze</h3>
                                 <ul class="analyze-card-list">
                                     <li><a href="/app/Assembly2" class="navigationLink">Assembly</a></li>
                                     <li><a href="/app/Annotation" class="navigationLink">Annotation</a></li>
@@ -107,7 +99,7 @@
                             </div>
 
                             <div class="analyze-card">
-                                <h3>🗃️ Data</h3>
+                                <h3>Data</h3>
                                 <ul class="analyze-card-list">
                                     <li><a href="https://bv-brc.org/docs/quick_references/workspaces/workspace.html" target="_blank">Workspace</a></li>
                                     <li><a href="https://bv-brc.org/docs/quick_references/workspaces/groups.html" target="_blank">Save Results</a></li>
@@ -118,7 +110,7 @@
                             </div>
 
                             <div class="analyze-card">
-                                <h3>🔗 Access</h3>
+                                <h3>Access</h3>
                                 <ul class="analyze-card-list">
                                     <li><a href="https://bv-brc.org/docs/cli_tutorial/index.html" target="_blank">CLI</a></li>
                                     <li><a href="https://bv-brc.org/api/doc/" target="_blank">API</a></li>
@@ -339,6 +331,7 @@
   .bv-brc-info {
     position: relative;
     overflow: hidden; /* This ensures the image doesn't overflow the container */
+    text-align: left; /* Explicitly set text alignment to left */
   }
 
   .corner-image {
@@ -361,6 +354,7 @@
   .bv-brc-info .browse {
     position: relative;
     z-index: 1; /* Higher z-index to place content above the image */
+    text-align: left; /* Ensure all text elements are left-aligned */
   }
 
   /* Search Section Styles */
