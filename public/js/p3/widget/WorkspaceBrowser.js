@@ -1171,6 +1171,24 @@ define([
         Topic.publish('/navigate', { href: '/view/PhylogeneticTree2/?&labelSearch=' + labelSearch + '&idType=' + idType + '&labelType=' + labelType + '&wsTreeFile=' + encodePath(path[0]) + '&fileType=' + fileType });
       }, false);
 
+      this.actionPanel.addAction('ViewGEXF', 'fa icon-sitemap fa-2x', { // Using 'sitemap' as a graph-like icon
+        label: 'VIEW GRAPH',
+        multiple: false, // This action works on a single file
+       // validTypes: ['gexf'], // This action only appears when a 'gexf' file is selected
+        validTypes: ['gexf'],
+        tooltip: 'View Synteny Graph'
+      }, function (selection) {
+        // 'selection' is an array of the selected grid items. We only care about the first one.
+        if (!selection || selection.length === 0) { return; }
+        
+        var item = selection[0];
+        
+        // When the button is clicked, we navigate to the workspace path for that item.
+        // The _setPathAttr function will see the path, recognize the '.gexf' type,
+        // and automatically launch GEXF viewer.
+        Topic.publish('/navigate', { href: '/workspace' + item.path });
+      }, true); // action is enabled by default when conditions are met.
+
       this.browserHeader.addAction('ViewNwkXml', 'fa icon-eye fa-2x', {
         label: 'VIEW',
         multiple: false,
@@ -2183,9 +2201,18 @@ define([
         // console.log('in WorkspaceBrowser obj.autoMeta', obj.autoMeta);
         // console.log('in WorkspaceBrowser browserHeader', this.browserHeader);
 
-        switch (obj.type) {
+        var tempType=obj.type;
+        if (obj.name && obj.name.endsWith('.gexf')) {
+          tempType = 'gexf';
+        }
+
+        switch (tempType) {
           case 'folder':
             panelCtor = WorkspaceExplorerView;
+            break;
+          case 'gexf': // This will now work correctly!
+            panelCtor = window.App.getConstructor('p3/widget/viewer/GEXF');
+            params.file = obj;
             break;
           case 'genome_group':
             panelCtor = window.App.getConstructor('p3/widget/viewer/WSGenomeGroup');
@@ -2233,6 +2260,25 @@ define([
                   break;
                 case 'Homology':
                   d = 'p3/widget/viewer/BlastJobResult';
+                  break;
+                case 'SyntenyGraph':
+                  panelCtor = window.App.getConstructor('p3/widget/viewer/GEXF');
+                  
+                  var gexfFileMeta = obj.autoMeta.output_files.find(function(f){
+                      return f[0].endsWith('.gexf');
+                  });
+
+                  if (gexfFileMeta) {
+                      // The viewer's 'file' property expects a workspace object with a 'path'.
+                      // We can create a lightweight object here.
+                      params.file = {
+                          path: gexfFileMeta[0] // gexfFileMeta[0] is the full path string
+                      };
+                  } else {
+                      // Fallback if no .gexf file is found
+                      panelCtor = window.App.getConstructor('p3/widget/viewer/JobResult');
+                      params.data = obj;
+                  }
                   break;
                 default:
                   console.log('Using the default JobResult viewer. A viewer could not be found for id: ' + id);
