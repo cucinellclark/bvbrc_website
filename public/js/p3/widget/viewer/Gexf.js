@@ -176,14 +176,15 @@ define([
                 console.error("GexfJS is not available. gexfjs.js may not have loaded correctly.");
                 return;
             }
+            var originalSetInterval = window.setInterval;
+            window.setInterval = function() {};
             var gexf_dom = (new window.DOMParser()).parseFromString(gexfXMLData, "text/xml");
-            this.resize();
-            if (window.GexfJS) {
-                GexfJS.params.centreX = 400; // Or half of the widget's width
-                GexfJS.params.centreY = 350; // Or half of the widget's height
-            } 
-
             startGraphViewer(gexf_dom);
+            
+            window.setInterval = originalSetInterval;
+
+            this.resize();
+            
         },
         
         postCreate: function(){
@@ -208,7 +209,7 @@ define([
             // Get the dimensions of this Dojo widget's container.
             var box = this.domNode.getBoundingClientRect();
 
-            if (box.width && box.height) {
+            if (box.width > 0 && box.height > 0) { // Check for > 0
                 // Manually override the dimensions that gexfjs.js uses.
                 // We are injecting the correct size from the modern container
                 // into the legacy script's global state.
