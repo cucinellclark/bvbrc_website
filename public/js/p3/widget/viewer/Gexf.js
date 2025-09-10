@@ -1,39 +1,60 @@
+// In public/js/p3/widget/viewer/GEXFView.js
+
 define([
-    "dojo/_base/declare", "dijit/_WidgetBase", "dijit/_TemplatedMixin",
-    "dojo/on", "dojo/_base/lang", "../../WorkspaceManager",
-    "dojo/dom-construct", "dojo/dom-style", "dojo/when",
-    "../../util/PathJoin", 
-    "dojo/text!/vendor/gexf-js/js/gexfjs.js" // Load the script code as text
+    "dojo/_base/declare", "dijit/layout/ContentPane", "dojo/_base/lang",
+    "dojo/on", "../../WorkspaceManager", "../../util/PathJoin", "dojo/when"
 ], function(
-    declare, WidgetBase, Templated,
-    on, lang, WorkspaceManager,
-    domConstruct, domStyle, when,
-    PathJoin,
-    gexfjsCode // The script is now in this string
+    declare, ContentPane, lang,
+    on, WorkspaceManager, PathJoin, when
 ){
-    // Helper to ensure the legacy script is loaded only once into the global scope
-    var gexfLoaded = false;
-    var loadGexfJs = function() {
-        if (gexfLoaded) { return; }
-        try {
+    var scriptsReady = false;
+    var pendingCallbacks = [];
+    var loadGexfDependencies = function(callback) {
+        if (scriptsReady) { callback(); return; }
+        pendingCallbacks.push(callback);
+        if (pendingCallbacks.length > 1) { return; }
+        var stylesToLoad = [
+            '/vendor/gexf-js/styles/jquery-ui-1.10.3.custom.min.css',
+            '/vendor/gexf-js/styles/gexfjs.css'
+        ];
+
+        stylesToLoad.forEach(function(href){
+            var link = document.createElement('link');
+            link.rel = 'stylesheet';
+            link.type = 'text/css';
+            link.href = href;
+            document.getElementsByTagName('head')[0].appendChild(link);
+        });
+        var scriptsToLoad = [
+            '/vendor/gexf-js/js/jquery-2.0.2.min.js',
+            '/vendor/gexf-js/js/jquery.mousewheel.min.js',
+            '/vendor/gexf-js/js/gexfjs.js'
+        ];
+        var loadScript = function(index) {
+            if (index >= scriptsToLoad.length) {
+                scriptsReady = true;
+                pendingCallbacks.forEach(function(cb){ cb(); });
+                return;
+            }
             var script = document.createElement('script');
             script.type = 'text/javascript';
-            script.text = gexfjsCode;
+            script.src = scriptsToLoad[index];
+            script.onload = function() { loadScript(index + 1); };
+            script.onerror = function() { console.error("Failed to load script:", scriptsToLoad[index]); };
             document.getElementsByTagName('head')[0].appendChild(script);
-            gexfLoaded = true;
-        } catch(e) {
-            console.error("GEXF-JS loading error:", e);
-        }
+        };
+        loadScript(0);
     };
 
-    return declare([WidgetBase, Templated], {
-        baseClass: "GEXFViewer",
+    return declare([ContentPane], { // Extends ContentPane to fill the page
+        "baseClass": "GEXFView",
+        "path": "",
+        "file": null,
 
-        // The HTML template with all the required IDs for gexfjs.js
         templateString: `
-            <div class="\${baseClass}" style="width: 100%; height: 100%;">
+            <div class="\${baseClass}" style="width: 100%; height: 100%; overflow: hidden;">
                 <div id="zonecentre" class="gradient" style="position: relative; width: 100%; height: 100%;">
-                    <canvas id="carte" data-dojo-attach-point="canvasNode" width="0" height="0"></canvas>
+                    <canvas id="carte" width="0" height="0"></canvas>
                     <ul id="ctlzoom">
                         <li><a href="#" id="zoomPlusButton"></a></li>
                         <li id="zoomSliderzone"><div id="zoomSlider"></div></li>
@@ -43,7 +64,7 @@ define([
                     </ul>
                 </div>
                 <div id="overviewzone" class="gradient">
-                    <canvas id="overview" data-dojo-attach-point="overviewNode" width="0" height="0"></canvas>
+                    <canvas id="overview" width="0" height="0"></canvas>
                 </div>
                 <div id="leftcolumn">
                     <div id="unfold"><a href="#" id="aUnfold" class="rightarrow"></a></div>
@@ -56,61 +77,113 @@ define([
                 <ul id="autocomplete"></ul>
             </div>
         `,
-        file: null, // This will be the workspace object for the GEXF file
+        // --- END TEMPLATE ---
 
-        postCreate: function(){
-            this.inherited(arguments);
-            loadGexfJs(); // Ensure the global functions like startGraphViewer are available
+
+        _updateState: function(attr, oldVal, state){
+            // This is our new central controller function.
+            // It's called on startup AND on any subsequent state change.
+
+            if (!state || !state.search) {
+                console.error("GEXF Viewer: State or search parameters are missing.");
+                this.set("content", "<div class='error'>Error: Invalid URL State.</div>");
+                return;
+            }
+
+            var params = new URLSearchParams(state.search);
+            var workspacePath = params.get('path');
+
+            if (workspacePath) {
+                // We have a valid path, let's load and render the graph.
+                this.loadAndRender(workspacePath);
+            } else {
+                console.error("GEXF Viewer: 'path' parameter not found in URL.", state.search);
+                this.set("content", "<div class='error'>Error: 'path' parameter missing from URL.</div>");
+            }
+        },
+        onSetState: function(attr, oldVal, state){
+            // This is the main entry point called by the router.
+            // The state object now contains the path in its 'search' property.
+            if (!state || !state.search) {
+                console.error("GEXF Viewer: State or search parameters are missing.");
+                return;
+            }
+
+            // Use the standard URLSearchParams API to easily parse the query string.
+            // state.search will look like "?&path=/anwarren@...".
+            var params = new URLSearchParams(state.search);
+
+            // Get the value of the 'path' parameter we put in the URL.
+            var workspacePath = params.get('path');
+
+            if (workspacePath) {
+                // Now that we have the clean path, we set it on the widget.
+                this.set("path", workspacePath);
+            } else {
+                console.error("GEXF Viewer: 'path' parameter not found in URL.", state.search);
+            }
         },
 
-        startup: function(){
-            if (this._started) { return; }
-            this.inherited(arguments);
+        _setPath: function(path){
+            this.path = path;
 
-            // The 'file' property can be a promise, so we use when() to handle it
-            when(this.file, lang.hitch(this, function(file_meta){
-                if (file_meta && file_meta.path){
-                    var fullPath = PathJoin(file_meta.path, file_meta.name);
-                    // Use getObject() to fetch the file content directly
-                    WorkspaceManager.getObject(fullPath, false).then(lang.hitch(this, function(res){
+            var file_meta = {
+                path: this.path,
+                name: this.path.split('/').pop()
+            };
+            this.set("file", file_meta);
+        },
+
+        // _setFileAttr is now just a simple setter, not responsible for logic.
+        _setFileAttr: function(file){
+            this.file = file;
+            if (this._started){
+                this.loadAndRender();
+            }
+        },
+
+        loadAndRender: function(path) {
+            // Load all scripts, then fetch data and render
+            this.path = path; // Set the path for reference
+
+            loadGexfDependencies(lang.hitch(this, function() {
+                if (this.path){
+                    // Show a temporary loading message
+                    this.set("content", "<div>Loading GEXF file...</div>");
+                    WorkspaceManager.getObject(this.path, false).then(lang.hitch(this, function(res){
                         if (res && res.data){
-                            this.renderGraph(res.data);
+                            // Now that data is loaded, replace the loading message with the real viewer template
+                            this.set("content", this.templateString);
+                            // Call renderGraph after a very short delay to allow the DOM to be created
+                            setTimeout(lang.hitch(this, function() {
+                                this.renderGraph(res.data);
+                            }), 0);
                         } else {
-                            console.error("GEXF Viewer: Could not retrieve file content.");
+                            this.set("content", "<div class='error'>Error: Could not retrieve GEXF file content.</div>");
                         }
                     }));
-                } else {
-                    console.error("GEXF Viewer: File object or path is missing.");
                 }
             }));
         },
 
         renderGraph: function(gexfXMLData){
-            // This function is the new entry point that calls the legacy code.
-            if (!window.startGraphViewer) {
-                console.error("gexfjs.js did not load correctly or startGraphViewer is not global.");
-                return;
+            if (!window.startGraphViewer) { 
+                console.error("startGraphViewer() is not available. gexfjs.js may not have loaded correctly.");
+                return; 
             }
-
-            // Before calling the viewer, we must ensure the DOM from our template is ready and sized.
-            // gexfjs.js directly manipulates DOM elements by ID.
-            this.resize();
-
-            // The 'data' parameter for startGraphViewer should be the raw GEXF XML string.
-            // The old code did `x=(new window.DOMParser()); res=x.parseFromString(res.graph, "text/xml");`
-            // This suggests the API was returning JSON with an XML string inside. Here, res.data IS the XML string.
             var gexf_dom = (new window.DOMParser()).parseFromString(gexfXMLData, "text/xml");
-
-            // Now, call the global function from gexfjs.js with the parsed XML document
             startGraphViewer(gexf_dom);
         },
-
-        resize: function(){
+        
+        postCreate: function(){
             this.inherited(arguments);
-            // gexfjs.js has a function to handle resizing, let's call it.
-            if (window.updateWorkspaceBounds){
-                updateWorkspaceBounds();
-            }
+            this.watch("state", lang.hitch(this, "onSetState"));
+        },
+
+        startup: function(){
+            if (this._started){ return; }
+            this.inherited(arguments);
+            this._updateState(null, null, this.state);
         }
     });
 });
