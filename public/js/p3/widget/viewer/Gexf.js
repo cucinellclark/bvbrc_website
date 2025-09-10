@@ -27,6 +27,7 @@ define([
         });
         var scriptsToLoad = [
             '/vendor/gexf-js/js/jquery-2.0.2.min.js',
+            '/vendor/gexf-js/js/jquery-ui-1.10.4.custom.min.js',
             '/vendor/gexf-js/js/jquery.mousewheel.min.js',
             '/vendor/gexf-js/js/gexfjs.js'
         ];
@@ -157,7 +158,7 @@ define([
                             // Call renderGraph after a very short delay to allow the DOM to be created
                             setTimeout(lang.hitch(this, function() {
                                 this.renderGraph(res.data);
-                            }), 0);
+                            }), 50);
                         } else {
                             this.set("content", "<div class='error'>Error: Could not retrieve GEXF file content.</div>");
                         }
@@ -171,7 +172,17 @@ define([
                 console.error("startGraphViewer() is not available. gexfjs.js may not have loaded correctly.");
                 return; 
             }
+            if(!window.GexfJS) {
+                console.error("GexfJS is not available. gexfjs.js may not have loaded correctly.");
+                return;
+            }
             var gexf_dom = (new window.DOMParser()).parseFromString(gexfXMLData, "text/xml");
+            this.resize();
+            if (window.GexfJS) {
+                GexfJS.params.centreX = 400; // Or half of the widget's width
+                GexfJS.params.centreY = 350; // Or half of the widget's height
+            } 
+
             startGraphViewer(gexf_dom);
         },
         
@@ -184,6 +195,30 @@ define([
             if (this._started){ return; }
             this.inherited(arguments);
             this._updateState(null, null, this.state);
+        },
+        
+        resize: function(){
+            this.inherited(arguments);
+
+            // If the gexfjs library isn't loaded yet, do nothing.
+            if (!window.GexfJS || !window.updateWorkspaceBounds) {
+                return;
+            }
+
+            // Get the dimensions of this Dojo widget's container.
+            var box = this.domNode.getBoundingClientRect();
+
+            if (box.width && box.height) {
+                // Manually override the dimensions that gexfjs.js uses.
+                // We are injecting the correct size from the modern container
+                // into the legacy script's global state.
+                GexfJS.graphZone.width = box.width;
+                GexfJS.graphZone.height = box.height;
+
+                // Now, call the legacy function, which will use our correct values
+                // instead of its own incorrect jQuery-based guesses.
+                updateWorkspaceBounds();
+            }
         }
     });
 });
