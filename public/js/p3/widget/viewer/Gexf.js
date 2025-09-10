@@ -80,13 +80,21 @@ define([
         `,
         // --- END TEMPLATE ---
 
+        postCreate: function(){
+            this.inherited(arguments);
+            this.watch("state", lang.hitch(this, "onSetState"));
+        },
 
-        _updateState: function(attr, oldVal, state){
-            // This is our new central controller function.
-            // It's called on startup AND on any subsequent state change.
+        startup: function(){
+            if (this._started){ return; }
+            this.inherited(arguments);
+            this.onSetState("state", null, this.state);
+        },
+        
 
+        onSetState: function(attr, oldVal, state){
+            // This is now the SINGLE entry point for all state changes.
             if (!state || !state.search) {
-                console.error("GEXF Viewer: State or search parameters are missing.");
                 this.set("content", "<div class='error'>Error: Invalid URL State.</div>");
                 return;
             }
@@ -98,30 +106,7 @@ define([
                 // We have a valid path, let's load and render the graph.
                 this.loadAndRender(workspacePath);
             } else {
-                console.error("GEXF Viewer: 'path' parameter not found in URL.", state.search);
                 this.set("content", "<div class='error'>Error: 'path' parameter missing from URL.</div>");
-            }
-        },
-        onSetState: function(attr, oldVal, state){
-            // This is the main entry point called by the router.
-            // The state object now contains the path in its 'search' property.
-            if (!state || !state.search) {
-                console.error("GEXF Viewer: State or search parameters are missing.");
-                return;
-            }
-
-            // Use the standard URLSearchParams API to easily parse the query string.
-            // state.search will look like "?&path=/anwarren@...".
-            var params = new URLSearchParams(state.search);
-
-            // Get the value of the 'path' parameter we put in the URL.
-            var workspacePath = params.get('path');
-
-            if (workspacePath) {
-                // Now that we have the clean path, we set it on the widget.
-                this.set("path", workspacePath);
-            } else {
-                console.error("GEXF Viewer: 'path' parameter not found in URL.", state.search);
             }
         },
 
@@ -168,36 +153,31 @@ define([
         },
 
         renderGraph: function(gexfXMLData){
-            if (!window.startGraphViewer) { 
-                console.error("startGraphViewer() is not available. gexfjs.js may not have loaded correctly.");
-                return; 
-            }
-            if(!window.GexfJS) {
-                console.error("GexfJS is not available. gexfjs.js may not have loaded correctly.");
+            if (!window.startGraphViewer || !window.GexfJS || !window.traceMap) {
+                console.error("GEXF libraries not available.");
                 return;
             }
+
+            // 1. Hijack setInterval to prevent the premature loop
             var originalSetInterval = window.setInterval;
             window.setInterval = function() {};
+
             var gexf_dom = (new window.DOMParser()).parseFromString(gexfXMLData, "text/xml");
-            startGraphViewer(gexf_dom);
             
+            // 2. Initialize the graph data structures
+            startGraphViewer(gexf_dom);
+
+            // 3. Restore setInterval
             window.setInterval = originalSetInterval;
 
+            // 4. Force the widget to calculate its dimensions and pass them to GexfJS
             this.resize();
-            
-        },
-        
-        postCreate: function(){
-            this.inherited(arguments);
-            this.watch("state", lang.hitch(this, "onSetState"));
+
+            // 5. CRITICAL: Manually start the rendering loop NOW.
+            GexfJS.timeRefresh = setInterval(window.traceMap, 60);
         },
 
-        startup: function(){
-            if (this._started){ return; }
-            this.inherited(arguments);
-            this._updateState(null, null, this.state);
-        },
-        
+
         resize: function(){
             this.inherited(arguments);
 
