@@ -151,7 +151,7 @@ define([
                 }
             }));
         },
-
+        
         renderGraph: function(gexfXMLData){
             if (!window.startGraphViewer || !window.GexfJS || !window.traceMap) {
                 console.error("GEXF libraries not available.");
