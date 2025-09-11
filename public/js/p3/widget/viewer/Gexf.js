@@ -157,7 +157,46 @@ define([
                 console.error("GEXF libraries not available.");
                 return;
             }
+                    
 
+            // 1. Get the real dimensions of our container.
+            var box = this.domNode.getBoundingClientRect();
+
+            // 2. Calculate the required zoom level to fit the default 800x700 canvas
+            //    into our actual container size.
+            var initialZoom = 0;
+            if (box.width > 0 && box.height > 0) {
+                // Find the ratio of the real size to the base size.
+                var scaleRatio = Math.min(box.width / GexfJS.baseWidth, box.height / GexfJS.baseHeight);
+                // The zoom level is related to the scale by Math.pow(Math.SQRT2, zoom).
+                // So, zoom = log(scale) / log(sqrt(2))
+                initialZoom = Math.log(scaleRatio) / Math.log(Math.SQRT2);
+            }
+            
+            var graph_params = {
+                showEdges : true,
+                useLens : false,
+                zoomLevel : 0,
+                curvedEdges : false,
+                edgeWidthFactor : 1, // We'll address why this can be small in the next section
+                pathAttr : "sequences",
+                colorNodeAttr : "diversity",
+                featureMapOn: false,
+                minEdgeWidth : 0.2,
+                maxEdgeWidth : 1,
+                textDisplayThreshold: 6,
+                nodeSizeFactor : 1, // We'll address this too
+                replaceUrls : false,
+                showEdgeWeight : true,
+                // Add the PATRIC-specific URLs here as well if needed
+                patric_on: true, // Example
+                genome_url: "https://example.com/genome",
+                location_url: "https://example.com/location",
+                replicon_url: "https://example.com/replicon",
+                language: false
+            };
+
+            setParams(graph_params);
             // 1. Hijack setInterval to prevent the premature loop
             var originalSetInterval = window.setInterval;
             window.setInterval = function() {};
