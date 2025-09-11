@@ -2,10 +2,12 @@
 
 define([
     "dojo/_base/declare", "dijit/layout/ContentPane", "dojo/_base/lang",
-    "dojo/on", "../../WorkspaceManager", "../../util/PathJoin", "dojo/when"
+    "dojo/on", "../../WorkspaceManager", "../../util/PathJoin", "dojo/when",
+    "dojo/query", "dojo/dom-geometry"
 ], function(
     declare, ContentPane, lang,
-    on, WorkspaceManager, PathJoin, when
+    on, WorkspaceManager, PathJoin, when,
+    query, domGeom
 ){
     var scriptsReady = false;
     var pendingCallbacks = [];
@@ -52,6 +54,9 @@ define([
         "path": "",
         "file": null,
 
+        _resizeHandle: null,
+
+
         templateString: `
             <div class="\${baseClass}" style="width: 100%; height: 100%; overflow: hidden;">
                 <div id="zonecentre" class="gradient" style="position: relative; width: 100%; height: 100%;">
@@ -88,9 +93,18 @@ define([
         startup: function(){
             if (this._started){ return; }
             this.inherited(arguments);
+            this._resizeHandle = on(window, 'resize', lang.hitch(this, function(){
+                this.resize();
+            }));
             this.onSetState("state", null, this.state);
         },
         
+        destroy: function(){
+            if (this._resizeHandle){
+                this._resizeHandle.remove();
+            }
+            this.inherited(arguments);
+        },
 
         onSetState: function(attr, oldVal, state){
             // This is now the SINGLE entry point for all state changes.
@@ -165,14 +179,20 @@ define([
             // 2. Calculate the required zoom level to fit the default 800x700 canvas
             //    into our actual container size.
             var initialZoom = 0;
-            if (box.width > 0 && box.height > 0) {
-                // Find the ratio of the real size to the base size.
-                var scaleRatio = Math.min(box.width / GexfJS.baseWidth, box.height / GexfJS.baseHeight);
-                // The zoom level is related to the scale by Math.pow(Math.SQRT2, zoom).
-                // So, zoom = log(scale) / log(sqrt(2))
-                initialZoom = Math.log(scaleRatio) / Math.log(Math.SQRT2);
+
+            var footer = query(".WorkspaceController.dijitAlignBottom")[0];
+            var footerHeight = footer ? domGeom.getMarginBox(footer).h : 0;
+            var availableHeight = box.height - footerHeight;
+
+            if (box.width > 0 && availableHeight > 0) {
+                // Use the adjusted height for zoom calculation
+                GexfJS.baseWidth = box.width;
+                GexfJS.baseHeight = availableHeight;
+                //var scaleRatio = Math.min(box.width / GexfJS.baseWidth, availableHeight / GexfJS.baseHeight);
+                //initialZoom = Math.log(scaleRatio) / Math.log(Math.SQRT2);
+
             }
-            
+      
             var graph_params = {
                 showEdges : true,
                 useLens : false,
@@ -199,7 +219,7 @@ define([
             setParams(graph_params);
             // 1. Hijack setInterval to prevent the premature loop
             var originalSetInterval = window.setInterval;
-            window.setInterval = function() {};
+            window.setInterval = function() { return null; };
 
             var gexf_dom = (new window.DOMParser()).parseFromString(gexfXMLData, "text/xml");
             
@@ -228,17 +248,28 @@ define([
             // Get the dimensions of this Dojo widget's container.
             var box = this.domNode.getBoundingClientRect();
 
-            if (box.width > 0 && box.height > 0) { // Check for > 0
-                // Manually override the dimensions that gexfjs.js uses.
-                // We are injecting the correct size from the modern container
-                // into the legacy script's global state.
-                GexfJS.graphZone.width = box.width;
-                GexfJS.graphZone.height = box.height;
-
-                // Now, call the legacy function, which will use our correct values
-                // instead of its own incorrect jQuery-based guesses.
-                updateWorkspaceBounds();
+           // --- GET FOOTER HEIGHT ---
+            var footerHeight = 0;
+            var footer = query(".WorkspaceController.dijitAlignBottom")[0];
+            if (footer) {
+                footerHeight = domGeom.getMarginBox(footer).h;
             }
+            // --- END GET ---
+
+            // Adjust the available height
+            var availableHeight = box.height - footerHeight;
+
+            if (this.canvasNode && box.width > 0 && availableHeight > 0) {
+                // Set the canvas height to the new, adjusted value
+                this.canvasNode.width = box.width;
+                this.canvasNode.height = availableHeight;
+
+                // Update the GexfJS global state with the correct dimensions
+                GexfJS.graphZone.width = box.width;
+                GexfJS.graphZone.height = availableHeight;
+            }
+            delete GexfJS.oldParams.zoomLevel;
+
         }
     });
 });
