@@ -205,15 +205,15 @@ define([
                 featureMapOn: false,
                 minEdgeWidth : 0.2,
                 maxEdgeWidth : 1,
-                textDisplayThreshold: 10,
+                textDisplayThreshold: 11,
                 nodeSizeFactor : 2, // We'll address this too
                 replaceUrls : false,
                 showEdgeWeight : true,
                 // Add the PATRIC-specific URLs here as well if needed
                 patric_on: true, // Example
-                genome_url: "https://example.com/genome",
-                location_url: "https://example.com/location",
-                replicon_url: "https://example.com/replicon",
+                genome_url: 'https://www.bv-brc.org/api/genome?in(genome_id,(GIDSTRING))&select(genome_id,genome_name)&limit(500)&http_accept=application/solr+json',
+                location_url: 'https://www.bv-brc.org/api/genome_sequence?in(sequence_id,(SIDSTRING))&select(sequence_id,description)&facet((pivot,(genome_id,genome_name,sequence_id)))&http_accept=application/solr+json',
+                replicon_url: 'https://www.bv-brc.org/api/genome_sequence?in(genome_id,(GIDSTRING))&select(sequence_id,description)&facet((pivot,(genome_id,genome_name,sequence_id)))&http_accept=application/solr+json',
                 language: false
             };
 
