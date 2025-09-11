@@ -180,17 +180,18 @@ define([
             //    into our actual container size.
             var initialZoom = 0;
 
+            var footerHeight = 0;
             var footer = query(".WorkspaceController.dijitAlignBottom")[0];
-            var footerHeight = footer ? domGeom.getMarginBox(footer).h : 0;
+            if (footer) {
+                footerHeight = domGeom.getMarginBox(footer).h;
+            }
+            
             var availableHeight = box.height - footerHeight;
 
             if (box.width > 0 && availableHeight > 0) {
                 // Use the adjusted height for zoom calculation
-                GexfJS.baseWidth = box.width;
-                GexfJS.baseHeight = availableHeight;
-                //var scaleRatio = Math.min(box.width / GexfJS.baseWidth, availableHeight / GexfJS.baseHeight);
-                //initialZoom = Math.log(scaleRatio) / Math.log(Math.SQRT2);
-
+                var scaleRatio = Math.min(box.width / GexfJS.baseWidth, availableHeight / GexfJS.baseHeight);
+                initialZoom = Math.log(scaleRatio) / Math.log(Math.SQRT2);
             }
       
             var graph_params = {
@@ -198,14 +199,14 @@ define([
                 useLens : false,
                 zoomLevel : 0,
                 curvedEdges : false,
-                edgeWidthFactor : 1, // We'll address why this can be small in the next section
+                edgeWidthFactor : 10, // We'll address why this can be small in the next section
                 pathAttr : "sequences",
                 colorNodeAttr : "diversity",
                 featureMapOn: false,
                 minEdgeWidth : 0.2,
                 maxEdgeWidth : 1,
-                textDisplayThreshold: 6,
-                nodeSizeFactor : 1, // We'll address this too
+                textDisplayThreshold: 10,
+                nodeSizeFactor : 2, // We'll address this too
                 replaceUrls : false,
                 showEdgeWeight : true,
                 // Add the PATRIC-specific URLs here as well if needed
@@ -219,7 +220,7 @@ define([
             setParams(graph_params);
             // 1. Hijack setInterval to prevent the premature loop
             var originalSetInterval = window.setInterval;
-            window.setInterval = function() { return null; };
+            window.setInterval = function() {};
 
             var gexf_dom = (new window.DOMParser()).parseFromString(gexfXMLData, "text/xml");
             

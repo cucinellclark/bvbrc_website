@@ -1171,23 +1171,16 @@ define([
         Topic.publish('/navigate', { href: '/view/PhylogeneticTree2/?&labelSearch=' + labelSearch + '&idType=' + idType + '&labelType=' + labelType + '&wsTreeFile=' + encodePath(path[0]) + '&fileType=' + fileType });
       }, false);
 
-      this.actionPanel.addAction('ViewGEXF', 'fa icon-sitemap fa-2x', { // Using 'sitemap' as a graph-like icon
+      this.actionPanel.addAction('ViewGEXF', 'fa icon-alignment fa-2x', { // Using 'sitemap' as a graph-like icon
         label: 'VIEW GRAPH',
         multiple: false, // This action works on a single file
        // validTypes: ['gexf'], // This action only appears when a 'gexf' file is selected
         validTypes: ['gexf'],
+
         tooltip: 'View Synteny Graph'
       }, function (selection) {
-        // 'selection' is an array of the selected grid items. We only care about the first one.
-        if (!selection || selection.length === 0) { return; }
-        
-        var item = selection[0];
-        
-        // When the button is clicked, we navigate to the workspace path for that item.
-        // The _setPathAttr function will see the path, recognize the '.gexf' type,
-        // and automatically launch GEXF viewer.
-        Topic.publish('/navigate', { href: '/workspace' + item.path });
-      }, true); // action is enabled by default when conditions are met.
+          Topic.publish('/navigate', { href: '/view/GEXF/?' + '&path=' + encodePath(selection[0].path) });
+      }, true);
 
       this.browserHeader.addAction('ViewNwkXml', 'fa icon-eye fa-2x', {
         label: 'VIEW',
@@ -2210,10 +2203,9 @@ define([
           case 'folder':
             panelCtor = WorkspaceExplorerView;
             break;
-          case 'gexf': // This will now work correctly!
-            panelCtor = window.App.getConstructor('p3/widget/viewer/GEXF');
-            params.file = obj;
-            break;
+          case 'gexf':
+            Topic.publish('/navigate', { href: '/view/Gexf' + '&path=' + this.file, target: 'blank' });
+            return;
           case 'genome_group':
             panelCtor = window.App.getConstructor('p3/widget/viewer/WSGenomeGroup');
             params.query = '?&in(genome_id,GenomeGroup(' + encodeURIComponent(this.path).replace('(', '%28').replace(')', '%29') + '))';
@@ -2261,25 +2253,9 @@ define([
                 case 'Homology':
                   d = 'p3/widget/viewer/BlastJobResult';
                   break;
-                case 'SyntenyGraph':
-                  panelCtor = window.App.getConstructor('p3/widget/viewer/GEXF');
-                  
-                  var gexfFileMeta = obj.autoMeta.output_files.find(function(f){
-                      return f[0].endsWith('.gexf');
-                  });
-
-                  if (gexfFileMeta) {
-                      // The viewer's 'file' property expects a workspace object with a 'path'.
-                      // We can create a lightweight object here.
-                      params.file = {
-                          path: gexfFileMeta[0] // gexfFileMeta[0] is the full path string
-                      };
-                  } else {
-                      // Fallback if no .gexf file is found
-                      panelCtor = window.App.getConstructor('p3/widget/viewer/JobResult');
-                      params.data = obj;
-                  }
-                  break;
+                //case 'SyntenyGraph':
+                //  d = 'p3/widget/viewer/GEXF';
+                //  break;
                 default:
                   console.log('Using the default JobResult viewer. A viewer could not be found for id: ' + id);
               }
@@ -2354,7 +2330,12 @@ define([
                 var sel = Object.keys(evt.selected).map(lang.hitch(this, function (rownum) {
                   return evt.grid.row(rownum).data;
                 }));
-
+                sel.forEach(function(item){
+                    if (item && (item.type === 'unspecified' || item.type === 'txt') && item.name && item.name.endsWith('.gexf')) {
+                        // Temporarily override the type for the ActionBar's logic
+                        item.type = 'gexf';
+                    }
+                });
                 if (hideTimer) {
                   clearTimeout(hideTimer);
                 }
