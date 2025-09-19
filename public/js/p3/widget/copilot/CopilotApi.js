@@ -339,12 +339,12 @@ define([
             });
         },
 
+
         /**
-         * Submits a copilot query with streaming (v2 API - two-step workflow)
+         * Submits a copilot query with streaming (v2 API - single endpoint)
          *
-         * This method uses a two-step process:
-         * 1. Setup: Call /setup-copilot-stream to prepare context and get stream_id
-         * 2. Stream: Call /copilot-stream with stream_id to get real-time response
+         * This method uses a single POST to /copilot-stream2 with the full payload
+         * and parses SSE events based on event names.
          *
          * @param {object} params - The parameters for the query
          * @param {string} params.inputText - The user's input text
@@ -359,12 +359,21 @@ define([
          * @param {function} onData - Callback for each data chunk: onData(chunk)
          * @param {function} onEnd - Callback for when the stream ends: onEnd()
          * @param {function} onError - Callback for any errors: onError(error)
-         * @param {function} onSetupComplete - Optional callback for when setup completes: onSetupComplete(metadata)
-         *                                     metadata includes: { stream_id, user_message_id, assistant_message_id, rag_docs }
-         *                                     rag_docs array contains retrieved documents for display in UI
+         * @param {function} onSetupComplete - Optional callback for setup/meta events.
+         *                                     Called multiple times as data arrives with a CONSISTENT shape:
+         *                                     {
+         *                                       stream_id,
+         *                                       session_id,
+         *                                       userMessage: { message_id } | null,
+         *                                       assistantMessage: { message_id } | null,
+         *                                       systemMessage: { message_id, content?, timestamp? } | null,
+         *                                       rag_docs: Array|Null,
+         *                                       copilot_details: Object|Null
+         *                                     }
+         *                                     rag_docs contains retrieved documents for display in UI
          *
          * @example
-         * // Basic usage (backward compatible)
+         * // Basic usage
          * api.submitCopilotQueryStream(params, onData, onEnd, onError);
          *
          * // With setup callback to show RAG documents
@@ -392,84 +401,46 @@ define([
             this.currentAbortController = abortController;
 
             // ========================================
-            // STEP 2: PREPARE SETUP DATA
+            // STEP 2: PREPARE FULL PAYLOAD
             // ========================================
             var _self = this;
-            var setupData = {
+            var payload = {
                 query: params.inputText,
                 model: params.model,
                 session_id: params.sessionId,
                 user_id: this.user_id,
+                system_prompt: params.systemPrompt || '',
                 save_chat: params.save_chat !== undefined ? params.save_chat : true,
                 include_history: true
             };
 
             // Add optional parameters
             if (params.enhancedPrompt) {
-                setupData.enhanced_prompt = params.enhancedPrompt;
-            }
-            if (params.systemPrompt) {
-                setupData.system_prompt = params.systemPrompt;
+                payload.enhanced_prompt = params.enhancedPrompt;
             }
             if (params.ragDb) {
-                setupData.rag_db = params.ragDb;
+                payload.rag_db = params.ragDb;
                 if (params.numDocs) {
-                    setupData.num_docs = params.numDocs;
+                    payload.num_docs = params.numDocs;
                 }
             }
             if (params.image) {
-                setupData.image = params.image;
+                payload.image = params.image;
             }
 
             // ========================================
-            // STEP 3: CALL SETUP ENDPOINT
+            // STEP 3: SINGLE POST TO /copilot-stream
             // ========================================
-            fetch(this.apiUrlBase + '/setup-copilot-stream', {
+            fetch(this.apiUrlBase + '/copilot-stream', {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
-                    'Authorization': (window.App.authorizationToken || '')
+                    'Authorization': (window.App.authorizationToken || ''),
+                    'Accept': 'text/event-stream',
+                    'Cache-Control': 'no-cache'
                 },
-                body: JSON.stringify(setupData),
+                body: JSON.stringify(payload),
                 signal: abortController.signal
-            })
-            .then(response => {
-                if (!response.ok) {
-                    return response.text().then(text => {
-                        const err = new Error(`Setup failed! status: ${response.status}, message: ${text}`);
-                        throw err;
-                    });
-                }
-                return response.json();
-            })
-            .then(setupResponse => {
-                if (setupResponse.message !== 'success') {
-                    throw new Error('Setup failed: ' + (setupResponse.message || 'Unknown error'));
-                }
-
-                var setupMetadata = setupResponse.setup_data;
-
-                // Call the setup complete callback if provided
-                if (onSetupComplete) {
-                    onSetupComplete(setupMetadata);
-                }
-
-                // ========================================
-                // STEP 4: START STREAMING
-                // ========================================
-                return fetch(_self.apiUrlBase + '/copilot-stream', {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json',
-                        'Authorization': (window.App.authorizationToken || ''),
-                        'Accept': 'text/event-stream',
-                        'Cache-Control': 'no-cache'
-                    },
-                    body: JSON.stringify({
-                        stream_id: setupMetadata.stream_id
-                    }),
-                    signal: abortController.signal
-                });
             })
             .then(response => {
                 if (!response.ok) {
@@ -485,18 +456,32 @@ define([
                 const reader = response.body.getReader();
                 const decoder = new TextDecoder('utf-8');
                 let buffer = '';
-                let isFirstEvent = true;
+
+                // Accumulate setup-related metadata across events and emit a consistent shape
+                const setupAggregate = {
+                    stream_id: null,
+                    session_id: payload.session_id,
+                    userMessage: null,
+                    assistantMessage: null,
+                    systemMessage: null,
+                    rag_docs: null,
+                    copilot_details: null
+                };
 
                 // ========================================
-                // STEP 5: PROCESS STREAM DATA
+                // STEP 5: PROCESS STREAM DATA WITH EVENT PARSING
                 // ========================================
                 const processLine = (line) => {
-                    // Handle error events
-                    if (line.startsWith('event: error')) {
+                    // Skip empty lines
+                    if (!line.trim()) return;
+
+                    // Parse SSE format: event: <event_name>\ndata: <data>
+                    if (line.startsWith('event:')) {
+                        // Store the event name for the next data line
+                        this._currentEventName = line.substring(6).trim();
                         return;
                     }
 
-                    // Handle data events
                     if (line.startsWith('data:')) {
                         let content = line.substring(5);
                         if (content.startsWith(' ')) {
@@ -509,29 +494,127 @@ define([
                             return;
                         }
 
-                        // Process content
+                        // Process content based on event name
                         if (content) {
                             try {
-                                // Handle first event (metadata)
-                                if (isFirstEvent) {
-                                    try {
-                                        const metadata = JSON.parse(content);
-                                        if (metadata.type === 'message_metadata') {
-                                            isFirstEvent = false;
-                                            return;
+                                const eventName = this._currentEventName || 'token';
+
+                                // Switch on event names
+                                switch (eventName) {
+                                    case 'open':
+                                        // Connection opened
+                                        break;
+
+                                    case 'metadata':
+                                        // Parse metadata JSON
+                                        try {
+                                            const metadata = JSON.parse(content);
+                                            // Normalize into consistent shape expected by UI
+                                            if (metadata.stream_id) {
+                                                setupAggregate.stream_id = metadata.stream_id;
+                                            }
+                                            if (metadata.user_message_id) {
+                                                setupAggregate.userMessage = setupAggregate.userMessage || {};
+                                                setupAggregate.userMessage.message_id = metadata.user_message_id;
+                                            }
+                                            if (metadata.assistant_message_id) {
+                                                setupAggregate.assistantMessage = setupAggregate.assistantMessage || {};
+                                                setupAggregate.assistantMessage.message_id = metadata.assistant_message_id;
+                                            }
+                                            if (metadata.system_message_id) {
+                                                setupAggregate.systemMessage = setupAggregate.systemMessage || {};
+                                                setupAggregate.systemMessage.message_id = metadata.system_message_id;
+                                                // Leave content/timestamp population to server or future events if provided
+                                            }
+                                            if (onSetupComplete) {
+                                                onSetupComplete({
+                                                    stream_id: setupAggregate.stream_id,
+                                                    session_id: setupAggregate.session_id,
+                                                    userMessage: setupAggregate.userMessage,
+                                                    assistantMessage: setupAggregate.assistantMessage,
+                                                    systemMessage: setupAggregate.systemMessage,
+                                                    rag_docs: setupAggregate.rag_docs,
+                                                    copilot_details: setupAggregate.copilot_details
+                                                });
+                                            }
+                                        } catch (parseError) {
+                                            console.warn('Failed to parse metadata:', parseError);
                                         }
-                                    } catch (parseError) {
-                                        // Not JSON metadata, treat as regular content
-                                    }
-                                    isFirstEvent = false;
+                                        break;
+
+                                    case 'rag_docs':
+                                        // Parse RAG documents JSON
+                                        try {
+                                            const ragDocs = JSON.parse(content);
+                                            setupAggregate.rag_docs = ragDocs;
+                                            if (onSetupComplete) {
+                                                onSetupComplete({
+                                                    stream_id: setupAggregate.stream_id,
+                                                    session_id: setupAggregate.session_id,
+                                                    userMessage: setupAggregate.userMessage,
+                                                    assistantMessage: setupAggregate.assistantMessage,
+                                                    systemMessage: setupAggregate.systemMessage,
+                                                    rag_docs: setupAggregate.rag_docs,
+                                                    copilot_details: setupAggregate.copilot_details
+                                                });
+                                            }
+                                        } catch (parseError) {
+                                            console.warn('Failed to parse RAG docs:', parseError);
+                                        }
+                                        break;
+
+                                    case 'copilot_details':
+                                        // Parse copilot details JSON
+                                        try {
+                                            const details = JSON.parse(content);
+                                            setupAggregate.copilot_details = details;
+                                            if (onSetupComplete) {
+                                                onSetupComplete({
+                                                    stream_id: setupAggregate.stream_id,
+                                                    session_id: setupAggregate.session_id,
+                                                    userMessage: setupAggregate.userMessage,
+                                                    assistantMessage: setupAggregate.assistantMessage,
+                                                    systemMessage: setupAggregate.systemMessage,
+                                                    rag_docs: setupAggregate.rag_docs,
+                                                    copilot_details: setupAggregate.copilot_details
+                                                });
+                                            }
+                                        } catch (parseError) {
+                                            console.warn('Failed to parse copilot details:', parseError);
+                                        }
+                                        break;
+
+                                    case 'token':
+                                        // Regular token content (plain text)
+                                        const finalContentJson = JSON.parse(content);
+                                        const finalContent = finalContentJson.text;
+                                        if (onData) onData(finalContent);
+                                        break;
+
+                                    case 'done':
+                                        // Stream completed
+                                        if (onEnd) onEnd();
+                                        break;
+
+                                    case 'error':
+                                        // Error occurred
+                                        try {
+                                            const errorData = JSON.parse(content);
+                                            if (onError) onError(new Error(errorData.message || 'Stream error'));
+                                        } catch (parseError) {
+                                            if (onError) onError(new Error(content));
+                                        }
+                                        break;
+
+                                    default:
+                                        // Unknown event, treat as token content
+                                        const defaultContent = content.replace(/\\n/g, '\n');
+                                        if (onData) onData(defaultContent);
+                                        break;
                                 }
-
-                                // Process regular content
-                                const finalContent = content.replace(/\\n/g, '\n');
-
-                                // Content is plain text, not JSON
-                                onData(finalContent);
                             } catch (e) {
+                                debugger;
+                                console.error('Error processing stream data:', e);
                                 if (onError) onError(e);
                             }
                         }
@@ -558,7 +641,7 @@ define([
                         while ((eol = buffer.indexOf('\n')) >= 0) {
                             const line = buffer.slice(0, eol).trim();
                             buffer = buffer.slice(eol + 1);
-                            if(line) processLine(line);
+                            if (line) processLine(line);
                         }
 
                         return pump();

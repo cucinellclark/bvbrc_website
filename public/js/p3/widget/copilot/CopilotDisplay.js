@@ -380,7 +380,6 @@ define([
      * - Shows red error message
      */
     onQueryError: function(error = null) {
-      debugger;
       console.log('onQueryError', error);
       domConstruct.empty(this.resultContainer);
       var errorMessage = error ? error.message : 'An error occurred while processing your request. Please try again later.';
