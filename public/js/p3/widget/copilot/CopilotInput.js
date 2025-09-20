@@ -12,9 +12,9 @@
  * - Provides model and RAG database selection UI
  */
 define([
-    'dojo/_base/declare', 'dojo/dom-construct', 'dojo/on', 'dijit/layout/ContentPane', 'dijit/form/Textarea', 'dijit/form/Button', 'dojo/topic', 'dojo/_base/lang', 'html2canvas/dist/html2canvas.min'
+    'dojo/_base/declare', 'dojo/dom-construct', 'dojo/on', 'dijit/layout/ContentPane', 'dijit/form/Textarea', 'dijit/form/Button', 'dojo/topic', 'dojo/_base/lang', 'dojo/dom-style', 'html2canvas/dist/html2canvas.min', './ChatAttachment'
   ], function (
-    declare, domConstruct, on, ContentPane, Textarea, Button, topic, lang, html2canvas
+    declare, domConstruct, on, ContentPane, Textarea, Button, topic, lang, domStyle, html2canvas, ChatAttachment
   ) {
     /**
      * @class CopilotInput
@@ -74,6 +74,9 @@ define([
       /** Flag to track page content toggle state */
       pageContentEnabled: false,
 
+      /** Array to store attachment widgets */
+      attachments: [],
+
       //================================================================
       // LIFECYCLE METHODS
       //================================================================
@@ -105,6 +108,23 @@ define([
         var inputContainer = domConstruct.create('div', {
             style: 'display: flex; justify-content: center; align-items: flex-start; width: 100%;'
         }, wrapperDiv);
+
+        // Container for attachments above the input
+        this.attachmentContainer = domConstruct.create('div', {
+            style: 'display: flex; flex-wrap: wrap; justify-content: flex-start; align-items: center; width: 60%; margin-bottom: 6px; min-height: 30px;'
+        }, wrapperDiv);
+
+        // Add Context button
+        this.addContextButton = new Button({
+            label: '+ Add Context',
+            style: 'height: 30px; margin-right: 10px;',
+            onClick: lang.hitch(this, function() {
+                this._addBlankAttachment();
+            })
+        });
+
+        // Add button to attachment container
+        this.addContextButton.placeAt(this.attachmentContainer);
 
         // Add container for the toggle switch and label on the left side
         var toggleContainer = domConstruct.create('div', {
@@ -874,6 +894,35 @@ define([
             buttonNode.classList.remove('pageContentToggleActive');
             buttonNode.classList.add('pageContentToggleInactive');
         }
+      },
+
+      /**
+       * Creates a new blank ChatAttachment and adds it to the container
+       * Limited to maximum of 3 attachments
+       */
+      _addBlankAttachment: function() {
+        // Check if we've reached the limit of 3 attachments
+        if (this.attachments.length >= 3) {
+          console.log('Maximum of 3 attachments allowed');
+          return;
+        }
+
+        var blankAttachment = new ChatAttachment({
+          icon: '📎',
+          label: 'New Attachment',
+          data: {
+            id: 'attachment_' + Date.now(),
+            type: 'blank',
+            created: new Date().toISOString()
+          },
+          container: this.attachmentContainer
+        });
+
+        // Store the attachment
+        this.attachments.push(blankAttachment);
+
+        console.log('Added blank attachment:', blankAttachment.data);
+        console.log('Total attachments:', this.attachments.length);
       }
     });
   });
