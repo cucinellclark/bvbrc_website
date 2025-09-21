@@ -2,17 +2,26 @@ define([
     'dojo/_base/declare',
     'dojo/dom-construct',
     'dojo/on',
-    'dojo/_base/lang'
+    'dojo/_base/lang',
+    './attachments/BaseAttachment',
+    './attachments/DataAttachment',
+    './attachments/ServiceAttachment',
+    './attachments/WorkspaceAttachment'
 ], function(
     declare,
     domConstruct,
     on,
-    lang
+    lang,
+    BaseAttachment,
+    DataAttachment,
+    ServiceAttachment,
+    WorkspaceAttachment
 ) {
     /**
      * @class ChatAttachment
      * @description A horizontal pill-shaped widget that displays an icon and label.
-     * When clicked, it logs all associated data fields to the console.
+     * When clicked, it shows a dropdown to select context types (Data, Service, Workspace).
+     * Once a context is selected, it creates the appropriate specialized attachment instance.
      */
     return declare(null, {
 
@@ -34,6 +43,25 @@ define([
         // Main DOM node for this widget
         domNode: null,
 
+        // Currently selected context type
+        selectedContext: null,
+
+        // Available context types with their icons and corresponding attachment classes
+        contextTypes: [
+            { name: 'Workspace', icon: '📁', attachmentClass: WorkspaceAttachment },
+            { name: 'Service', icon: '⚙️', attachmentClass: ServiceAttachment },
+            { name: 'Data', icon: '💾', attachmentClass: DataAttachment }
+        ],
+
+        // Current attachment instance (null until a context is selected)
+        attachmentInstance: null,
+
+        // Dropdown menu element
+        dropdownMenu: null,
+
+        // Callback function to notify parent when attachment is removed
+        onRemove: null,
+
         /**
          * @constructor
          * Creates a new ChatAttachment instance
@@ -43,6 +71,7 @@ define([
          * @param {Object} options.data - Data fields associated with this attachment
          * @param {string} options.className - Optional CSS class name
          * @param {HTMLElement} options.container - Container to place the widget in
+         * @param {Function} options.onRemove - Callback function called when attachment is removed
          */
         constructor: function(options) {
             if (options) {
@@ -101,18 +130,212 @@ define([
 
         /**
          * Handles click events on the attachment
-         * Logs all data fields to the console
+         * Shows context dropdown when clicking icon, delegates to attachment instance when clicking label
          */
         _onClick: function(event) {
             event.preventDefault();
             event.stopPropagation();
 
-            console.log('ChatAttachment clicked:', {
-                icon: this.icon,
-                label: this.label,
-                data: this.data,
-                className: this.className
+            // Check if the click was on the icon section
+            var iconSection = this.domNode.querySelector('.chat-attachment-icon');
+            var isIconClick = iconSection && iconSection.contains(event.target);
+
+            if (isIconClick) {
+                // Icon clicked - always show dropdown (for new or assigned contexts)
+                this._showContextDropdown();
+            } else {
+                // Label clicked
+                if (this.attachmentInstance && this.attachmentInstance._onClick) {
+                    // Delegate to the attachment instance's click handler
+                    this.attachmentInstance._onClick(event);
+                } else if (this.selectedContext) {
+                    // Already assigned a context - just log what it is
+                    console.log('ChatAttachment context:', this.selectedContext);
+                } else {
+                    // New attachment - show context dropdown
+                    this._showContextDropdown();
+                }
+            }
+        },
+
+        /**
+         * Shows the context type dropdown menu
+         */
+        _showContextDropdown: function() {
+            // Remove existing dropdown if any
+            this._hideContextDropdown();
+
+            // Create dropdown container
+            this.dropdownMenu = domConstruct.create('div', {
+                class: 'chat-attachment-dropdown',
+                style: this._getDropdownStyles()
             });
+
+            // Create dropdown items for each context type
+            this.contextTypes.forEach(lang.hitch(this, function(contextType) {
+                var item = domConstruct.create('div', {
+                    class: 'chat-attachment-dropdown-item',
+                    style: this._getDropdownItemStyles(),
+                    innerHTML: '<span style="margin-right: 8px;">' + contextType.icon + '</span>' + contextType.name
+                });
+
+                // Add click handler for this context type
+                on(item, 'click', lang.hitch(this, function() {
+                    this._selectContext(contextType);
+                    this._hideContextDropdown();
+                }));
+
+                // Add hover effects
+                on(item, 'mouseenter', function() {
+                    this.style.backgroundColor = '#f3f4f6';
+                });
+                on(item, 'mouseleave', function() {
+                    this.style.backgroundColor = 'transparent';
+                });
+
+                domConstruct.place(item, this.dropdownMenu);
+            }));
+
+            // Add separator line
+            var separator = domConstruct.create('div', {
+                style: 'height: 1px; background: #e5e7eb; margin: 4px 0;'
+            });
+            domConstruct.place(separator, this.dropdownMenu);
+
+            // Add Remove option
+            var removeItem = domConstruct.create('div', {
+                class: 'chat-attachment-dropdown-item',
+                style: this._getDropdownItemStyles() + 'color: #dc2626;', // Red color for remove
+                innerHTML: '<span style="margin-right: 8px;">🗑️</span>Remove'
+            });
+
+            // Add click handler for remove
+            on(removeItem, 'click', lang.hitch(this, function() {
+                this._hideContextDropdown();
+                this._removeAttachment();
+            }));
+
+            // Add hover effects for remove item
+            on(removeItem, 'mouseenter', function() {
+                this.style.backgroundColor = '#fef2f2'; // Light red background
+            });
+            on(removeItem, 'mouseleave', function() {
+                this.style.backgroundColor = 'transparent';
+            });
+
+            domConstruct.place(removeItem, this.dropdownMenu);
+
+            // Position dropdown above the attachment
+            this._positionDropdown();
+
+            // Add to document body to ensure it's above everything
+            domConstruct.place(this.dropdownMenu, document.body);
+
+            // Add click outside handler to close dropdown
+            this._dropdownClickHandler = on(document, 'click', lang.hitch(this, function(event) {
+                if (!this.domNode.contains(event.target) && !this.dropdownMenu.contains(event.target)) {
+                    this._hideContextDropdown();
+                }
+            }));
+        },
+
+        /**
+         * Hides the context dropdown menu
+         */
+        _hideContextDropdown: function() {
+            if (this.dropdownMenu) {
+                domConstruct.destroy(this.dropdownMenu);
+                this.dropdownMenu = null;
+            }
+            if (this._dropdownClickHandler) {
+                this._dropdownClickHandler.remove();
+                this._dropdownClickHandler = null;
+            }
+        },
+
+        /**
+         * Selects a context type and creates the appropriate attachment instance
+         * @param {Object} contextType - The selected context type
+         */
+        _selectContext: function(contextType) {
+            this.selectedContext = contextType;
+
+            // Destroy existing attachment instance if any
+            if (this.attachmentInstance) {
+                this.attachmentInstance.destroy();
+                this.attachmentInstance = null;
+            }
+
+            // Create new attachment instance based on the selected context type
+            var AttachmentClass = contextType.attachmentClass;
+            if (AttachmentClass) {
+                // Create the attachment instance without creating its own DOM
+                this.attachmentInstance = new AttachmentClass({
+                    icon: contextType.icon,
+                    label: contextType.name,
+                    data: this.data,
+                    container: null, // Don't let it create its own DOM placement
+                    onRemove: this.onRemove,
+                    createDOM: false // Don't create DOM elements
+                });
+
+                // Update the current widget's display to match the new attachment
+                this.setIcon(contextType.icon);
+                this.setLabel(contextType.name);
+
+                console.log('Created attachment instance:', contextType.name, this.attachmentInstance);
+            } else {
+                // Fallback to basic functionality if no attachment class is specified
+                this.setIcon(contextType.icon);
+                this.setLabel(contextType.name);
+            }
+        },
+
+        /**
+         * Positions the dropdown menu above the attachment
+         */
+        _positionDropdown: function() {
+            if (!this.dropdownMenu || !this.domNode) return;
+
+            var rect = this.domNode.getBoundingClientRect();
+            // Account for context types + separator + remove option
+            var dropdownHeight = (this.contextTypes.length + 1) * 32 + 12; // +1 for remove, +12 for separator
+
+            this.dropdownMenu.style.left = rect.left + 'px';
+            this.dropdownMenu.style.top = (rect.top - dropdownHeight - 4) + 'px';
+        },
+
+        /**
+         * Returns CSS styles for the dropdown menu
+         * @returns {string} CSS style string
+         */
+        _getDropdownStyles: function() {
+            return [
+                'position: fixed;',
+                'background: white;',
+                'border: 1px solid #d1d5db;',
+                'border-radius: 8px;',
+                'box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);',
+                'z-index: 9999;',
+                'min-width: 120px;',
+                'padding: 4px 0;'
+            ].join(' ');
+        },
+
+        /**
+         * Returns CSS styles for dropdown items
+         * @returns {string} CSS style string
+         */
+        _getDropdownItemStyles: function() {
+            return [
+                'padding: 8px 12px;',
+                'cursor: pointer;',
+                'font-size: 12px;',
+                'color: #374151;',
+                'display: flex;',
+                'align-items: center;',
+                'transition: background-color 0.2s ease;'
+            ].join(' ');
         },
 
         /**
@@ -206,6 +429,40 @@ define([
          */
         setData: function(newData) {
             this.data = newData || {};
+
+            // If we have an attachment instance, update its data as well
+            if (this.attachmentInstance && this.attachmentInstance.setData) {
+                this.attachmentInstance.setData(newData);
+            }
+        },
+
+        /**
+         * Sets attachment data using the specialized setAttachment method
+         * @param {Object} attachmentData - The attachment data to set
+         */
+        setAttachment: function(attachmentData) {
+            if (this.attachmentInstance && this.attachmentInstance.setAttachment) {
+                this.attachmentInstance.setAttachment(attachmentData);
+
+                // Update the display based on the attachment data
+                if (attachmentData.name) {
+                    this.setLabel(attachmentData.name);
+                }
+                if (attachmentData.type && this.attachmentInstance._setIconForDataType) {
+                    // Let the attachment instance handle icon setting based on type
+                    this.attachmentInstance._setIconForDataType(attachmentData.type);
+                    this.setIcon(this.attachmentInstance.icon);
+                } else if (attachmentData.type && this.attachmentInstance._setIconForServiceType) {
+                    this.attachmentInstance._setIconForServiceType(attachmentData.type);
+                    this.setIcon(this.attachmentInstance.icon);
+                } else if (attachmentData.type && this.attachmentInstance._setIconForWorkspaceType) {
+                    this.attachmentInstance._setIconForWorkspaceType(attachmentData.type);
+                    this.setIcon(this.attachmentInstance.icon);
+                }
+            } else {
+                // Fallback to basic data setting if no specialized instance
+                this.setData(attachmentData);
+            }
         },
 
         /**
@@ -219,9 +476,79 @@ define([
         },
 
         /**
+         * Gets the currently selected context type
+         * @returns {Object|null} The selected context type or null if none selected
+         */
+        getSelectedContext: function() {
+            return this.selectedContext;
+        },
+
+        /**
+         * Sets a context type programmatically
+         * @param {string} contextName - Name of the context type to set
+         */
+        setContext: function(contextName) {
+            var contextType = this.contextTypes.find(function(ct) {
+                return ct.name === contextName;
+            });
+            if (contextType) {
+                this._selectContext(contextType);
+            }
+        },
+
+        /**
+         * Gets the current attachment instance
+         * @returns {Object|null} The current attachment instance or null if none selected
+         */
+        getAttachmentInstance: function() {
+            return this.attachmentInstance;
+        },
+
+        /**
+         * Gets the type of the current attachment instance
+         * @returns {string|null} The attachment type name or null if none selected
+         */
+        getAttachmentType: function() {
+            return this.selectedContext ? this.selectedContext.name : null;
+        },
+
+        /**
+         * Removes the attachment widget and notifies parent
+         */
+        _removeAttachment: function() {
+            // Notify parent if callback is provided
+            if (this.onRemove && typeof this.onRemove === 'function') {
+                this.onRemove(this);
+            }
+
+            // Destroy the widget
+            this.destroy();
+        },
+
+        /**
+         * Gets the attachment prompt from the specialized attachment instance
+         * @returns {string|null} The attachment prompt or null if no instance or method
+         */
+        getAttachmentPrompt: function() {
+            if (this.attachmentInstance && typeof this.attachmentInstance.getAttachmentPrompt === 'function') {
+                return this.attachmentInstance.getAttachmentPrompt();
+            }
+            return null;
+        },
+
+        /**
          * Destroys the widget and removes it from the DOM
          */
         destroy: function() {
+            // Clean up dropdown
+            this._hideContextDropdown();
+
+            // Destroy attachment instance if it exists
+            if (this.attachmentInstance) {
+                this.attachmentInstance.destroy();
+                this.attachmentInstance = null;
+            }
+
             if (this.domNode && this.domNode.parentNode) {
                 this.domNode.parentNode.removeChild(this.domNode);
             }
