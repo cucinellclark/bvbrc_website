@@ -171,38 +171,7 @@ define([
                 style: this._getDropdownStyles()
             });
 
-            // Create dropdown items for each context type
-            this.contextTypes.forEach(lang.hitch(this, function(contextType) {
-                var item = domConstruct.create('div', {
-                    class: 'chat-attachment-dropdown-item',
-                    style: this._getDropdownItemStyles(),
-                    innerHTML: '<span style="margin-right: 8px;">' + contextType.icon + '</span>' + contextType.name
-                });
-
-                // Add click handler for this context type
-                on(item, 'click', lang.hitch(this, function() {
-                    this._selectContext(contextType);
-                    this._hideContextDropdown();
-                }));
-
-                // Add hover effects
-                on(item, 'mouseenter', function() {
-                    this.style.backgroundColor = '#f3f4f6';
-                });
-                on(item, 'mouseleave', function() {
-                    this.style.backgroundColor = 'transparent';
-                });
-
-                domConstruct.place(item, this.dropdownMenu);
-            }));
-
-            // Add separator line
-            var separator = domConstruct.create('div', {
-                style: 'height: 1px; background: #e5e7eb; margin: 4px 0;'
-            });
-            domConstruct.place(separator, this.dropdownMenu);
-
-            // Add Remove option
+            // Add Remove option only
             var removeItem = domConstruct.create('div', {
                 class: 'chat-attachment-dropdown-item',
                 style: this._getDropdownItemStyles() + 'color: #dc2626;', // Red color for remove
@@ -298,8 +267,8 @@ define([
             if (!this.dropdownMenu || !this.domNode) return;
 
             var rect = this.domNode.getBoundingClientRect();
-            // Account for context types + separator + remove option
-            var dropdownHeight = (this.contextTypes.length + 1) * 32 + 12; // +1 for remove, +12 for separator
+            // Account for only the remove option
+            var dropdownHeight = 32; // Single item height
 
             this.dropdownMenu.style.left = rect.left + 'px';
             this.dropdownMenu.style.top = (rect.top - dropdownHeight - 4) + 'px';

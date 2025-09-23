@@ -119,7 +119,7 @@ define([
             label: '+ Attach',
             style: 'height: 30px; margin-right: 10px;',
             onClick: lang.hitch(this, function() {
-                this._addBlankAttachment();
+                this._showAttachmentOptions();
             })
         });
 
@@ -921,33 +921,158 @@ define([
       },
 
       /**
-       * Creates a new blank ChatAttachment and adds it to the container
-       * Limited to maximum of 3 attachments
+       * Shows the attachment options dropdown when the Attach button is pressed
+       * Creates the appropriate attachment directly based on user selection
        */
-      _addBlankAttachment: function() {
+      _showAttachmentOptions: function() {
         // Check if we've reached the limit of 3 attachments
         if (this.attachments.length >= 3) {
           console.log('Maximum of 3 attachments allowed');
           return;
         }
 
-        var blankAttachment = new ChatAttachment({
-          icon: '📎',
-          label: 'New Attachment',
+        // Remove existing dropdown if any
+        this._hideAttachmentOptionsDropdown();
+
+        // Create dropdown container
+        this.attachmentOptionsDropdown = domConstruct.create('div', {
+          class: 'attachment-options-dropdown',
+          style: this._getAttachmentOptionsDropdownStyles()
+        });
+
+        // Define attachment options (excluding Remove)
+        var attachmentOptions = [
+          { name: 'Workspace', icon: '📁', type: 'workspace' },
+          { name: 'Service', icon: '⚙️', type: 'service' },
+          { name: 'Data', icon: '💾', type: 'data' }
+        ];
+
+        // Create dropdown items for each attachment option
+        attachmentOptions.forEach(lang.hitch(this, function(option) {
+          var item = domConstruct.create('div', {
+            class: 'attachment-options-dropdown-item',
+            style: this._getAttachmentOptionsDropdownItemStyles(),
+            innerHTML: '<span style="margin-right: 8px;">' + option.icon + '</span>' + option.name
+          });
+
+          // Add click handler for this attachment option
+          on(item, 'click', lang.hitch(this, function() {
+            this._createAttachmentDirectly(option);
+            this._hideAttachmentOptionsDropdown();
+          }));
+
+          // Add hover effects
+          on(item, 'mouseenter', function() {
+            this.style.backgroundColor = '#f3f4f6';
+          });
+          on(item, 'mouseleave', function() {
+            this.style.backgroundColor = 'transparent';
+          });
+
+          domConstruct.place(item, this.attachmentOptionsDropdown);
+        }));
+
+        // Position dropdown below the Attach button
+        this._positionAttachmentOptionsDropdown();
+
+        // Add to document body to ensure it's above everything
+        domConstruct.place(this.attachmentOptionsDropdown, document.body);
+
+        // Add click outside handler to close dropdown
+        this._attachmentOptionsClickHandler = on(document, 'click', lang.hitch(this, function(event) {
+          if (!this.addContextButton.domNode.contains(event.target) &&
+              !this.attachmentOptionsDropdown.contains(event.target)) {
+            this._hideAttachmentOptionsDropdown();
+          }
+        }));
+      },
+
+      /**
+       * Creates an attachment directly based on the selected option
+       * @param {Object} option - The selected attachment option
+       */
+      _createAttachmentDirectly: function(option) {
+        // Create the appropriate attachment instance directly
+        var attachment = new ChatAttachment({
+          icon: option.icon,
+          label: option.name,
           data: {
             id: 'attachment_' + Date.now(),
-            type: 'blank',
+            type: option.type,
             created: new Date().toISOString()
           },
           container: this.attachmentContainer,
-          onRemove: lang.hitch(this, this._onAttachmentRemoved) // Add removal callback
+          onRemove: lang.hitch(this, this._onAttachmentRemoved)
         });
 
-        // Store the attachment
-        this.attachments.push(blankAttachment);
+        // Set the context directly to skip the dropdown selection
+        attachment.setContext(option.name);
 
-        console.log('Added blank attachment:', blankAttachment.data);
+        // Store the attachment
+        this.attachments.push(attachment);
+
+        console.log('Created attachment directly:', option.name, attachment.data);
         console.log('Total attachments:', this.attachments.length);
+      },
+
+      /**
+       * Hides the attachment options dropdown
+       */
+      _hideAttachmentOptionsDropdown: function() {
+        if (this.attachmentOptionsDropdown) {
+          domConstruct.destroy(this.attachmentOptionsDropdown);
+          this.attachmentOptionsDropdown = null;
+        }
+        if (this._attachmentOptionsClickHandler) {
+          this._attachmentOptionsClickHandler.remove();
+          this._attachmentOptionsClickHandler = null;
+        }
+      },
+
+      /**
+       * Positions the attachment options dropdown above the Attach button
+       */
+      _positionAttachmentOptionsDropdown: function() {
+        if (!this.attachmentOptionsDropdown || !this.addContextButton.domNode) return;
+
+        var rect = this.addContextButton.domNode.getBoundingClientRect();
+        var dropdownHeight = 3 * 32 + 8; // 3 options * 32px height + 8px padding
+
+        this.attachmentOptionsDropdown.style.left = rect.left + 'px';
+        this.attachmentOptionsDropdown.style.top = (rect.top - dropdownHeight - 4) + 'px';
+      },
+
+      /**
+       * Returns CSS styles for the attachment options dropdown
+       * @returns {string} CSS style string
+       */
+      _getAttachmentOptionsDropdownStyles: function() {
+        return [
+          'position: fixed;',
+          'background: white;',
+          'border: 1px solid #d1d5db;',
+          'border-radius: 8px;',
+          'box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);',
+          'z-index: 9999;',
+          'min-width: 120px;',
+          'padding: 4px 0;'
+        ].join(' ');
+      },
+
+      /**
+       * Returns CSS styles for attachment options dropdown items
+       * @returns {string} CSS style string
+       */
+      _getAttachmentOptionsDropdownItemStyles: function() {
+        return [
+          'padding: 8px 12px;',
+          'cursor: pointer;',
+          'font-size: 12px;',
+          'color: #374151;',
+          'display: flex;',
+          'align-items: center;',
+          'transition: background-color 0.2s ease;'
+        ].join(' ');
       },
 
       /**
@@ -1185,12 +1310,12 @@ define([
       },
 
       /**
-       * Gets the number of valid (non-blank) attachments
+       * Gets the number of valid attachments
        * @returns {number} Number of valid attachments
        */
       getValidAttachmentCount: function() {
           return this.attachments.filter(function(attachment) {
-              return attachment && attachment.data && attachment.data.type !== 'blank';
+              return attachment && attachment.data && ['workspace', 'service', 'data'].includes(attachment.data.type);
           }).length;
       },
 
@@ -1330,7 +1455,7 @@ define([
                   result.warnings = result.warnings.concat(attachmentValidation.warnings);
               }
 
-              if (attachmentValidation.isValid && attachment.data && attachment.data.type !== 'blank') {
+              if (attachmentValidation.isValid && attachment.data && ['workspace', 'service', 'data'].includes(attachment.data.type)) {
                   result.validCount++;
               }
           }));
@@ -1376,9 +1501,9 @@ define([
               return result;
           }
 
-          // Check if attachment is blank (which is valid but not useful)
-          if (attachment.data.type === 'blank') {
-              result.warnings.push('Attachment at index ' + index + ' is blank and will not provide context');
+          // Check if attachment has valid type
+          if (!['workspace', 'service', 'data'].includes(attachment.data.type)) {
+              result.warnings.push('Attachment at index ' + index + ' has unknown type: ' + attachment.data.type);
           }
 
           // Validate attachment instance if it exists
@@ -1769,7 +1894,7 @@ define([
           var summary = {
               totalCount: this.attachments.length,
               validCount: this.getValidAttachmentCount(),
-              blankCount: this.getAttachmentsByType('blank').length,
+              invalidCount: this.attachments.length - this.getValidAttachmentCount(),
               attachments: []
           };
 
@@ -1780,7 +1905,7 @@ define([
                   type: attachment.data ? attachment.data.type : 'unknown',
                   label: attachment.label || 'unknown',
                   hasInstance: !!attachment.attachmentInstance,
-                  isValid: attachment.data && attachment.data.type !== 'blank'
+                  isValid: attachment.data && ['workspace', 'service', 'data'].includes(attachment.data.type)
               });
           }));
 
@@ -1915,6 +2040,22 @@ define([
           this._updateAttachmentPreview();
 
           return true;
+      },
+
+      /**
+       * Destroys the widget and cleans up resources
+       */
+      destroy: function() {
+          // Clean up attachment options dropdown
+          this._hideAttachmentOptionsDropdown();
+
+          // Clean up all attachments
+          this.removeAllAttachments();
+
+          // Call parent destroy if it exists
+          if (this.inherited) {
+              this.inherited(arguments);
+          }
       }
     });
   });
