@@ -503,12 +503,14 @@ define([
                                 switch (eventName) {
                                     case 'open':
                                         // Connection opened
+                                        console.log('EventSource event: open', { ok: true });
                                         break;
 
                                     case 'metadata':
                                         // Parse metadata JSON
                                         try {
                                             const metadata = JSON.parse(content);
+                                            console.log('EventSource event: metadata', metadata);
                                             // Normalize into consistent shape expected by UI
                                             if (metadata.stream_id) {
                                                 setupAggregate.stream_id = metadata.stream_id;
@@ -542,31 +544,11 @@ define([
                                         }
                                         break;
 
-                                    case 'rag_docs':
-                                        // Parse RAG documents JSON
-                                        try {
-                                            const ragDocs = JSON.parse(content);
-                                            setupAggregate.rag_docs = ragDocs;
-                                            if (onSetupComplete) {
-                                                onSetupComplete({
-                                                    stream_id: setupAggregate.stream_id,
-                                                    session_id: setupAggregate.session_id,
-                                                    userMessage: setupAggregate.userMessage,
-                                                    assistantMessage: setupAggregate.assistantMessage,
-                                                    systemMessage: setupAggregate.systemMessage,
-                                                    rag_docs: setupAggregate.rag_docs,
-                                                    copilot_details: setupAggregate.copilot_details
-                                                });
-                                            }
-                                        } catch (parseError) {
-                                            console.warn('Failed to parse RAG docs:', parseError);
-                                        }
-                                        break;
-
                                     case 'copilot_details':
                                         // Parse copilot details JSON
                                         try {
                                             const details = JSON.parse(content);
+                                            console.log('EventSource event: copilot_details', details);
                                             setupAggregate.copilot_details = details;
                                             if (onSetupComplete) {
                                                 onSetupComplete({
@@ -584,15 +566,120 @@ define([
                                         }
                                         break;
 
+                                    case 'rag_docs':
+                                        // Parse RAG documents JSON
+                                        try {
+                                            const ragDocs = JSON.parse(content);
+                                            console.log('EventSource event: rag_docs', ragDocs);
+                                            setupAggregate.rag_docs = ragDocs;
+                                            if (onSetupComplete) {
+                                                onSetupComplete({
+                                                    stream_id: setupAggregate.stream_id,
+                                                    session_id: setupAggregate.session_id,
+                                                    userMessage: setupAggregate.userMessage,
+                                                    assistantMessage: setupAggregate.assistantMessage,
+                                                    systemMessage: setupAggregate.systemMessage,
+                                                    rag_docs: setupAggregate.rag_docs,
+                                                    copilot_details: setupAggregate.copilot_details
+                                                });
+                                            }
+                                        } catch (parseError) {
+                                            console.warn('Failed to parse RAG docs:', parseError);
+                                        }
+                                        break;
+
+                                    case 'phase':
+                                        // Parse phase JSON
+                                        try {
+                                            const phase = JSON.parse(content);
+                                            console.log('EventSource event: phase', phase);
+                                        } catch (parseError) {
+                                            console.warn('Failed to parse phase:', parseError);
+                                        }
+                                        break;
+
+                                    case 'actions':
+                                        // Parse actions JSON
+                                        try {
+                                            const actions = JSON.parse(content);
+                                            console.log('EventSource event: actions', actions);
+                                        } catch (parseError) {
+                                            console.warn('Failed to parse actions:', parseError);
+                                        }
+                                        break;
+
+                                    case 'rag_start':
+                                        // Parse RAG start JSON
+                                        try {
+                                            const ragStart = JSON.parse(content);
+                                            console.log('EventSource event: rag_start', ragStart);
+                                        } catch (parseError) {
+                                            console.warn('Failed to parse rag_start:', parseError);
+                                        }
+                                        break;
+
+                                    case 'rag_end':
+                                        // Parse RAG end JSON
+                                        try {
+                                            const ragEnd = JSON.parse(content);
+                                            console.log('EventSource event: rag_end', ragEnd);
+                                        } catch (parseError) {
+                                            console.warn('Failed to parse rag_end:', parseError);
+                                        }
+                                        break;
+
+                                    case 'tool_start':
+                                        // Parse tool start JSON
+                                        try {
+                                            const toolStart = JSON.parse(content);
+                                            console.log('EventSource event: tool_start', toolStart);
+                                        } catch (parseError) {
+                                            console.warn('Failed to parse tool_start:', parseError);
+                                        }
+                                        break;
+
+                                    case 'tool_result':
+                                        // Parse tool result JSON
+                                        try {
+                                            const toolResult = JSON.parse(content);
+                                            console.log('EventSource event: tool_result', toolResult);
+                                        } catch (parseError) {
+                                            console.warn('Failed to parse tool_result:', parseError);
+                                        }
+                                        break;
+
+                                    case 'tool_error':
+                                        // Parse tool error JSON
+                                        try {
+                                            const toolError = JSON.parse(content);
+                                            console.log('EventSource event: tool_error', toolError);
+                                        } catch (parseError) {
+                                            console.warn('Failed to parse tool_error:', parseError);
+                                        }
+                                        break;
+
                                     case 'token':
                                         // Regular token content (plain text)
-                                        const finalContentJson = JSON.parse(content);
-                                        const finalContent = finalContentJson.text;
-                                        if (onData) onData(finalContent);
+                                        try {
+                                            const finalContentJson = JSON.parse(content);
+                                            const finalContent = finalContentJson.text;
+                                            console.log('EventSource event: token', { text: finalContent });
+                                            if (onData) onData(finalContent);
+                                        } catch (parseError) {
+                                            // If not JSON, treat as plain text
+                                            console.log('EventSource event: token', { text: content });
+                                            if (onData) onData(content);
+                                        }
                                         break;
 
                                     case 'done':
                                         // Stream completed
+                                        try {
+                                            const doneData = JSON.parse(content);
+                                            console.log('EventSource event: done', doneData);
+                                        } catch (parseError) {
+                                            console.log('EventSource event: done', { message_id: null, content: null });
+                                        }
                                         if (onEnd) onEnd();
                                         break;
 
@@ -600,14 +687,17 @@ define([
                                         // Error occurred
                                         try {
                                             const errorData = JSON.parse(content);
+                                            console.log('EventSource event: error', errorData);
                                             if (onError) onError(new Error(errorData.message || 'Stream error'));
                                         } catch (parseError) {
+                                            console.log('EventSource event: error', { error: content });
                                             if (onError) onError(new Error(content));
                                         }
                                         break;
 
                                     default:
                                         // Unknown event, treat as token content
+                                        console.log('EventSource event: unknown (' + eventName + ')', { content: content });
                                         const defaultContent = content.replace(/\\n/g, '\n');
                                         if (onData) onData(defaultContent);
                                         break;
