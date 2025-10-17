@@ -223,7 +223,8 @@ define([
 
           // Create new CopilotAPI
           this.copilotAPI = new CopilotAPI({
-            user_id: window.App.user.l_id
+            user_id: window.App.user.l_id,
+            w_id: window.App.user.id
           });
 
           this.copilotAPI.getModelList().then(lang.hitch(this, function(modelsAndRag) {

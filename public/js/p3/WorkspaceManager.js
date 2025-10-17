@@ -259,6 +259,7 @@ define([
       }
 
       var p = '/' + this.userId + '/';
+
       this.userWorkspaces = Deferred.when(this.api('Workspace.ls', [{
         paths: [p],
         includeSubDirs: false,

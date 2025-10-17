@@ -404,11 +404,13 @@ define([
             // STEP 2: PREPARE FULL PAYLOAD
             // ========================================
             var _self = this;
+
             var payload = {
                 query: params.inputText,
                 model: params.model,
                 session_id: params.sessionId,
                 user_id: this.user_id,
+                w_id: this.w_id,
                 system_prompt: params.systemPrompt || '',
                 save_chat: params.save_chat !== undefined ? params.save_chat : true,
                 include_history: true
@@ -703,7 +705,6 @@ define([
                                         break;
                                 }
                             } catch (e) {
-                                debugger;
                                 console.error('Error processing stream data:', e);
                                 if (onError) onError(e);
                             }
