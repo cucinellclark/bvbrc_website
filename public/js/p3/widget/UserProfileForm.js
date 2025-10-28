@@ -383,6 +383,11 @@ define([
         this._onProfileChange = lang.hitch(this,"onProfileChange");
         addEventListener("storage", this._onProfileChange);
 
+        // Populate the authorization token in the User Tokens section
+        if (this.authorizationTokenDisplay && window.App.authorizationToken) {
+          this.authorizationTokenDisplay.innerHTML = window.App.authorizationToken;
+        }
+
         // this.UNF.destroy();
         // domConstruct.create("span",{innerHTML: this.userprofileStored.id.replace('@' + localStorage.getItem("realm"), '')},this.usernameContainer)
         // var uidfield = document.getElementsByClassName('useridField')[0];
@@ -395,6 +400,10 @@ define([
         domClass.add(this.email_wait_domnode,"dijitHidden")
         domClass.add(this.resend_email_domnode,"dijitHidden")
         domClass.add(this.verification_message,"dijitHidden")
+        // Hide the User Tokens section when not authenticated
+        if (this.userTokensForm) {
+          domClass.add(this.userTokensForm, "dijitHidden");
+        }
         if (window.location.search) {
           var o = {};
           var fields = ['email', 'username', 'first_name', 'last_name', 'middle_name', 'affiliation', 'organization', 'organisms', 'interests'];
