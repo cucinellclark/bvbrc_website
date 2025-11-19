@@ -338,6 +338,14 @@
                         <div><a class="TopMenuLink" href="/privacy-policy">Privacy Policy</a></div>
                     </div>
                 </div>
+
+                <div class="topMenuButton showOnLoad dijitHidden" data-dojo-type="dijit/form/DropDownButton">
+                    <span>DEMO</span>
+
+                    <div data-dojo-type="p3/widget/TooltipDialog">
+                        <div><a class="navigationLink" href="https://dev-1.bv-brc.org/view/RadicalPilot" target="_blank">RadicalPilot</a></div>
+                    </div>
+                </div>
             </div>
 
             <div id="p3header-search" style="width: 120px;flex-grow: 0.85;margin-right: 10px;">
@@ -620,6 +628,13 @@
                         <div><a class="TopMenuLink" href="/related-resources">Related Resources</a></div>
                         <div><a class="TopMenuLink navigationLinkOut" href="https://github.com/BV-BRC" target="_blank" rel="noopener">BV-BRC GitHub</a></div>
                         <div><a class="TopMenuLink" href="/privacy-policy">Privacy Policy</a></div>
+                    </div>
+                </div>
+
+                <div id="demo-menu" class="menu-section">
+                    <div class="menu-header" onclick="toggleSubMenu(this)">DEMO <span class="icon-chevron-down"></span></div>
+                    <div class="menu-items" style="display: none">
+                        <div><a class="navigationLink" href="https://dev-1.bv-brc.org/view/RadicalPilot" target="_blank">RadicalPilot</a></div>
                     </div>
                 </div>
             </div>
