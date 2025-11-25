@@ -1,0 +1,166 @@
+processing profile resource /home/ac.cucinell/bvbrc-dev/Copilot/bvbrc_website/public/js/release.profile.js
+info(107) Package Version: package: dojo; version: 1.16.3
+processing profile resource /home/ac.cucinell/bvbrc-dev/Copilot/bvbrc_website/public/js/dojo/dojo.profile.js
+info(107) Package Version: package: dijit; version: 1.16.3
+processing profile resource /home/ac.cucinell/bvbrc-dev/Copilot/bvbrc_website/public/js/dijit/dijit.profile.js
+info(107) Package Version: package: dojox; version: 1.16.3
+processing profile resource /home/ac.cucinell/bvbrc-dev/Copilot/bvbrc_website/public/js/dojox/dojox.profile.js
+info(107) Package Version: package: p3; version: 1.0
+processing profile resource /home/ac.cucinell/bvbrc-dev/Copilot/bvbrc_website/public/js/p3/p3.profile.js
+info(107) Package Version: package: dgrid; version: 0.3.17-dev
+processing profile resource /home/ac.cucinell/bvbrc-dev/Copilot/bvbrc_website/public/js/dgrid/package.js
+info(107) Package Version: package: put-selector; version: 0.3.6
+processing profile resource /home/ac.cucinell/bvbrc-dev/Copilot/bvbrc_website/public/js/put-selector/package.js
+info(107) Package Version: package: xstyle; version: 0.3.2
+processing profile resource /home/ac.cucinell/bvbrc-dev/Copilot/bvbrc_website/public/js/xstyle/package.js
+processing profile resource /home/ac.cucinell/bvbrc-dev/Copilot/bvbrc_website/public/js/dbind/package.js
+info(107) Package Version: package: rql; version: 0.3.3
+processing profile resource /home/ac.cucinell/bvbrc-dev/Copilot/bvbrc_website/public/js/rql/package.js
+info(107) Package Version: package: JBrowse; version: 1.x.x
+processing profile resource /home/ac.cucinell/bvbrc-dev/Copilot/bvbrc_website/public/js/JBrowse/JBrowse.profile.js
+info(107) Package Version: package: jszlib; version: 0.1
+processing profile resource /home/ac.cucinell/bvbrc-dev/Copilot/bvbrc_website/public/js/jszlib/jszlib.profile.js
+warn(209) Missing or empty package.json. filename: /home/ac.cucinell/bvbrc-dev/Copilot/bvbrc_website/public/js/FileSaver/package.json
+warn(209) Missing or empty package.json. filename: /home/ac.cucinell/bvbrc-dev/Copilot/bvbrc_website/public/js/circulus/package.json
+warn(209) Missing or empty package.json. filename: /home/ac.cucinell/bvbrc-dev/Copilot/bvbrc_website/public/js/lazyload/package.json
+warn(209) Missing or empty package.json. filename: /home/ac.cucinell/bvbrc-dev/Copilot/bvbrc_website/public/js/jDataView/src/package.json
+info(107) Package Version: package: d3; version: 3.5.6
+warn(226) A package without a profile could throw errors or warnings. package: d3
+processing profile resource /home/ac.cucinell/bvbrc-dev/Copilot/bvbrc_website/public/js/d3.v5/app.profile.js
+warn(209) Missing or empty package.json. filename: /home/ac.cucinell/bvbrc-dev/Copilot/bvbrc_website/public/js/phyloview/package.json
+info(107) Package Version: package: cytoscape-panzoom; version: 2.5.3
+warn(226) A package without a profile could throw errors or warnings. package: cytoscape-panzoom
+info(107) Package Version: package: cytoscape-context-menus; version: 3.1.0
+warn(226) A package without a profile could throw errors or warnings. package: cytoscape-context-menus
+info(107) Package Version: package: cytoscape-cola; version: 1.6.0
+warn(226) A package without a profile could throw errors or warnings. package: cytoscape-cola
+info(107) Package Version: package: cytoscape-dagre; version: 2.5.0
+warn(226) A package without a profile could throw errors or warnings. package: cytoscape-dagre
+info(107) Package Version: package: heatmap; version: 0.2.33
+processing profile resource /home/ac.cucinell/bvbrc-dev/Copilot/bvbrc_website/public/js/heatmap/app.profile.js
+discovering resources...
+starting reading resources...
+starting processing raw resource content...
+starting tokenizing resource...
+starting processing resource tokens...
+starting parsing resource...
+starting processing resource AST...
+warn(216) dojo/has plugin resource could not be resolved during build-time. plugin resource id: dom-addeventlistener?:./aspect; reference module id: dojo/on
+warn(224) A plugin dependency was encountered but there was no build-time plugin resolver. module: dojo/request; plugin: dojo/request/default
+warn(224) A plugin dependency was encountered but there was no build-time plugin resolver. module: dojo/request/node; plugin: dojo/node
+warn(224) A plugin dependency was encountered but there was no build-time plugin resolver. module: dojo/request/node; plugin: dojo/node
+warn(224) A plugin dependency was encountered but there was no build-time plugin resolver. module: dojo/request/node; plugin: dojo/node
+warn(224) A plugin dependency was encountered but there was no build-time plugin resolver. module: dojo/request/node; plugin: dojo/node
+warn(224) A plugin dependency was encountered but there was no build-time plugin resolver. module: dojo/request/registry; plugin: dojo/request/default
+warn(216) dojo/has plugin resource could not be resolved during build-time. plugin resource id: host-browser?dom-addeventlistener?:../on:; reference module id: dojo/request/watch
+warn(224) A plugin dependency was encountered but there was no build-time plugin resolver. module: dijit/Fieldset; plugin: dojo/query
+warn(224) A plugin dependency was encountered but there was no build-time plugin resolver. module: dijit/RadioMenuItem; plugin: dojo/query
+warn(224) A plugin dependency was encountered but there was no build-time plugin resolver. module: dijit/Tree; plugin: dojo/query
+warn(216) dojo/has plugin resource could not be resolved during build-time. plugin resource id: dojo-bidi?./_BidiMixin; reference module id: dijit/_WidgetBase
+warn(224) A plugin dependency was encountered but there was no build-time plugin resolver. module: dijit/form/_RadioButtonMixin; plugin: dojo/query
+warn(216) dojo/has plugin resource could not be resolved during build-time. plugin resource id: dojo-bidi?./bidi/Chart; reference module id: dojox/charting/Chart
+warn(216) dojo/has plugin resource could not be resolved during build-time. plugin resource id: dojo-bidi?./bidi/Chart3D; reference module id: dojox/charting/Chart3D
+warn(216) dojo/has plugin resource could not be resolved during build-time. plugin resource id: dojo-bidi?../bidi/action2d/ZoomAndPan; reference module id: dojox/charting/action2d/MouseZoomAndPan
+warn(216) dojo/has plugin resource could not be resolved during build-time. plugin resource id: dojo-bidi?../bidi/action2d/Tooltip; reference module id: dojox/charting/action2d/Tooltip
+warn(216) dojo/has plugin resource could not be resolved during build-time. plugin resource id: dojo-bidi?../bidi/action2d/ZoomAndPan; reference module id: dojox/charting/action2d/TouchZoomAndPan
+warn(216) dojo/has plugin resource could not be resolved during build-time. plugin resource id: dojo-bidi?../bidi/axis2d/Default; reference module id: dojox/charting/axis2d/Default
+warn(216) dojo/has plugin resource could not be resolved during build-time. plugin resource id: dojo-bidi?../bidi/widget/Chart; reference module id: dojox/charting/widget/Chart
+warn(216) dojo/has plugin resource could not be resolved during build-time. plugin resource id: dojo-bidi?../bidi/widget/Legend; reference module id: dojox/charting/widget/Legend
+warn(216) dojo/has plugin resource could not be resolved during build-time. plugin resource id: dojo-bidi?./bidi/_BidiMixin; reference module id: dojox/grid/DataGrid
+warn(216) dojo/has plugin resource could not be resolved during build-time. plugin resource id: dojo-bidi?dojox/mobile/bidi/Accordion; reference module id: dojox/mobile/Accordion
+warn(216) dojo/has plugin resource could not be resolved during build-time. plugin resource id: dojo-bidi?dojox/mobile/bidi/Badge; reference module id: dojox/mobile/Badge
+warn(216) dojo/has plugin resource could not be resolved during build-time. plugin resource id: dojo-bidi?dojox/mobile/bidi/Button; reference module id: dojox/mobile/Button
+warn(216) dojo/has plugin resource could not be resolved during build-time. plugin resource id: dojo-bidi?dojox/mobile/bidi/Carousel; reference module id: dojox/mobile/Carousel
+warn(216) dojo/has plugin resource could not be resolved during build-time. plugin resource id: dojo-bidi?dojox/mobile/bidi/CarouselItem; reference module id: dojox/mobile/CarouselItem
+warn(224) A plugin dependency was encountered but there was no build-time plugin resolver. module: dojox/mobile/DatePicker; plugin: dojox/mobile/_PickerChooser
+warn(216) dojo/has plugin resource could not be resolved during build-time. plugin resource id: dojo-bidi?dojox/mobile/bidi/FormLayout; reference module id: dojox/mobile/FormLayout
+warn(216) dojo/has plugin resource could not be resolved during build-time. plugin resource id: dojo-bidi?dojox/mobile/bidi/Heading; reference module id: dojox/mobile/Heading
+warn(216) dojo/has plugin resource could not be resolved during build-time. plugin resource id: dojo-bidi?dojox/mobile/bidi/Icon; reference module id: dojox/mobile/Icon
+warn(216) dojo/has plugin resource could not be resolved during build-time. plugin resource id: dojo-bidi?dojox/mobile/bidi/IconItem; reference module id: dojox/mobile/IconItem
+warn(216) dojo/has plugin resource could not be resolved during build-time. plugin resource id: dojo-bidi?dojox/mobile/bidi/IconMenu; reference module id: dojox/mobile/IconMenu
+warn(216) dojo/has plugin resource could not be resolved during build-time. plugin resource id: dojo-bidi?dojox/mobile/bidi/ListItem; reference module id: dojox/mobile/ListItem
+warn(216) dojo/has plugin resource could not be resolved during build-time. plugin resource id: dojo-bidi?dojox/mobile/bidi/ProgressIndicator; reference module id: dojox/mobile/ProgressIndicator
+warn(216) dojo/has plugin resource could not be resolved during build-time. plugin resource id: dojo-bidi?dojox/mobile/bidi/Rating; reference module id: dojox/mobile/Rating
+warn(216) dojo/has plugin resource could not be resolved during build-time. plugin resource id: dojo-bidi?dojox/mobile/bidi/RoundRectCategory; reference module id: dojox/mobile/RoundRectCategory
+warn(216) dojo/has plugin resource could not be resolved during build-time. plugin resource id: dojo-bidi?dojox/mobile/bidi/SimpleDialog; reference module id: dojox/mobile/SimpleDialog
+warn(216) dojo/has plugin resource could not be resolved during build-time. plugin resource id: dojo-bidi?dojox/mobile/bidi/SpinWheelSlot; reference module id: dojox/mobile/SpinWheelSlot
+warn(216) dojo/has plugin resource could not be resolved during build-time. plugin resource id: dojo-bidi?dojox/mobile/bidi/SwapView; reference module id: dojox/mobile/SwapView
+warn(216) dojo/has plugin resource could not be resolved during build-time. plugin resource id: dojo-bidi?dojox/mobile/bidi/Switch; reference module id: dojox/mobile/Switch
+warn(216) dojo/has plugin resource could not be resolved during build-time. plugin resource id: dojo-bidi?dojox/mobile/bidi/TabBar; reference module id: dojox/mobile/TabBar
+warn(216) dojo/has plugin resource could not be resolved during build-time. plugin resource id: dojo-bidi?dojox/mobile/bidi/TabBarButton; reference module id: dojox/mobile/TabBarButton
+warn(216) dojo/has plugin resource could not be resolved during build-time. plugin resource id: dojo-bidi?dojox/mobile/bidi/TextBox; reference module id: dojox/mobile/TextBox
+warn(224) A plugin dependency was encountered but there was no build-time plugin resolver. module: dojox/mobile/TimePicker; plugin: dojox/mobile/_PickerChooser
+warn(216) dojo/has plugin resource could not be resolved during build-time. plugin resource id: dojo-bidi?dojox/mobile/bidi/ToolBarButton; reference module id: dojox/mobile/ToolBarButton
+warn(216) dojo/has plugin resource could not be resolved during build-time. plugin resource id: dojo-bidi?dojox/mobile/bidi/Tooltip; reference module id: dojox/mobile/Tooltip
+warn(216) dojo/has plugin resource could not be resolved during build-time. plugin resource id: dojo-bidi?dojox/mobile/bidi/TreeView; reference module id: dojox/mobile/TreeView
+warn(216) dojo/has plugin resource could not be resolved during build-time. plugin resource id: dojo-bidi?dojox/mobile/bidi/ValuePickerSlot; reference module id: dojox/mobile/ValuePickerSlot
+warn(216) dojo/has plugin resource could not be resolved during build-time. plugin resource id: dojo-bidi?dojox/mobile/bidi/_ComboBoxMenu; reference module id: dojox/mobile/_ComboBoxMenu
+warn(216) dojo/has plugin resource could not be resolved during build-time. plugin resource id: dojo-bidi?dojox/mobile/bidi/_StoreListMixin; reference module id: dojox/mobile/_DataListMixin
+warn(216) dojo/has plugin resource could not be resolved during build-time. plugin resource id: dojo-bidi?dojox/mobile/bidi/_ItemBase; reference module id: dojox/mobile/_ItemBase
+warn(216) dojo/has plugin resource could not be resolved during build-time. plugin resource id: dojo-bidi?dojox/mobile/bidi/_PickerBase; reference module id: dojox/mobile/_PickerBase
+warn(216) dojo/has plugin resource could not be resolved during build-time. plugin resource id: dojo-bidi?dojox/mobile/bidi/_StoreListMixin; reference module id: dojox/mobile/_StoreListMixin
+warn(216) dojo/has plugin resource could not be resolved during build-time. plugin resource id: dojo-bidi?dojox/mobile/bidi/Scrollable; reference module id: dojox/mobile/scrollable
+warn(216) dojo/has plugin resource could not be resolved during build-time. plugin resource id: dojo-parser?:dojo/_base/window; reference module id: dojox/mvc/parserExtension
+warn(216) dojo/has plugin resource could not be resolved during build-time. plugin resource id: dojo-mobile-parser?:dojo/parser; reference module id: dojox/mvc/parserExtension
+warn(216) dojo/has plugin resource could not be resolved during build-time. plugin resource id: dojo-parser?:dojox/mobile/parser; reference module id: dojox/mvc/parserExtension
+warn(224) A plugin dependency was encountered but there was no build-time plugin resolver. module: dojox/store/LocalDB; plugin: dojox/store/db/has
+warn(216) dojo/has plugin resource could not be resolved during build-time. plugin resource id: touch?dojox/gesture/tap; reference module id: dojox/treemap/DrillDownUp
+error(311) Missing dependency. module: p3/widget/BiosetResultHeatmapContainer; dependency: heatmap/dist/hotmap
+warn(224) A plugin dependency was encountered but there was no build-time plugin resolver. module: p3/widget/D3StackedBarChart; plugin: dojo/query
+error(311) Missing dependency. module: p3/widget/MapsCanvas; dependency: dojo/text!/public/js/p3/resources/surveillancemap/flyaways.json; error: Error: text resource (/public/js/p3/resources/surveillancemap/flyaways.json/x) missing
+error(311) Missing dependency. module: p3/widget/MapsCanvas; dependency: https://maps.googleapis.com/maps/api/js?key=AIzaSyAo6Eq83tcpiWufvVpw_uuqdoRfWbFXfQ8&sensor=false&libraries=drawing
+warn(216) dojo/has plugin resource could not be resolved during build-time. plugin resource id: touch?./util/touch; reference module id: p3/widget/PageGrid
+error(311) Missing dependency. module: p3/widget/PathwayMapHeatmapContainerNew; dependency: heatmap/dist/hotmap
+error(311) Missing dependency. module: p3/widget/ProteinFamiliesHeatmapContainerNew; dependency: heatmap/dist/hotmap
+error(311) Missing dependency. module: p3/widget/ProteinFamiliesServiceHeatmapContainer; dependency: heatmap/dist/hotmap
+error(311) Missing dependency. module: p3/widget/SubsystemMapHeatmapContainer; dependency: heatmap/dist/hotmap
+error(311) Missing dependency. module: p3/widget/TranscriptomicsGeneHeatmapContainerNew; dependency: heatmap/dist/hotmap
+error(311) Missing dependency. module: p3/widget/copilot/ChatMessage; dependency: markdown-it/dist/markdown-it.min
+error(311) Missing dependency. module: p3/widget/copilot/CopilotDisplay; dependency: markdown-it/dist/markdown-it.min
+error(311) Missing dependency. module: p3/widget/copilot/CopilotInput; dependency: html2canvas/dist/html2canvas.min
+error(311) Missing dependency. module: p3/widget/copilot/CopilotInputSidePanel; dependency: html2canvas/dist/html2canvas.min
+error(311) Missing dependency. module: p3/widget/outbreaks/OutbreaksGeoMap; dependency: https://maps.googleapis.com/maps/api/js?key=AIzaSyAo6Eq83tcpiWufvVpw_uuqdoRfWbFXfQ8&sensor=false&libraries=drawing
+error(311) Missing dependency. module: p3/widget/proteinStructure/ProteinStructure; dependency: molstar/mol-bvbrc/index
+error(311) Missing dependency. module: p3/widget/proteinStructure/ProteinStructure; dependency: xstyle/css!molstar/mol-bvbrc/molstar.css; error: Error: text resource (/home/ac.cucinell/bvbrc-dev/Copilot/bvbrc_website/public/molstar/mol-bvbrc/molstar.css) missing
+warn(202) AMD module specified and absolute module identifier that is not consistent with the configuration and filename module: p3/widget/util/touch; specified: dojo/touch
+error(311) Missing dependency. module: p3/widget/viewer/Copilot; dependency: ../copilot/CopilotGridContainer
+error(311) Missing dependency. module: p3/widget/viewer/GenomeAlignment; dependency: mauve_viewer/dist/mauve-viewer
+error(311) Missing dependency. module: p3/widget/viewer/GenomeAlignment; dependency: xstyle/css!mauve_viewer/dist/mauve-viewer.css; error: Error: text resource (/home/ac.cucinell/bvbrc-dev/Copilot/bvbrc_website/public/mauve_viewer/dist/mauve-viewer.css) missing
+warn(216) dojo/has plugin resource could not be resolved during build-time. plugin resource id: touch?./TouchScroll; reference module id: dgrid/List
+warn(216) dojo/has plugin resource could not be resolved during build-time. plugin resource id: touch?./util/touch; reference module id: dgrid/Selection
+warn(216) dojo/has plugin resource could not be resolved during build-time. plugin resource id: touch?./util/touch; reference module id: dgrid/tree
+warn(216) dojo/has plugin resource could not be resolved during build-time. plugin resource id: touch?../util/touch; reference module id: dgrid/extensions/DnD
+warn(216) dojo/has plugin resource could not be resolved during build-time. plugin resource id: touch?./_DnD-touch-autoscroll; reference module id: dgrid/extensions/DnD
+warn(205) Module not tagged as pure AMD yet it contains AMD API applications. module: FileSaver/FileSaver
+warn(205) Module not tagged as pure AMD yet it contains AMD API applications. module: circulus/HeatmapTrack
+warn(205) Module not tagged as pure AMD yet it contains AMD API applications. module: circulus/HistogramTrack
+warn(205) Module not tagged as pure AMD yet it contains AMD API applications. module: circulus/LineTrack
+warn(205) Module not tagged as pure AMD yet it contains AMD API applications. module: circulus/SectionTrack
+warn(205) Module not tagged as pure AMD yet it contains AMD API applications. module: circulus/SectionTrackWithLabel
+warn(205) Module not tagged as pure AMD yet it contains AMD API applications. module: circulus/Track
+warn(205) Module not tagged as pure AMD yet it contains AMD API applications. module: circulus/Viewer
+warn(205) Module not tagged as pure AMD yet it contains AMD API applications. module: jDataView/jdataview
+warn(205) Module not tagged as pure AMD yet it contains AMD API applications. module: d3/d3
+warn(205) Module not tagged as pure AMD yet it contains AMD API applications. module: d3/src/end
+warn(205) Module not tagged as pure AMD yet it contains AMD API applications. module: phyloview/TreeNavSVG
+warn(202) AMD module specified and absolute module identifier that is not consistent with the configuration and filename module: cytoscape-panzoom/cytoscape-panzoom; specified: cytoscape-panzoom
+warn(205) Module not tagged as pure AMD yet it contains AMD API applications. module: cytoscape-panzoom/cytoscape-panzoom
+warn(202) AMD module specified and absolute module identifier that is not consistent with the configuration and filename module: cytoscape-context-menus/cytoscape-context-menus; specified: cytoscape-context-menus
+warn(205) Module not tagged as pure AMD yet it contains AMD API applications. module: cytoscape-context-menus/cytoscape-context-menus
+warn(202) AMD module specified and absolute module identifier that is not consistent with the configuration and filename module: cytoscape-cola/cytoscape-cola; specified: cytoscape-cola
+warn(205) Module not tagged as pure AMD yet it contains AMD API applications. module: cytoscape-cola/cytoscape-cola
+warn(205) Module not tagged as pure AMD yet it contains AMD API applications. module: cytoscape-dagre/cytoscape-dagre
+error(311) Missing dependency. module: cytoscape-dagre/cytoscape-dagre; dependency: dagre
+starting executing global optimizations...
+warn(228) While optimizing a CSS file, an import directive was not expanded because the source for the import was not available to the builder. CSS file: /home/ac.cucinell/bvbrc-dev/Copilot/bvbrc_website/public/js/p3/resources/home-new.css; import directive: @import url("https://fonts.googleapis.com/css?family=Didact+Gothic|Roboto");
+starting writing resources...
+starting cleaning up...
+waiting for the optimizer runner to finish...
+error(356) The optimizer threw an exception; the module probably contains syntax errors. module identifier: /home/ac.cucinell/bvbrc-dev/Copilot/bvbrc_website/public/js/release/p3/layer/core.js; exception: (compile time:4.229s). OPTIMIZER FAILED: JavaException: java.lang.RuntimeException: Exception parsing "core.js.uncompressed.js"
+error(352) Optimizer reported errors; consult build report for details. 
+starting reporting...
+Report written to /home/ac.cucinell/bvbrc-dev/Copilot/bvbrc_website/public/js/release/build-report.txt
+Process finished normally.
+	errors: 21
+	warnings: 98
+	build time: 35.95 seconds
