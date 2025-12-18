@@ -1,6 +1,6 @@
 define([
   'dojo/_base/declare',
-  'dojo/topic', 'dojo/on', 'dojo/dom', 'dojo/dom-class', 'dojo/dom-attr', 'dojo/dom-construct', 'dojo/query',
+  'dojo/topic', 'dojo/on', 'dojo/dom', 'dojo/dom-class', 'dojo/dom-attr', 'dojo/dom-construct', 'dojo/dom-style', 'dojo/query',
   'dijit/registry', 'dojo/_base/lang',
   'dojo/_base/Deferred',
   'dojo/store/JsonRest', 'dojox/widget/Toaster',
@@ -12,7 +12,7 @@ define([
 
 ], function (
   declare,
-  Topic, on, dom, domClass, domAttr, domConstruct, domQuery,
+  Topic, on, dom, domClass, domAttr, domConstruct, domStyle, domQuery,
   Registry, lang,
   Deferred,
   JsonRest, Toaster,
@@ -53,6 +53,50 @@ define([
             backgroundColor: '#007bff',
             borderRadius: '50%'
           }).placeAt(document.body);
+          this.chatButton = chatButton;
+
+          // Create blue rectangle button for showing chat button when hidden
+          var showChatRectButton = domConstruct.create('div', {
+            className: 'ShowChatRectButton',
+            innerHTML: '<span class="show-chat-plus">+</span>',
+            title: 'show copilot button',
+            style: {
+              display: 'none'
+            }
+          });
+          domConstruct.place(showChatRectButton, document.body);
+
+          // Function to get chat button visibility from localStorage
+          function getChatButtonVisibility() {
+            try {
+              if (window && window.localStorage) {
+                var stored = localStorage.getItem('copilot-chat-button-visible');
+                return stored !== null ? (stored === 'true') : true; // default to visible
+              }
+            } catch (e) {
+              console.warn('Unable to read chat button visibility from localStorage', e);
+            }
+            return true; // default to visible
+          }
+
+          // Initialize showChatRectButton visibility based on localStorage
+          var initialChatButtonVisible = getChatButtonVisibility();
+          if (!initialChatButtonVisible) {
+            domStyle.set(showChatRectButton, 'display', 'block');
+          }
+
+          // Add click handler for the rectangle button
+          on(showChatRectButton, 'click', function(evt) {
+            Topic.publish('showChatButton', true);
+          });
+
+          Topic.subscribe('hideChatButton', lang.hitch(this, function(checked) {
+            domStyle.set(showChatRectButton, 'display', 'block');
+          }));
+
+          Topic.subscribe('showChatButton', lang.hitch(this, function(checked) {
+            domStyle.set(showChatRectButton, 'display', 'none');
+          }));
         })
       }
 
@@ -213,6 +257,7 @@ define([
         newState.set = 'path';
         newState.requireAuth = false;
         newState.pageTitle = 'Registration | BV-BRC';
+        newState.layers = ['p3/layer/p3user'];
         // console.log("Navigate to ", newState);
         _self.navigate(newState);
       });
@@ -238,6 +283,7 @@ define([
         newState.widgetClass = 'p3/widget/AdvancedSearch';
         newState.requireAuth = false;
         // console.log("Navigate to ", newState);
+        newState.layers = ['p3/layer/search'];
         _self.navigate(newState);
       });
 
@@ -351,13 +397,16 @@ define([
       });
 
       Router.register('/view(/.*)', function (params, path) {
+        console.log("Register Viewer Route: ", params, path);
         var newState = getState(params, path);
         var parts = newState.pathname.split('/');
         parts.shift();
         var type = parts.shift();
 
         newState.widgetClass = 'p3/widget/viewer/' + type;
-
+        console.log("window.App:", window.App,window.App.production)
+        newState.layers = ['p3/layer/grids','p3/layer/jbrowse','p3/layer/viewers'];
+        console.log("new state)")
         _self.navigate(newState);
       });
 
@@ -368,6 +417,7 @@ define([
         var type = parts.shift();
 
         newState.widgetClass = 'p3/widget/outbreaks/' + type + '/index';
+        newState.layers = ['p3/layer/outbreaks'];
         newState.requireAuth = false;
 
         _self.navigate(newState);
@@ -394,6 +444,7 @@ define([
         const type = parts.shift();
 
         newState.widgetClass = 'p3/widget/search/' + type;
+        newState.layers = ['p3/layer/search'];
         newState.requireAuth = false;
 
         if (newState.search) {
@@ -429,6 +480,8 @@ define([
 
         // console.log("Parts:", parts, type, path)
         newState.widgetClass = 'p3/widget/app/' + type;
+        newState.layers = ['p3/layer/grids','p3/layer/viewers','p3/layer/jbrowse','p3/layer/apps'];
+
         newState.value = viewerParams;
         newState.set = 'params';
         // move requireAuth check to AppBase and its derieved class

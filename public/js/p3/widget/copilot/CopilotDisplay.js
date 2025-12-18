@@ -60,6 +60,12 @@ define([
     // Current suggested questions (will be randomly selected)
     suggestedQuestions: [],
 
+    // Number of questions to display
+    suggestedQuestionsCount: 6,
+
+    // Current suggested questions (will be randomly selected)
+    suggestedQuestions: [],
+
     // Flag to ensure styles are injected only once
     _copilotStylesInjected: false,
 
