@@ -351,6 +351,27 @@ define([
                 auth_token: window.App.authorizationToken || null
             };
 
+            // Add RAG parameters if provided
+            if (params.ragDb) {
+                data.rag_db = params.ragDb;
+            }
+            if (params.numDocs !== undefined && params.numDocs !== null) {
+                data.num_docs = params.numDocs;
+            }
+
+            // Add image if provided
+            if (params.image) {
+                data.image = params.image;
+            }
+
+            // Add enhanced prompt if provided
+            if (params.enhancedPrompt) {
+                data.enhanced_prompt = params.enhancedPrompt;
+            }
+
+            // Create abort controller for this request
+            this.currentAbortController = new AbortController();
+
             fetch(this.apiUrlBase + '/copilot-agent', {
                 method: 'POST',
                 headers: {
@@ -359,7 +380,8 @@ define([
                     'Accept': 'text/event-stream',
                     'Cache-Control': 'no-cache'
                 },
-                body: JSON.stringify(data)
+                body: JSON.stringify(data),
+                signal: this.currentAbortController.signal
             }).then(response => {
                 if (!response.ok) {
                     response.text().then(text => {
@@ -385,6 +407,7 @@ define([
                         let content = line.substring(5).trim();
 
                         if (content === '[DONE]') {
+                            this.currentAbortController = null;
                             if (onEnd) onEnd();
                             return;
                         }
@@ -442,6 +465,7 @@ define([
                             if (buffer.length > 0) {
                                 processLine(buffer); // Process any remaining data
                             }
+                            this.currentAbortController = null;
                             if (onEnd) onEnd();
                             return;
                         }
@@ -460,6 +484,8 @@ define([
                 return pump();
 
             }).catch(err => {
+                // Clear abort controller on error
+                this.currentAbortController = null;
                 if (onError) onError(err);
             });
         },
