@@ -67,9 +67,8 @@ define([
                     /* Reset defaults to move panel to the right */
                     #zonecentre { top: 0 !important; left: 0 !important; }
                     
-                    /* --- MODIFIED: Overview moved down 20px --- */
                     #overviewzone {
-                        top: 50px !important; /* Was 10px */
+                        top: 50px !important;
                         left: 10px !important;
                         bottom: auto !important;
                         right: auto !important;
@@ -77,24 +76,76 @@ define([
                         border: 1px solid #999;
                     }
 
-                    /* --- MODIFIED: Titlebar moved to Top Right --- */
+                    /* --- STRATEGY CHANGE: Neutralize the Titlebar Container --- */
+                    /* Make it an invisible wrapper that doesn't restrict its children */
                     #titlebar {
-                        left: auto !important;
-                        right: 30px !important; /* Dock to right */
-                        top: 30px !important;   /* Dock to top */
-                        bottom: auto !important;
-                        width: auto !important; /* Allow it to shrink wrap text */
-                        z-index: 101; /* Ensure it stays above the sidebar background */
-                        pointer-events: none; /* Let clicks pass through if it overlaps map */
+                        position: absolute !important;
+                        top: 0 !important;
+                        left: 0 !important;
+                        width: 100% !important;
+                        height: 0px !important; /* Don't take up space */
+                        
+                        margin: 0 !important;
+                        padding: 0 !important;
+                        
+                        /* CRITICAL: Allow children to be seen outside this 0px box */
+                        overflow: visible !important;
+                        
+                        pointer-events: none !important;
+                        z-index: 2000 !important; /* Highest layer */
                     }
-                    
+
+                    /* Hide Main Title */
                     #maintitle {
                         display: none !important;
                     }
 
+                    /* --- Position the Search Form Directly --- */
+                    #recherche {
+                        /* Anchor to Top Right of the Widget */
+                        position: absolute !important;
+                        top: 20px !important;
+                        right: auto !important;
+                        left: 240px !important;   /* Override legacy */
+                        bottom: auto !important; /* Override legacy */
+                        
+                        /* Visuals */
+                        display: block !important;
+                        background: rgba(255,255,255,0.8); /* Semi-transparent background container */
+                        padding: 5px;
+                        border-radius: 4px;
+                        
+                        pointer-events: auto !important;
+                        z-index: 2001 !important;
+                    }
+
+                    /* --- Force Input Visibility --- */
+                    #searchinput, #searchsubmit {
+                        /* CRITICAL: Turn off legacy absolute positioning */
+                        position: static !important; 
+                        float: none !important;
+                        
+                        /* Reset offsets so they don't fly away */
+                        top: auto !important;
+                        left: auto !important;
+                        right: auto !important;
+                        bottom: auto !important;
+                        
+                        /* Layout: Sit next to each other */
+                        display: inline-block !important;
+                        vertical-align: middle !important;
+                        margin: 0 2px !important; /* Small gap between them */
+                        
+                        /* Interaction */
+                        pointer-events: auto !important;
+                        visibility: visible !important;
+                        opacity: 1 !important;
+                    }
+
+                    /* Side Panel Styling */
                     #leftcolumn {
                         left: auto !important;
-                        right: 0px !important; /* Start visible on right */
+                        right: 0px !important;
                         border-right: none !important;
                         border-left: 1px solid #cdcdcd;
                         background-color: #f7f7f7;
@@ -109,7 +160,6 @@ define([
                         border-left: 1px solid #cdcdcd;
                     }
                     
-                    /* Flip arrow to point left by default */
                     #aUnfold { transform: rotate(180deg); }
                 </style>
                 <div id="zonecentre" class="gradient" style="position: relative; width: 100%; height: 100%;">
