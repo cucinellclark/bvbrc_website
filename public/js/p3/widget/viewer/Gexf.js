@@ -3,36 +3,42 @@
 define([
     "dojo/_base/declare", "dijit/layout/ContentPane", "dojo/_base/lang",
     "dojo/on", "../../WorkspaceManager", "../../util/PathJoin", "dojo/when",
-    "dojo/query", "dojo/dom-geometry"
+    "dojo/query", "dojo/dom-geometry", "dojo/dom-style"
 ], function(
     declare, ContentPane, lang,
     on, WorkspaceManager, PathJoin, when,
-    query, domGeom
+    query, domGeom, domStyle
 ){
     var scriptsReady = false;
     var pendingCallbacks = [];
+    
     var loadGexfDependencies = function(callback) {
         if (scriptsReady) { callback(); return; }
         pendingCallbacks.push(callback);
         if (pendingCallbacks.length > 1) { return; }
+        
         var stylesToLoad = [
             '/vendor/gexf-js/styles/jquery-ui-1.10.3.custom.min.css',
             '/vendor/gexf-js/styles/gexfjs.css'
         ];
 
         stylesToLoad.forEach(function(href){
-            var link = document.createElement('link');
-            link.rel = 'stylesheet';
-            link.type = 'text/css';
-            link.href = href;
-            document.getElementsByTagName('head')[0].appendChild(link);
+            if (!document.querySelector('link[href="' + href + '"]')) {
+                var link = document.createElement('link');
+                link.rel = 'stylesheet';
+                link.type = 'text/css';
+                link.href = href;
+                document.getElementsByTagName('head')[0].appendChild(link);
+            }
         });
+        
         var scriptsToLoad = [
             '/vendor/gexf-js/js/jquery-2.0.2.min.js',
-            '/vendor/gexf-js/js/jquery-ui-1.10.4.custom.min.js',
+            '/vendor/gexf-js/js/jquery-ui-1.10.4.custom.min.js', // Reverted to Gexf.js version
             '/vendor/gexf-js/js/jquery.mousewheel.min.js',
             '/vendor/gexf-js/js/gexfjs.js'
         ];
+        
         var loadScript = function(index) {
             if (index >= scriptsToLoad.length) {
                 scriptsReady = true;
@@ -49,16 +55,63 @@ define([
         loadScript(0);
     };
 
-    return declare([ContentPane], { // Extends ContentPane to fill the page
+    return declare([ContentPane], { 
         "baseClass": "GEXFView",
         "path": "",
         "file": null,
-
         _resizeHandle: null,
-
 
         templateString: `
             <div class="\${baseClass}" style="width: 100%; height: 100%; overflow: hidden;">
+                <style>
+                    /* Reset defaults to move panel to the right */
+                    #zonecentre { top: 0 !important; left: 0 !important; }
+                    
+                    /* --- MODIFIED: Overview moved down 20px --- */
+                    #overviewzone {
+                        top: 50px !important; /* Was 10px */
+                        left: 10px !important;
+                        bottom: auto !important;
+                        right: auto !important;
+                        background: rgba(255,255,255,0.7);
+                        border: 1px solid #999;
+                    }
+
+                    /* --- MODIFIED: Titlebar moved to Top Right --- */
+                    #titlebar {
+                        left: auto !important;
+                        right: 30px !important; /* Dock to right */
+                        top: 30px !important;   /* Dock to top */
+                        bottom: auto !important;
+                        width: auto !important; /* Allow it to shrink wrap text */
+                        z-index: 101; /* Ensure it stays above the sidebar background */
+                        pointer-events: none; /* Let clicks pass through if it overlaps map */
+                    }
+                    
+                    #maintitle {
+                        display: none !important;
+                    }
+
+                    #leftcolumn {
+                        left: auto !important;
+                        right: 0px !important; /* Start visible on right */
+                        border-right: none !important;
+                        border-left: 1px solid #cdcdcd;
+                        background-color: #f7f7f7;
+                        z-index: 100;
+                    }
+
+                    #unfold {
+                        left: -12px !important;
+                        right: auto !important;
+                        border-radius: 4px 0 0 4px;
+                        border-right: none !important;
+                        border-left: 1px solid #cdcdcd;
+                    }
+                    
+                    /* Flip arrow to point left by default */
+                    #aUnfold { transform: rotate(180deg); }
+                </style>
                 <div id="zonecentre" class="gradient" style="position: relative; width: 100%; height: 100%;">
                     <canvas id="carte" width="0" height="0"></canvas>
                     <ul id="ctlzoom">
@@ -83,7 +136,6 @@ define([
                 <ul id="autocomplete"></ul>
             </div>
         `,
-        // --- END TEMPLATE ---
 
         postCreate: function(){
             this.inherited(arguments);
@@ -93,124 +145,53 @@ define([
         startup: function(){
             if (this._started){ return; }
             this.inherited(arguments);
-            this._resizeHandle = on(window, 'resize', lang.hitch(this, function(){
-                this.resize();
-            }));
+            this._resizeHandle = on(window, 'resize', lang.hitch(this, function(){ this.resize(); }));
             this.onSetState("state", null, this.state);
         },
         
         destroy: function(){
-            if (this._resizeHandle){
-                this._resizeHandle.remove();
-            }
+            if (this._resizeHandle){ this._resizeHandle.remove(); }
+            if (window.GexfJS && GexfJS.timeRefresh) { clearInterval(GexfJS.timeRefresh); }
             this.inherited(arguments);
         },
 
         onSetState: function(attr, oldVal, state){
-            // This is now the SINGLE entry point for all state changes.
-            if (!state || !state.search) {
-                this.set("content", "<div class='error'>Error: Invalid URL State.</div>");
-                return;
-            }
-
+            if (!state || !state.search) return;
             var params = new URLSearchParams(state.search);
             var workspacePath = params.get('path');
-
-            if (workspacePath) {
-                // We have a valid path, let's load and render the graph.
-                this.loadAndRender(workspacePath);
-            } else {
-                this.set("content", "<div class='error'>Error: 'path' parameter missing from URL.</div>");
-            }
-        },
-
-        _setPath: function(path){
-            this.path = path;
-
-            var file_meta = {
-                path: this.path,
-                name: this.path.split('/').pop()
-            };
-            this.set("file", file_meta);
-        },
-
-        // _setFileAttr is now just a simple setter, not responsible for logic.
-        _setFileAttr: function(file){
-            this.file = file;
-            if (this._started){
-                this.loadAndRender();
-            }
+            if (workspacePath) { this.loadAndRender(workspacePath); }
         },
 
         loadAndRender: function(path) {
-            // Load all scripts, then fetch data and render
-            this.path = path; // Set the path for reference
-
+            this.path = path;
             loadGexfDependencies(lang.hitch(this, function() {
-                if (this.path){
-                    // Show a temporary loading message
-                    this.set("content", "<div>Loading GEXF file...</div>");
-                    WorkspaceManager.getObject(this.path, false).then(lang.hitch(this, function(res){
-                        if (res && res.data){
-                            // Now that data is loaded, replace the loading message with the real viewer template
-                            this.set("content", this.templateString);
-                            // Call renderGraph after a very short delay to allow the DOM to be created
-                            setTimeout(lang.hitch(this, function() {
-                                this.renderGraph(res.data);
-                            }), 50);
-                        } else {
-                            this.set("content", "<div class='error'>Error: Could not retrieve GEXF file content.</div>");
-                        }
-                    }));
-                }
+                this.set("content", "<div>Loading GEXF file...</div>");
+                WorkspaceManager.getObject(this.path, false).then(lang.hitch(this, function(res){
+                    if (res && res.data){
+                        this.set("content", this.templateString);
+                        setTimeout(lang.hitch(this, function() { this.renderGraph(res.data); }), 50);
+                    }
+                }));
             }));
         },
         
         renderGraph: function(gexfXMLData){
-            if (!window.startGraphViewer || !window.GexfJS || !window.traceMap) {
-                console.error("GEXF libraries not available.");
-                return;
-            }
-                    
+            if (!window.startGraphViewer || !window.GexfJS) return;
 
-            // 1. Get the real dimensions of our container.
             var box = this.domNode.getBoundingClientRect();
-
-            // 2. Calculate the required zoom level to fit the default 800x700 canvas
-            //    into our actual container size.
-            var initialZoom = 0;
-
-            var footerHeight = 0;
             var footer = query(".WorkspaceController.dijitAlignBottom")[0];
-            if (footer) {
-                footerHeight = domGeom.getMarginBox(footer).h;
-            }
-            
-            var availableHeight = box.height - footerHeight;
+            var footerHeight = footer ? domGeom.getMarginBox(footer).h : 0;
+            var availH = box.height - footerHeight;
 
-            if (box.width > 0 && availableHeight > 0) {
-                // Use the adjusted height for zoom calculation
-                var scaleRatio = Math.min(box.width / GexfJS.baseWidth, availableHeight / GexfJS.baseHeight);
-                initialZoom = Math.log(scaleRatio) / Math.log(Math.SQRT2);
-            }
-      
+            // Restore original API URLs from Gexf.js
             var graph_params = {
                 showEdges : true,
-                useLens : false,
                 zoomLevel : 0,
-                curvedEdges : false,
-                edgeWidthFactor : 10, // We'll address why this can be small in the next section
+                edgeWidthFactor : 10,
                 pathAttr : "sequences",
                 colorNodeAttr : "diversity",
-                featureMapOn: false,
-                minEdgeWidth : 0.2,
-                maxEdgeWidth : 1,
-                textDisplayThreshold: 11,
-                nodeSizeFactor : 2, // We'll address this too
-                replaceUrls : false,
-                showEdgeWeight : true,
-                // Add the PATRIC-specific URLs here as well if needed
-                patric_on: true, // Example
+                nodeSizeFactor : 2,
+                patric_on: true,
                 genome_url: 'https://www.bv-brc.org/api/genome?in(genome_id,(GIDSTRING))&select(genome_id,genome_name)&limit(500)&http_accept=application/solr+json',
                 location_url: 'https://www.bv-brc.org/api/genome_sequence?in(sequence_id,(SIDSTRING))&select(sequence_id,description)&facet((pivot,(genome_id,genome_name,sequence_id)))&http_accept=application/solr+json',
                 replicon_url: 'https://www.bv-brc.org/api/genome_sequence?in(genome_id,(GIDSTRING))&select(sequence_id,description)&facet((pivot,(genome_id,genome_name,sequence_id)))&http_accept=application/solr+json',
@@ -218,59 +199,53 @@ define([
             };
 
             setParams(graph_params);
-            // 1. Hijack setInterval to prevent the premature loop
+
             var originalSetInterval = window.setInterval;
-            window.setInterval = function() {};
+            window.setInterval = function() { return 999; }; // Return dummy ID
 
             var gexf_dom = (new window.DOMParser()).parseFromString(gexfXMLData, "text/xml");
-            
-            // 2. Initialize the graph data structures
             startGraphViewer(gexf_dom);
 
-            // 3. Restore setInterval
             window.setInterval = originalSetInterval;
 
-            // 4. Force the widget to calculate its dimensions and pass them to GexfJS
-            this.resize();
+            // Fix Fold Button Animation for Right Side
+            $("#aUnfold").off("click").click(function() {
+                var isExpanded = $(this).hasClass("rightarrow");
+                $("#leftcolumn").animate({ right: isExpanded ? "-250px" : "0px" }, 500);
+                $(this).toggleClass("rightarrow").toggleClass("leftarrow");
+                return false;
+            });
 
-            // 5. CRITICAL: Manually start the rendering loop NOW.
+            this.resize();
             GexfJS.timeRefresh = setInterval(window.traceMap, 60);
         },
 
-
-        resize: function(){
+resize: function(){
             this.inherited(arguments);
+            if (!window.GexfJS) return;
 
-            // If the gexfjs library isn't loaded yet, do nothing.
-            if (!window.GexfJS || !window.updateWorkspaceBounds) {
-                return;
-            }
-
-            // Get the dimensions of this Dojo widget's container.
             var box = this.domNode.getBoundingClientRect();
-
-           // --- GET FOOTER HEIGHT ---
-            var footerHeight = 0;
             var footer = query(".WorkspaceController.dijitAlignBottom")[0];
-            if (footer) {
-                footerHeight = domGeom.getMarginBox(footer).h;
-            }
-            // --- END GET ---
+            var footerHeight = footer ? domGeom.getMarginBox(footer).h : 0;
 
-            // Adjust the available height
-            var availableHeight = box.height - footerHeight;
+            // --- FIX: Use window.innerHeight to prevent shrinking loop ---
+            // Calculate height based on the Viewport, not the current Element height.
+            // Window Height - Top of Widget - Footer Height = Exact space available.
+            var availH = window.innerHeight - box.top - footerHeight;
+            // -------------------------------------------------------------
 
-            if (this.canvasNode && box.width > 0 && availableHeight > 0) {
-                // Set the canvas height to the new, adjusted value
-                this.canvasNode.width = box.width;
-                this.canvasNode.height = availableHeight;
-
-                // Update the GexfJS global state with the correct dimensions
+            if (availH > 0) {
+                domStyle.set(this.domNode, "height", availH + "px");
+                var carte = document.getElementById("carte");
+                if (carte) {
+                    carte.width = box.width;
+                    carte.height = availH;
+                }
                 GexfJS.graphZone.width = box.width;
-                GexfJS.graphZone.height = availableHeight;
+                GexfJS.graphZone.height = availH;
+                delete GexfJS.oldParams.zoomLevel;
             }
-            delete GexfJS.oldParams.zoomLevel;
-
         }
+
     });
 });
