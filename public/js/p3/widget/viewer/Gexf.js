@@ -1,13 +1,15 @@
-// In public/js/p3/widget/viewer/GEXFView.js
-
 define([
-    "dojo/_base/declare", "dijit/layout/ContentPane", "dojo/_base/lang",
-    "dojo/on", "../../WorkspaceManager", "../../util/PathJoin", "dojo/when",
-    "dojo/query", "dojo/dom-geometry", "dojo/dom-style"
+    "dojo/_base/declare", "dijit/layout/BorderContainer", "dijit/layout/ContentPane", 
+    "dojo/_base/lang", "dojo/on", "dojo/topic", "dojo/request", "dojo/when",
+    "../../WorkspaceManager", "../../util/PathJoin", 
+    "dojo/query", "dojo/dom-geometry", "dojo/dom-style", "dojo/dom-construct",
+    "../ActionBar", "../ItemDetailPanel", "../PerspectiveToolTip", "dojo/dom-class"
 ], function(
-    declare, ContentPane, lang,
-    on, WorkspaceManager, PathJoin, when,
-    query, domGeom, domStyle
+    declare, BorderContainer, ContentPane, 
+    lang, on, Topic, xhr, when,
+    WorkspaceManager, PathJoin, 
+    query, domGeom, domStyle, domConstruct,
+    ActionBar, ItemDetailPanel, PerspectiveToolTipDialog, domClass
 ){
     var scriptsReady = false;
     var pendingCallbacks = [];
@@ -32,9 +34,10 @@ define([
             }
         });
         
+        // Using strict order loading
         var scriptsToLoad = [
             '/vendor/gexf-js/js/jquery-2.0.2.min.js',
-            '/vendor/gexf-js/js/jquery-ui-1.10.4.custom.min.js', // Reverted to Gexf.js version
+            '/vendor/gexf-js/js/jquery-ui-1.10.4.custom.min.js',
             '/vendor/gexf-js/js/jquery.mousewheel.min.js',
             '/vendor/gexf-js/js/gexfjs.js'
         ];
@@ -55,16 +58,26 @@ define([
         loadScript(0);
     };
 
-    return declare([ContentPane], { 
+    // INHERITANCE CHANGE: Inherit from BorderContainer to manage layout
+    return declare([BorderContainer], { 
         "baseClass": "GEXFView",
+        "disabled": false,
         "path": "",
         "file": null,
+        "gutters": false, // No spacing between regions
+        "design": "headline",
         _resizeHandle: null,
+        
+        // Data management properties
+        selection: null,
+        containerType: "feature_data", // Default assumption
 
-        templateString: `
-            <div class="\${baseClass}" style="width: 100%; height: 100%; overflow: hidden;">
+        // HTML Template for the CENTER region (The Graph)
+        // Note: We hide the old #leftcolumn sidebar here
+        graphTemplateString: `
+            <div style="width: 100%; height: 100%; overflow: hidden;">
                 <style>
-                    /* Reset defaults to move panel to the right */
+                    /* Force canvas container to top-left of the CENTER pane */
                     #zonecentre { top: 0 !important; left: 0 !important; }
                     
                     #overviewzone {
@@ -76,8 +89,10 @@ define([
                         border: 1px solid #999;
                     }
 
-                    /* --- STRATEGY CHANGE: Neutralize the Titlebar Container --- */
-                    /* Make it an invisible wrapper that doesn't restrict its children */
+                    /* HIDE THE OLD LEGACY SIDEBAR - We use ItemDetailPanel now */
+                    #leftcolumn, #unfold {
+                        display: none !important;
+                    }
                     #titlebar {
                         position: absolute !important;
                         top: 0 !important;
@@ -99,68 +114,32 @@ define([
                     #maintitle {
                         display: none !important;
                     }
-
-                    /* --- Position the Search Form Directly --- */
+                    /* Search Bar Styling */
                     #recherche {
-                        /* Anchor to Top Right of the Widget */
                         position: absolute !important;
                         top: 20px !important;
+                        left: 240px !important;
                         right: auto !important;
-                        left: 240px !important;   /* Override legacy */
-                        bottom: auto !important; /* Override legacy */
-                        
-                        /* Visuals */
+                        bottom: auto !important;
                         display: block !important;
-                        background: rgba(255,255,255,0.8); /* Semi-transparent background container */
+                        background: rgba(255,255,255,0.8);
                         padding: 5px;
                         border-radius: 4px;
-                        
                         pointer-events: auto !important;
                         z-index: 2001 !important;
                     }
 
-                    /* --- Force Input Visibility --- */
                     #searchinput, #searchsubmit {
-                        /* CRITICAL: Turn off legacy absolute positioning */
                         position: static !important; 
                         float: none !important;
-                        
-                        /* Reset offsets so they don't fly away */
-                        top: auto !important;
-                        left: auto !important;
-                        right: auto !important;
-                        bottom: auto !important;
-                        
-                        /* Layout: Sit next to each other */
+                        top: auto !important; left: auto !important;
                         display: inline-block !important;
                         vertical-align: middle !important;
-                        margin: 0 2px !important; /* Small gap between them */
-                        
-                        /* Interaction */
+                        margin: 0 2px !important;
                         pointer-events: auto !important;
                         visibility: visible !important;
                         opacity: 1 !important;
                     }
-
-                    /* Side Panel Styling */
-                    #leftcolumn {
-                        left: auto !important;
-                        right: 0px !important;
-                        border-right: none !important;
-                        border-left: 1px solid #cdcdcd;
-                        background-color: #f7f7f7;
-                        z-index: 100;
-                    }
-
-                    #unfold {
-                        left: -12px !important;
-                        right: auto !important;
-                        border-radius: 4px 0 0 4px;
-                        border-right: none !important;
-                        border-left: 1px solid #cdcdcd;
-                    }
-                    
-                    #aUnfold { transform: rotate(180deg); }
                 </style>
                 <div id="zonecentre" class="gradient" style="position: relative; width: 100%; height: 100%;">
                     <canvas id="carte" width="0" height="0"></canvas>
@@ -175,27 +154,132 @@ define([
                 <div id="overviewzone" class="gradient">
                     <canvas id="overview" width="0" height="0"></canvas>
                 </div>
-                <div id="leftcolumn">
-                    <div id="unfold"><a href="#" id="aUnfold" class="rightarrow"></a></div>
-                    <div id="leftcontent"></div>
-                </div>
-                <div id="titlebar">
-                    <div id="maintitle"><h1></h1></div>
-                    <form id="recherche"><input id="searchinput" class="grey" autocomplete="off" /><input id="searchsubmit" type="submit" /></form>
-                </div>
+                <div id="titlebar"><div id="maintitle"></div><form id="recherche"><input id="searchinput" class="grey" autocomplete="off" /><input id="searchsubmit" type="submit" /></form></div>
                 <ul id="autocomplete"></ul>
             </div>
         `,
 
+        // Define Actions (copied and adapted from MSATree/GenomeList)
+        selectionActions: [
+            [
+                "ToggleItemDetail",
+                "fa icon-chevron-circle-right fa-2x",
+                {
+                    label: "HIDE",
+                    persistent: true,
+                    validTypes: ["*"],
+                    tooltip: "Toggle Details Pane"
+                },
+                function(selection, container, button){
+                    var children = this.getChildren();
+                    if(children.some(function(child){ return this.itemDetailPanel && (child.id == this.itemDetailPanel.id); }, this)){
+                        this.removeChild(this.itemDetailPanel);
+                        query(".ActionButtonText", button).forEach(function(node){ node.innerHTML = "DETAILS"; });
+                        query(".ActionButton", button).forEach(function(node){ domClass.remove(node, "icon-chevron-circle-right"); domClass.add(node, "icon-chevron-circle-left"); });
+                    }else{
+                        this.addChild(this.itemDetailPanel);
+                        query(".ActionButtonText", button).forEach(function(node){ node.innerHTML = "HIDE"; });
+                        query(".ActionButton", button).forEach(function(node){ domClass.remove(node, "icon-chevron-circle-left"); domClass.add(node, "icon-chevron-circle-right"); });
+                    }
+                },
+                true
+            ],
+            [
+                "ViewFeatureItem",
+                "MultiButton fa icon-selection-Feature fa-2x",
+                {
+                    label: "FEATURE",
+                    validTypes: ["*"],
+                    multiple: false,
+                    tooltip: "Switch to Feature View. Press and Hold for more options.",
+                    validContainerTypes: ["feature_data"],
+                    pressAndHold: function(selection, button, opts, evt){
+                        popup.open({
+                            popup: new PerspectiveToolTipDialog({ perspective: "Feature", perspectiveUrl: "/view/Feature/" + selection[0].feature_id }),
+                            around: button,
+                            orient: ["below"]
+                        });
+                    }
+                },
+                function(selection){
+                    var sel = selection[0];
+                    Topic.publish("/navigate", { href: "/view/Feature/" + sel.patric_id + "#view_tab=overview", target: "blank" });
+                },
+                false
+            ],
+            [
+                "AddGroup",
+                "fa icon-object-group fa-2x",
+                {
+                    label: "GROUP",
+                    ignoreDataType: true,
+                    multiple: true,
+                    validTypes: ["*"],
+                    requireAuth: true,
+                    max: 10000,
+                    tooltip: "Add selection to a new or existing group",
+                    validContainerTypes: ["feature_data", "genome_data"]
+                },
+                function(selection, containerWidget){
+                    // This requires the SelectionToGroup widget (you may need to add it to imports if you use this)
+                    // For now, this is a placeholder matching MSATree structure
+                    console.log("Add Group clicked", selection);
+                },
+                false
+            ]
+        ],
+
+        setupActions: function () {
+            this.selectionActions.forEach(function (a) {
+                this.selectionActionBar.addAction(a[0], a[1], a[2], lang.hitch(this, a[3]), a[4], a[5], a[6], a[7], a[8], a[9], a[10]);
+            }, this);
+        },
+
         postCreate: function(){
-            this.inherited(arguments);
+            this.inherited(arguments); // Calls BorderContainer postCreate
+            
+            // 1. Create the Center Pane (The Graph)
+            this.viewerPane = new ContentPane({
+                region: "center",
+                content: this.graphTemplateString,
+                style: "padding:0; overflow:hidden;"
+            });
+            this.addChild(this.viewerPane);
+
+            // 2. Create the Right Pane (ActionBar)
+            this.selectionActionBar = new ActionBar({
+                region: "right",
+                layoutPriority: 2,
+                style: "width:56px; text-align:center;",
+                splitter: false,
+                currentContainerWidget: this
+            });
+            this.addChild(this.selectionActionBar);
+
+            // 3. Create the Right Pane (ItemDetailPanel)
+            this.itemDetailPanel = new ItemDetailPanel({
+                region: "right",
+                style: "width:300px",
+                splitter: true,
+                layoutPriority: 1,
+                containerWidget: this
+            });
+            this.addChild(this.itemDetailPanel);
+
+            this.setupActions();
             this.watch("state", lang.hitch(this, "onSetState"));
         },
 
         startup: function(){
             if (this._started){ return; }
             this.inherited(arguments);
+            
+            // Bind resize to the window to handle outer layout changes
             this._resizeHandle = on(window, 'resize', lang.hitch(this, function(){ this.resize(); }));
+            
+            this.itemDetailPanel.startup();
+            this.selectionActionBar.startup();
+            
             this.onSetState("state", null, this.state);
         },
         
@@ -215,10 +299,13 @@ define([
         loadAndRender: function(path) {
             this.path = path;
             loadGexfDependencies(lang.hitch(this, function() {
-                this.set("content", "<div>Loading GEXF file...</div>");
+                // Set content on the viewerPane, not 'this' (which is the BorderContainer)
+                this.viewerPane.set("content", "<div>Loading GEXF file...</div>");
+                
                 WorkspaceManager.getObject(this.path, false).then(lang.hitch(this, function(res){
                     if (res && res.data){
-                        this.set("content", this.templateString);
+                        // Reset the template into the center pane
+                        this.viewerPane.set("content", this.graphTemplateString);
                         setTimeout(lang.hitch(this, function() { this.renderGraph(res.data); }), 50);
                     }
                 }));
@@ -228,12 +315,61 @@ define([
         renderGraph: function(gexfXMLData){
             if (!window.startGraphViewer || !window.GexfJS) return;
 
-            var box = this.domNode.getBoundingClientRect();
-            var footer = query(".WorkspaceController.dijitAlignBottom")[0];
-            var footerHeight = footer ? domGeom.getMarginBox(footer).h : 0;
-            var availH = box.height - footerHeight;
+            // --- THE BRIDGE: Intercept Legacy Node Clicks ---
+            var originalDisplayNode = window.displayNode;
+            
+            // Override global displayNode to capture selection
+// --- THE BRIDGE: Intercept Legacy Node Clicks ---
+            var originalDisplayNode = window.displayNode;
+            
+            window.displayNode = lang.hitch(this, function(nodeIndex) {
+                // 1. Run original logic (visual highlights)
+                if (originalDisplayNode) originalDisplayNode(nodeIndex);
 
-            // Restore original API URLs from Gexf.js
+                var node = GexfJS.graph.nodeList[nodeIndex];
+                if (!node) return;
+
+                // 2. Find the attribute index for "features"
+                // GexfJS._node_attr_value maps attribute names to their numeric index (e.g., "features" -> 1)
+                var featureAttrIndex = null;
+                if (GexfJS._node_attr_value && GexfJS._node_attr_value["features"]) {
+                    featureAttrIndex = GexfJS._node_attr_value["features"];
+                }
+
+                // 3. Extract IDs from the JSON attribute
+                var targetIds = [];
+                if (featureAttrIndex !== null && node.attributes[featureAttrIndex]) {
+                    try {
+                        // Apply the quote fix we found earlier
+                        var rawJson = node.attributes[featureAttrIndex].replace(/""/g, '"');
+                        var featureMap = JSON.parse(rawJson);
+                        
+                        // The structure is { GenomeID: { ContigID: [FeatureID, ...] } }
+                        // We need to flatten this to get just the FeatureIDs
+                        Object.keys(featureMap).forEach(function(genomeId) {
+                            var contigs = featureMap[genomeId];
+                            Object.keys(contigs).forEach(function(contigId) {
+                                var features = contigs[contigId];
+                                features.forEach(function(fid) {
+                                    targetIds.push(fid);
+                                });
+                            });
+                        });
+                    } catch (e) {
+                        console.error("Error parsing node features JSON:", e);
+                    }
+                }
+
+                // 4. Send the IDs to the API handler
+                if (targetIds.length > 0) {
+                    this.onGraphSelection(targetIds);
+                } else if (node.label) {
+                    // Fallback: If no features found, maybe the label IS the ID (e.g. for Genome nodes)
+                    this.onGraphSelection([node.label]);
+                }
+            });
+
+            // (configuration logic...)
             var graph_params = {
                 showEdges : true,
                 zoomLevel : 0,
@@ -247,55 +383,111 @@ define([
                 replicon_url: 'https://www.bv-brc.org/api/genome_sequence?in(genome_id,(GIDSTRING))&select(sequence_id,description)&facet((pivot,(genome_id,genome_name,sequence_id)))&http_accept=application/solr+json',
                 language: false
             };
-
             setParams(graph_params);
 
             var originalSetInterval = window.setInterval;
-            window.setInterval = function() { return 999; }; // Return dummy ID
+            window.setInterval = function() { return 999; }; 
 
             var gexf_dom = (new window.DOMParser()).parseFromString(gexfXMLData, "text/xml");
             startGraphViewer(gexf_dom);
 
             window.setInterval = originalSetInterval;
 
-            // Fix Fold Button Animation for Right Side
-            $("#aUnfold").off("click").click(function() {
-                var isExpanded = $(this).hasClass("rightarrow");
-                $("#leftcolumn").animate({ right: isExpanded ? "-250px" : "0px" }, 500);
-                $(this).toggleClass("rightarrow").toggleClass("leftarrow");
-                return false;
-            });
-
             this.resize();
             GexfJS.timeRefresh = setInterval(window.traceMap, 60);
         },
 
-resize: function(){
-            this.inherited(arguments);
+        // New function to handle selection from Graph -> API -> IDP
+        onGraphSelection: function(ids) {
+            if (!ids || ids.length === 0) return;
+            
+            // Ensure inputs are strings and clean them up
+            var cleanIds = ids.map(function(id) { return String(id).replace(/"/g, ''); });
+            
+            console.log("Graph Selection:", cleanIds);
+
+            // Determine type based on the format of the first ID
+            // Feature IDs look like "fig|..."
+            var isFeature = cleanIds[0].match(/^fig\|\d+\.\d+/);
+            
+            var query = "";
+            var url = "";
+
+            if (isFeature) {
+                this.containerType = "feature_data";
+                url = PathJoin(window.App.dataAPI, "genome_feature");
+                
+                // Construct an IN query for all selected IDs
+                // Encode every ID to be safe
+                var idList = cleanIds.map(encodeURIComponent).join(",");
+                query = "in(patric_id,(" + idList + "))&limit(25000)"; 
+
+            } else {
+                // Assume Genome IDs (e.g. "1234.5")
+                this.containerType = "genome_data";
+                url = PathJoin(window.App.dataAPI, "genome");
+                
+                var idList = cleanIds.map(encodeURIComponent).join(",");
+                query = "in(genome_id,(" + idList + "))&limit(25000)";
+            }
+
+            // Execute the query
+            xhr.post(url, {
+                headers: {
+                    accept: "application/json",
+                    "X-Requested-With": null,
+                    Authorization: (window.App.authorizationToken || "")
+                },
+                handleAs: "json",
+                data: query
+            }).then(lang.hitch(this, function(records) {
+                if (records && records.length > 0) {
+                    this.updateSelection(records);
+                }
+            }));
+        },
+
+        updateSelection: function(records) {
+            this.selection = records;
+            // Tell ActionBar about the selection and context
+            this.selectionActionBar.set("currentContainerType", this.containerType);
+            this.selectionActionBar.set("selection", this.selection);
+            // Tell ItemDetailPanel about the selection
+            this.itemDetailPanel.set("selection", this.selection);
+        },
+
+        resize: function(){
+            this.inherited(arguments); // Important: Let BorderContainer resize its children first
             if (!window.GexfJS) return;
 
-            var box = this.domNode.getBoundingClientRect();
+            // We resize based on the viewerPane (Center Region), not the whole widget
+            if (!this.viewerPane || !this.viewerPane.domNode) return;
+
+            var box = this.viewerPane.domNode.getBoundingClientRect();
+            
+            // Logic regarding footer height is still useful to ensure we don't overflow the page,
+            // though BorderContainer usually handles this if placed correctly in the Viewport.
+            // Keeping your previous logic for safety:
             var footer = query(".WorkspaceController.dijitAlignBottom")[0];
             var footerHeight = footer ? domGeom.getMarginBox(footer).h : 0;
-
-            // --- FIX: Use window.innerHeight to prevent shrinking loop ---
-            // Calculate height based on the Viewport, not the current Element height.
-            // Window Height - Top of Widget - Footer Height = Exact space available.
             var availH = window.innerHeight - box.top - footerHeight;
-            // -------------------------------------------------------------
 
             if (availH > 0) {
-                domStyle.set(this.domNode, "height", availH + "px");
+                // Resize the DOM Node of the center pane
+                domStyle.set(this.viewerPane.domNode, "height", availH + "px");
+                
+                // Update Canvas
                 var carte = document.getElementById("carte");
                 if (carte) {
                     carte.width = box.width;
                     carte.height = availH;
                 }
+                
+                // Update GEXF internal state
                 GexfJS.graphZone.width = box.width;
                 GexfJS.graphZone.height = availH;
                 delete GexfJS.oldParams.zoomLevel;
             }
         }
-
     });
 });
