@@ -315,13 +315,9 @@ define([
         renderGraph: function(gexfXMLData){
             if (!window.startGraphViewer || !window.GexfJS) return;
 
-            // --- THE BRIDGE: Intercept Legacy Node Clicks ---
             var originalDisplayNode = window.displayNode;
             
-            // Override global displayNode to capture selection
-// --- THE BRIDGE: Intercept Legacy Node Clicks ---
-            var originalDisplayNode = window.displayNode;
-            
+            // --- BRIDGE: Intercept Node Clicks ---
             window.displayNode = lang.hitch(this, function(nodeIndex) {
                 // 1. Run original logic (visual highlights)
                 if (originalDisplayNode) originalDisplayNode(nodeIndex);
@@ -336,13 +332,14 @@ define([
                     featureAttrIndex = GexfJS._node_attr_value["features"];
                 }
 
-                // 3. Extract IDs from the JSON attribute
+                // 1. Extract the raw Feature Mapping (JSON) to preserve hierarchy
+                var featureMap = null;
                 var targetIds = [];
+
                 if (featureAttrIndex !== null && node.attributes[featureAttrIndex]) {
                     try {
-                        // Apply the quote fix we found earlier
                         var rawJson = node.attributes[featureAttrIndex].replace(/""/g, '"');
-                        var featureMap = JSON.parse(rawJson);
+                        featureMap = JSON.parse(rawJson);
                         
                         // The structure is { GenomeID: { ContigID: [FeatureID, ...] } }
                         // We need to flatten this to get just the FeatureIDs
@@ -356,13 +353,13 @@ define([
                             });
                         });
                     } catch (e) {
-                        console.error("Error parsing node features JSON:", e);
+                        console.error("Error parsing features JSON:", e);
                     }
                 }
 
-                // 4. Send the IDs to the API handler
+                // 2. Pass both the IDs (for API) and the Map (for Display)
                 if (targetIds.length > 0) {
-                    this.onGraphSelection(targetIds);
+                    this.onGraphSelection(targetIds, featureMap, node.label);
                 } else if (node.label) {
                     // Fallback: If no features found, maybe the label IS the ID (e.g. for Genome nodes)
                     this.onGraphSelection([node.label]);
@@ -397,17 +394,12 @@ define([
             GexfJS.timeRefresh = setInterval(window.traceMap, 60);
         },
 
-        // New function to handle selection from Graph -> API -> IDP
-        onGraphSelection: function(ids) {
+        // --- UPDATED SELECTION LOGIC ---
+        onGraphSelection: function(ids, featureMap, label) {
             if (!ids || ids.length === 0) return;
             
             // Ensure inputs are strings and clean them up
             var cleanIds = ids.map(function(id) { return String(id).replace(/"/g, ''); });
-            
-            console.log("Graph Selection:", cleanIds);
-
-            // Determine type based on the format of the first ID
-            // Feature IDs look like "fig|..."
             var isFeature = cleanIds[0].match(/^fig\|\d+\.\d+/);
             
             var query = "";
@@ -416,19 +408,12 @@ define([
             if (isFeature) {
                 this.containerType = "feature_data";
                 url = PathJoin(window.App.dataAPI, "genome_feature");
-                
-                // Construct an IN query for all selected IDs
-                // Encode every ID to be safe
-                var idList = cleanIds.map(encodeURIComponent).join(",");
-                query = "in(patric_id,(" + idList + "))&limit(25000)"; 
-
+                // Get enough fields to display useful info
+                query = "in(patric_id,(" + cleanIds.map(encodeURIComponent).join(",") + "))&select(patric_id,genome_name,product)&limit(25000)"; 
             } else {
-                // Assume Genome IDs (e.g. "1234.5")
                 this.containerType = "genome_data";
                 url = PathJoin(window.App.dataAPI, "genome");
-                
-                var idList = cleanIds.map(encodeURIComponent).join(",");
-                query = "in(genome_id,(" + idList + "))&limit(25000)";
+                query = "in(genome_id,(" + cleanIds.map(encodeURIComponent).join(",") + "))&select(genome_id,genome_name)&limit(25000)";
             }
 
             // Execute the query
@@ -442,32 +427,97 @@ define([
                 data: query
             }).then(lang.hitch(this, function(records) {
                 if (records && records.length > 0) {
-                    this.updateSelection(records);
+                    this.updateSelection(records, featureMap, label);
                 }
             }));
         },
 
-        updateSelection: function(records) {
+        updateSelection: function(records, featureMap, label) {
             this.selection = records;
-            // Tell ActionBar about the selection and context
+            
+            // 1. Update ActionBar so buttons like "Add Group" work
             this.selectionActionBar.set("currentContainerType", this.containerType);
             this.selectionActionBar.set("selection", this.selection);
-            // Tell ItemDetailPanel about the selection
-            this.itemDetailPanel.set("selection", this.selection);
+            //this.itemDetailPanel.set("selection", this.selection);
+
+            // 2. Build Custom HTML for ItemDetailPanel
+            // This replicates the legacy "Left Column" behavior
+            
+            var html = '<div style="padding:10px;">';
+            html += '<h3 style="margin-top:0;">' + label + '</h3>';
+            
+            // Map records for easy lookup by ID
+            var recordMap = {};
+            records.forEach(function(rec) {
+                var key = rec.patric_id || rec.genome_id;
+                recordMap[key] = rec;
+            });
+
+            if (featureMap) {
+                // FEATURE NODE: Iterate hierarchical map (Genome -> Contig -> Feature)
+                // The structure is { GenomeID: { ContigID: [FeatureID, ...] } }
+                
+                Object.keys(featureMap).forEach(function(genomeId) {
+                    // Try to find a representative record to get the Genome Name
+                    var genomeName = genomeId;
+                    // We might have to look inside the contigs/features to find a record that has the genome name
+                    // Or, if the API call returned genome_name, we can find it.
+                    
+                    var contigs = featureMap[genomeId];
+                    var features = [];
+                    Object.keys(contigs).forEach(function(k){ features = features.concat(contigs[k]); });
+                    
+                    // Lookup genome name from first feature
+                    if(features.length > 0 && recordMap[features[0]] && recordMap[features[0]].genome_name){
+                        genomeName = recordMap[features[0]].genome_name;
+                    }
+
+                    html += '<div style="margin-bottom:10px;">';
+                    html += '<b>' + genomeName + '</b>';
+                    html += '<ul style="margin-top:2px; padding-left:20px;">';
+                    
+                    features.forEach(function(fid) {
+                        var displayLabel = fid;
+                        if(recordMap[fid] && recordMap[fid].product) {
+                            // Optional: Show product name if available, or just ID
+                            // displayLabel = recordMap[fid].product; 
+                        }
+                        
+                        // Create the link calling global displayPath
+                        // We use onclick with 'window.displayPath' to be safe
+                        html += '<li><a href="javascript:void(0)" onclick="window.displayPath(undefined, \'' + fid + '\', undefined); return false;">' + displayLabel + '</a></li>';
+                    });
+                    
+                    html += '</ul></div>';
+                });
+
+            } else {
+                // GENOME NODE: Simple list
+                html += '<ul>';
+                records.forEach(function(rec) {
+                    var id = rec.genome_id || rec.patric_id;
+                    var name = rec.genome_name || id;
+                    // For genomes, displayPath logic might vary, but assuming ID works:
+                    html += '<li><a href="javascript:void(0)" onclick="window.displayPath(undefined, \'' + id + '\', undefined); return false;">' + name + '</a></li>';
+                });
+                html += '</ul>';
+            }
+            
+            html += '</div>';
+
+            // 3. Set content directly, bypassing standard IDP rendering
+            this.itemDetailPanel.set('content', html);
         },
+        // -------------------------------------
 
         resize: function(){
-            this.inherited(arguments); // Important: Let BorderContainer resize its children first
+            this.inherited(arguments);
             if (!window.GexfJS) return;
 
             // We resize based on the viewerPane (Center Region), not the whole widget
             if (!this.viewerPane || !this.viewerPane.domNode) return;
 
             var box = this.viewerPane.domNode.getBoundingClientRect();
-            
-            // Logic regarding footer height is still useful to ensure we don't overflow the page,
-            // though BorderContainer usually handles this if placed correctly in the Viewport.
-            // Keeping your previous logic for safety:
             var footer = query(".WorkspaceController.dijitAlignBottom")[0];
             var footerHeight = footer ? domGeom.getMarginBox(footer).h : 0;
             var availH = window.innerHeight - box.top - footerHeight;
