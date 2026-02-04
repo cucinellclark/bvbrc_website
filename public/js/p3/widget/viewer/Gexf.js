@@ -188,6 +188,25 @@ define([
                 true
             ],
             [
+                "ResetColors",
+                "fa icon-reset fa-2x",
+                {
+                    label: "RESET COLORS",
+                    validTypes: ["*"],
+                    multiple: true, // Allow it to work regardless of selection count
+                    tooltip: "Clear all pinned colors",
+                    validContainerTypes: ["feature_data", "genome_data"]
+                },
+                function(selection){
+                    if (window.GexfJS && GexfJS.params) {
+                        GexfJS.params.pinnedElements = {}; // Clear the object
+                        // Force a redraw
+                        if (GexfJS.oldParams) delete GexfJS.oldParams.zoomLevel;
+                    }
+                },
+                true
+            ],
+            [
                 "ViewFeatureItem",
                 "MultiButton fa icon-selection-Feature fa-2x",
                 {
@@ -401,6 +420,70 @@ define([
                 }
             });
 
+                        // --- NEW: Global Pin Color Function ---
+            window.pinColor = lang.hitch(this, function(ids, type, colorValue) {
+                if (!window.GexfJS || !GexfJS.params.pinnedElements) return;
+
+                // ids can be a single string or a comma-separated string
+                var idList = ids.split(',');
+
+                // 1. Convert HEX color to RGBA string (gexfjs usually prefers rgba)
+                // Note: Input type="color" returns Hex (e.g. #ff0000). 
+                // We can use it directly if gexfjs accepts hex, which canvas usually does.
+                // If opacity issues arise, we might need to convert. 
+                // For now, let's use the Hex string directly.
+                var finalColor = colorValue;
+
+                idList.forEach(function(targetId) {
+                    if (type === 'node') {
+                        // Easy: TargetId is the Node ID (e.g. "4748")
+                        // Wait, our inputs usually use Labels or Feature IDs. 
+                        // We need to look up the internal Node ID.
+                        
+                        // If targetId is the internal int index:
+                        if (GexfJS.graph.nodeList[targetId]) {
+                            GexfJS.params.pinnedElements['n_' + targetId] = finalColor;
+                        } 
+                        // If targetId is a label/feature ID:
+                        else if (GexfJS.graph.nodeIndexByLabel && GexfJS.graph.nodeIndexByLabel[targetId] !== undefined) {
+                             var idx = GexfJS.graph.nodeIndexByLabel[targetId];
+                             GexfJS.params.pinnedElements[idx] = finalColor;
+                        }
+                    } 
+                    else if (type === 'path') {
+                        // Harder: TargetId is a Genome/Sequence ID (e.g. "NC_007624")
+                        // We need to find all edges associated with this path.
+                        
+                        // We reuse the logic from displayPath to find the edges
+                        var attr_id = GexfJS._edge_attr_value['sequences']; // or 'genomes'
+                        if (GexfJS.path_highlights && GexfJS.path_highlights[attr_id]) {
+                            
+                            // Look up the edges for this path ID
+                            // (Remember our quote cleaning logic!)
+                            var cleanId = targetId.replace(/"/g, '');
+                            var edges = GexfJS.path_highlights[attr_id][cleanId];
+                            
+                            // If direct lookup fails, try searching cleaned keys (from our previous fix)
+                            if (!edges) {
+                                for (var key in GexfJS.path_highlights[attr_id]) {
+                                    if (key.replace(/"/g, '') === cleanId) {
+                                        edges = GexfJS.path_highlights[attr_id][key];
+                                        break;
+                                    }
+                                }
+                            }
+
+                            if (edges) {
+                                Object.keys(edges).forEach(function(edgeId) {
+                                    GexfJS.params.pinnedElements['e_' + edgeId] = finalColor;
+                                });
+                            }
+                        }
+                    }
+                });
+            });
+            // --------------------------------------
+
             // (configuration logic...)
             var graph_params = {
                 showEdges : true,
@@ -469,17 +552,21 @@ define([
 
         updateSelection: function(records, featureMap, node) {
             this.selection = records;
-            var typeString = (this.containerType === "feature_data") ? "genome_feature" : "genome";
-            //records.forEach(function(rec) {
-            //    rec.type = typeString; 
-            //});
+            
             // 1. Update ActionBar
             this.selectionActionBar.set("currentContainerType", this.containerType);
             this.selectionActionBar.set("selection", this.selection);
             this.itemDetailPanel.set("selection", this.selection);
+
+            // --- Helper for Color Input ---
+            var colorInput = function(ids, type) {
+                // Returns an HTML5 color picker that triggers window.pinColor on change
+                return '<input type="color" style="width:20px; height:20px; vertical-align:middle; border:none; padding:0; background:none; cursor:pointer;" onchange="window.pinColor(\'' + ids + '\', \'' + type + '\', this.value)"> ';
+            };
+
             // 2. Prepare Data for HTML Construction
             
-            // A. Helper to get attribute names from IDs (reverse GexfJS._node_attr_value)
+            // A. Helper to get attribute names from IDs
             var nodeAttrIdToName = {};
             if (window.GexfJS && GexfJS._node_attr_value) {
                 Object.keys(GexfJS._node_attr_value).forEach(function(name){
@@ -487,10 +574,9 @@ define([
                 });
             }
 
-            // --- NEW: Lookup Edge Attribute IDs for displayPath ---
-            // We need to send the numeric ID (e.g., '5') not the name (e.g., 'genomes')
-            var genomeAttrId = 'genomes'; // Default fallback
-            var sequenceAttrId = 'sequences'; // Default fallback
+            // Lookup Edge Attribute IDs for displayPath
+            var genomeAttrId = 'genomes';
+            var sequenceAttrId = 'sequences';
             
             if (window.GexfJS && GexfJS._edge_attr_value) {
                 if (GexfJS._edge_attr_value['genomes']) {
@@ -500,7 +586,6 @@ define([
                     sequenceAttrId = GexfJS._edge_attr_value['sequences'];
                 }
             }
-            // -----------------------------------------------------
 
             // B. Build Attributes HTML
             var attrHtml = '<div style="margin-bottom:10px; font-size:0.9em; color:#555;">';
@@ -516,7 +601,7 @@ define([
             }
             attrHtml += '</div>';
 
-            // C. Build Graph Links (Genomes / Sequences)
+            // C. Build Graph Links
             var linksHtml = '';
             var recordMap = {};
             records.forEach(function(rec) { 
@@ -536,25 +621,32 @@ define([
                     var genomeSequences = Object.keys(contigs);
                     allSequences = allSequences.concat(genomeSequences);
                     
-                    // Genome Name Lookup
-                    var genomeName = genomeId;
-                    // Try to find a real name from the API records
-                    var firstSeq = genomeSequences[0];
-                    if(firstSeq && contigs[firstSeq][0] && recordMap[contigs[firstSeq][0]]){
-                        genomeName = recordMap[contigs[firstSeq][0]].genome_name;
+                    // --- RESTORED LOGIC: Calculate genomeName ---
+                    var genomeName = genomeId; 
+                    var features = [];
+                    // Flatten features to find a record to get the name from
+                    Object.keys(contigs).forEach(function(k){ features = features.concat(contigs[k]); });
+                    
+                    if(features.length > 0 && recordMap[features[0]] && recordMap[features[0]].genome_name){
+                        genomeName = recordMap[features[0]].genome_name;
                     }
+                    // ---------------------------------------------
 
-                    // Genome Link: Uses genomeAttrId (e.g. '5')
                     hierarchyHtml += '<div style="margin-top:5px;">';
+                    // COLOR PICKER: Genome (Edge Group)
+                    hierarchyHtml += colorInput(genomeId, 'path');
                     hierarchyHtml += '<a href="javascript:void(0)" style="font-weight:bold;" onclick="window.displayPath(undefined, \'' + genomeId + '\', \'' + genomeAttrId + '\'); return false;">' + genomeName + '</a>:';
-                    hierarchyHtml += '<div style="padding-left:10px;">';
+                    hierarchyHtml += '<div style="padding-left:20px;">';
 
                     Object.keys(contigs).forEach(function(contigId) {
-                        // Sequence Link: Uses sequenceAttrId (e.g. '6')
-                        hierarchyHtml += '<div><a href="javascript:void(0)" onclick="window.displayPath(undefined, \'' + contigId + '\', \'' + sequenceAttrId + '\'); return false;">' + contigId + '</a>:</div>';
+                        hierarchyHtml += '<div>';
+                        // COLOR PICKER: Sequence (Edge Group)
+                        hierarchyHtml += colorInput(contigId, 'path');
+                        hierarchyHtml += '<a href="javascript:void(0)" onclick="window.displayPath(undefined, \'' + contigId + '\', \'' + sequenceAttrId + '\'); return false;">' + contigId + '</a>:';
+                        hierarchyHtml += '</div>';
                         
-                        var features = contigs[contigId];
-                        hierarchyHtml += '<div style="padding-left:10px; color:#666;">[' + features.join(', ') + ']</div>';
+                        var feats = contigs[contigId];
+                        hierarchyHtml += '<div style="padding-left:10px; color:#666;">[' + feats.join(', ') + ']</div>';
                     });
                     hierarchyHtml += '</div></div>';
                 });
@@ -562,20 +654,24 @@ define([
 
                 // Summary Header
                 var summaryHtml = '<div style="margin-bottom:10px; padding-bottom:5px; border-bottom:1px solid #ccc;">';
-                summaryHtml += '<b><a href="javascript:void(0)" onclick="window.displayPath(undefined, \'' + allGenomes.join(',') + '\', \'' + genomeAttrId + '\'); return false;">Genomes[' + allGenomes.length + ']</a></b> ';
-                summaryHtml += '<b><a href="javascript:void(0)" onclick="window.displayPath(undefined, \'' + allSequences.join(',') + '\', \'' + sequenceAttrId + '\'); return false;">Sequences[' + allSequences.length + ']</a></b> ';
+                
+                // COLOR PICKER: All Genomes
+                summaryHtml += '<div>' + colorInput(allGenomes.join(','), 'path');
+                summaryHtml += '<b><a href="javascript:void(0)" onclick="window.displayPath(undefined, \'' + allGenomes.join(',') + '\', \'' + genomeAttrId + '\'); return false;">Genomes[' + allGenomes.length + ']</a></b></div>';
+                
+                // COLOR PICKER: All Sequences
+                summaryHtml += '<div>' + colorInput(allSequences.join(','), 'path');
+                summaryHtml += '<b><a href="javascript:void(0)" onclick="window.displayPath(undefined, \'' + allSequences.join(',') + '\', \'' + sequenceAttrId + '\'); return false;">Sequences[' + allSequences.length + ']</a></b></div>';
+                
                 summaryHtml += '</div>';
 
                 linksHtml = summaryHtml + hierarchyHtml;
             }
 
-            // D. Neighbors (Optional: replicate "Neighbors" section)
-            // This requires iterating edges, which can be expensive on large graphs. 
-            // Only implement if strictly necessary.
-            
             // 3. Assemble Content
             var content = '<div style="padding:10px;">';
-            content += '<h3 style="margin-top:0; word-wrap:break-word;">' + node.label + '</h3>';
+            // COLOR PICKER: Title (Node)
+            content += '<div style="margin-bottom:5px;">' + colorInput(node.id, 'node') + '<h3 style="margin:0; display:inline; word-wrap:break-word;">' + node.label + '</h3></div>';
             content += attrHtml;
             content += linksHtml;
             content += '</div>';
