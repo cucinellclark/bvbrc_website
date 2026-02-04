@@ -3,13 +3,16 @@ define([
     "dojo/_base/lang", "dojo/on", "dojo/topic", "dojo/request", "dojo/when",
     "../../WorkspaceManager", "../../util/PathJoin", 
     "dojo/query", "dojo/dom-geometry", "dojo/dom-style", "dojo/dom-construct",
-    "../ActionBar", "../ItemDetailPanel", "../PerspectiveToolTip", "dojo/dom-class"
+    "../ActionBar", "../ItemDetailPanel", "../PerspectiveToolTip", "dojo/dom-class",
+    "../SelectionToGroup", "dijit/Dialog" 
+
 ], function(
     declare, BorderContainer, ContentPane, 
     lang, on, Topic, xhr, when,
     WorkspaceManager, PathJoin, 
     query, domGeom, domStyle, domConstruct,
-    ActionBar, ItemDetailPanel, PerspectiveToolTipDialog, domClass
+    ActionBar, ItemDetailPanel, PerspectiveToolTipDialog, domClass,
+    SelectionToGroup, Dialog
 ){
     var scriptsReady = false;
     var pendingCallbacks = [];
@@ -224,6 +227,43 @@ define([
                     // This requires the SelectionToGroup widget (you may need to add it to imports if you use this)
                     // For now, this is a placeholder matching MSATree structure
                     console.log("Add Group clicked", selection);
+                    // console.log("Add Items to Group", selection);
+                    var dlg = new Dialog({ title: 'Add selected items to group' });
+                    var type;
+
+                    if (!containerWidget) {
+                        // console.log("Container Widget not setup for addGroup");
+                        return;
+                    }
+
+                    if (containerWidget.containerType == 'genome_data') {
+                        type = 'genome_group';
+                    } else if (containerWidget.containerType == 'feature_data') {
+                        type = 'feature_group';
+                    }
+
+                    if (!type) {
+                        console.error('Missing type for AddGroup');
+                        return;
+                    }
+                    var stg = new SelectionToGroup({
+                        selection: selection,
+                        selectType: true,
+                        type: type,
+                        inputType: containerWidget.containerType,
+                        path: containerWidget.get('path')
+                    });
+                    on(dlg.domNode, 'dialogAction', function (evt) {
+                        dlg.hide();
+                        setTimeout(function () {
+                        dlg.destroy();
+                        }, 2000);
+                    });
+                    domConstruct.place(stg.domNode, dlg.containerNode, 'first');
+                    stg.startup();
+                    dlg.startup();
+                    dlg.show();
+
                 },
                 false
             ]
@@ -427,9 +467,12 @@ define([
             }));
         },
 
-updateSelection: function(records, featureMap, node) {
+        updateSelection: function(records, featureMap, node) {
             this.selection = records;
-            
+            var typeString = (this.containerType === "feature_data") ? "genome_feature" : "genome";
+            //records.forEach(function(rec) {
+            //    rec.type = typeString; 
+            //});
             // 1. Update ActionBar
             this.selectionActionBar.set("currentContainerType", this.containerType);
             this.selectionActionBar.set("selection", this.selection);
@@ -438,11 +481,26 @@ updateSelection: function(records, featureMap, node) {
             
             // A. Helper to get attribute names from IDs (reverse GexfJS._node_attr_value)
             var nodeAttrIdToName = {};
-            if (GexfJS._node_attr_value) {
+            if (window.GexfJS && GexfJS._node_attr_value) {
                 Object.keys(GexfJS._node_attr_value).forEach(function(name){
                     nodeAttrIdToName[GexfJS._node_attr_value[name]] = name;
                 });
             }
+
+            // --- NEW: Lookup Edge Attribute IDs for displayPath ---
+            // We need to send the numeric ID (e.g., '5') not the name (e.g., 'genomes')
+            var genomeAttrId = 'genomes'; // Default fallback
+            var sequenceAttrId = 'sequences'; // Default fallback
+            
+            if (window.GexfJS && GexfJS._edge_attr_value) {
+                if (GexfJS._edge_attr_value['genomes']) {
+                    genomeAttrId = GexfJS._edge_attr_value['genomes'];
+                }
+                if (GexfJS._edge_attr_value['sequences']) {
+                    sequenceAttrId = GexfJS._edge_attr_value['sequences'];
+                }
+            }
+            // -----------------------------------------------------
 
             // B. Build Attributes HTML
             var attrHtml = '<div style="margin-bottom:10px; font-size:0.9em; color:#555;">';
@@ -451,7 +509,6 @@ updateSelection: function(records, featureMap, node) {
             if (node.attributes) {
                 Object.keys(node.attributes).forEach(function(attrId){
                     var name = nodeAttrIdToName[attrId];
-                    // Skip 'features' as it's the giant JSON blob we display below
                     if (name && name !== 'features') {
                         attrHtml += '<div><b>' + name + ':</b> ' + node.attributes[attrId] + '</div>';
                     }
@@ -487,16 +544,15 @@ updateSelection: function(records, featureMap, node) {
                         genomeName = recordMap[contigs[firstSeq][0]].genome_name;
                     }
 
-                    // Genome Link (calls displayPath with attr 'genomes')
+                    // Genome Link: Uses genomeAttrId (e.g. '5')
                     hierarchyHtml += '<div style="margin-top:5px;">';
-                    hierarchyHtml += '<a href="javascript:void(0)" style="font-weight:bold;" onclick="window.displayPath(undefined, \'' + genomeId + '\', \'genomes\'); return false;">' + genomeName + '</a>:';
+                    hierarchyHtml += '<a href="javascript:void(0)" style="font-weight:bold;" onclick="window.displayPath(undefined, \'' + genomeId + '\', \'' + genomeAttrId + '\'); return false;">' + genomeName + '</a>:';
                     hierarchyHtml += '<div style="padding-left:10px;">';
 
                     Object.keys(contigs).forEach(function(contigId) {
-                        // Sequence Link (calls displayPath with attr 'sequences')
-                        hierarchyHtml += '<div><a href="javascript:void(0)" onclick="window.displayPath(undefined, \'' + contigId + '\', \'sequences\'); return false;">' + contigId + '</a>:</div>';
+                        // Sequence Link: Uses sequenceAttrId (e.g. '6')
+                        hierarchyHtml += '<div><a href="javascript:void(0)" onclick="window.displayPath(undefined, \'' + contigId + '\', \'' + sequenceAttrId + '\'); return false;">' + contigId + '</a>:</div>';
                         
-                        // Features (Text Only, matching legacy)
                         var features = contigs[contigId];
                         hierarchyHtml += '<div style="padding-left:10px; color:#666;">[' + features.join(', ') + ']</div>';
                     });
@@ -504,11 +560,10 @@ updateSelection: function(records, featureMap, node) {
                 });
                 hierarchyHtml += '</div>';
 
-                // Summary Header (Genomes[N] Sequences[N])
+                // Summary Header
                 var summaryHtml = '<div style="margin-bottom:10px; padding-bottom:5px; border-bottom:1px solid #ccc;">';
-                // Note: We join IDs with commas for the batch highlight
-                summaryHtml += '<b><a href="javascript:void(0)" onclick="window.displayPath(undefined, \'' + allGenomes.join(',') + '\', \'genomes\'); return false;">Genomes[' + allGenomes.length + ']</a></b> ';
-                summaryHtml += '<b><a href="javascript:void(0)" onclick="window.displayPath(undefined, \'' + allSequences.join(',') + '\', \'sequences\'); return false;">Sequences[' + allSequences.length + ']</a></b> ';
+                summaryHtml += '<b><a href="javascript:void(0)" onclick="window.displayPath(undefined, \'' + allGenomes.join(',') + '\', \'' + genomeAttrId + '\'); return false;">Genomes[' + allGenomes.length + ']</a></b> ';
+                summaryHtml += '<b><a href="javascript:void(0)" onclick="window.displayPath(undefined, \'' + allSequences.join(',') + '\', \'' + sequenceAttrId + '\'); return false;">Sequences[' + allSequences.length + ']</a></b> ';
                 summaryHtml += '</div>';
 
                 linksHtml = summaryHtml + hierarchyHtml;
@@ -526,17 +581,14 @@ updateSelection: function(records, featureMap, node) {
             content += '</div>';
 
             // 4. Update IDP
-            // We target the custom node you added to the template
             if (this.itemDetailPanel.customDisplayNode) {
                 // Clear any previous selection logic to prevent conflicts
                 //this.itemDetailPanel.set('selection', []); 
                 this.itemDetailPanel.customDisplayNode.innerHTML = content;
             } else {
-                // Fallback if custom node missing
-                console.warn("customDisplayNode not found in ItemDetailPanel");
                 this.itemDetailPanel.set('content', content);
             }
-        },        // -------------------------------------
+        },
 
         resize: function(){
             this.inherited(arguments);
