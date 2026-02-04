@@ -319,14 +319,11 @@ define([
             
             // --- BRIDGE: Intercept Node Clicks ---
             window.displayNode = lang.hitch(this, function(nodeIndex) {
-                // 1. Run original logic (visual highlights)
                 if (originalDisplayNode) originalDisplayNode(nodeIndex);
 
                 var node = GexfJS.graph.nodeList[nodeIndex];
                 if (!node) return;
 
-                // 2. Find the attribute index for "features"
-                // GexfJS._node_attr_value maps attribute names to their numeric index (e.g., "features" -> 1)
                 var featureAttrIndex = null;
                 if (GexfJS._node_attr_value && GexfJS._node_attr_value["features"]) {
                     featureAttrIndex = GexfJS._node_attr_value["features"];
@@ -341,8 +338,7 @@ define([
                         var rawJson = node.attributes[featureAttrIndex].replace(/""/g, '"');
                         featureMap = JSON.parse(rawJson);
                         
-                        // The structure is { GenomeID: { ContigID: [FeatureID, ...] } }
-                        // We need to flatten this to get just the FeatureIDs
+                        // Flatten to get IDs for API query
                         Object.keys(featureMap).forEach(function(genomeId) {
                             var contigs = featureMap[genomeId];
                             Object.keys(contigs).forEach(function(contigId) {
@@ -357,12 +353,11 @@ define([
                     }
                 }
 
-                // 2. Pass both the IDs (for API) and the Map (for Display)
+                // 2. Pass the full NODE object (added as 3rd arg)
                 if (targetIds.length > 0) {
-                    this.onGraphSelection(targetIds, featureMap, node.label);
+                    this.onGraphSelection(targetIds, featureMap, node);
                 } else if (node.label) {
-                    // Fallback: If no features found, maybe the label IS the ID (e.g. for Genome nodes)
-                    this.onGraphSelection([node.label]);
+                    this.onGraphSelection([node.label], null, node);
                 }
             });
 
@@ -395,7 +390,7 @@ define([
         },
 
         // --- UPDATED SELECTION LOGIC ---
-        onGraphSelection: function(ids, featureMap, label) {
+        onGraphSelection: function(ids, featureMap, node) {
             if (!ids || ids.length === 0) return;
             
             // Ensure inputs are strings and clean them up
@@ -427,86 +422,121 @@ define([
                 data: query
             }).then(lang.hitch(this, function(records) {
                 if (records && records.length > 0) {
-                    this.updateSelection(records, featureMap, label);
+                    this.updateSelection(records, featureMap, node);
                 }
             }));
         },
 
-updateSelection: function(records, featureMap, label) {
+updateSelection: function(records, featureMap, node) {
             this.selection = records;
             
             // 1. Update ActionBar
             this.selectionActionBar.set("currentContainerType", this.containerType);
             this.selectionActionBar.set("selection", this.selection);
-
-            // 2. Trigger Standard IDP Render (This draws the standard metadata/header)
             this.itemDetailPanel.set("selection", this.selection);
-
-            // 3. Build Custom HTML for Graph Links
-            var customContainer = domConstruct.create("div", {
-                style: {
-                    "padding": "10px",
-                    "border-top": "1px solid #ccc",
-                    "margin-top": "10px",
-                    "background-color": "#f4f4f4"
-                }
-            });
-
-            var html = '<h3 style="margin-top:0; font-size:1.1em; color:#666;">Graph Connections</h3>';
-            html += '<div style="font-size:0.9em;">' + label + '</div>';
+            // 2. Prepare Data for HTML Construction
             
+            // A. Helper to get attribute names from IDs (reverse GexfJS._node_attr_value)
+            var nodeAttrIdToName = {};
+            if (GexfJS._node_attr_value) {
+                Object.keys(GexfJS._node_attr_value).forEach(function(name){
+                    nodeAttrIdToName[GexfJS._node_attr_value[name]] = name;
+                });
+            }
+
+            // B. Build Attributes HTML
+            var attrHtml = '<div style="margin-bottom:10px; font-size:0.9em; color:#555;">';
+            attrHtml += '<div><b>Node ID:</b> ' + node.id + '</div>';
+            
+            if (node.attributes) {
+                Object.keys(node.attributes).forEach(function(attrId){
+                    var name = nodeAttrIdToName[attrId];
+                    // Skip 'features' as it's the giant JSON blob we display below
+                    if (name && name !== 'features') {
+                        attrHtml += '<div><b>' + name + ':</b> ' + node.attributes[attrId] + '</div>';
+                    }
+                });
+            }
+            attrHtml += '</div>';
+
+            // C. Build Graph Links (Genomes / Sequences)
+            var linksHtml = '';
             var recordMap = {};
-            records.forEach(function(rec) {
+            records.forEach(function(rec) { 
                 var key = rec.patric_id || rec.genome_id;
-                recordMap[key] = rec;
+                recordMap[key] = rec; 
             });
 
             if (featureMap) {
-                // FEATURE NODE LOGIC
+                var allGenomes = Object.keys(featureMap);
+                var allSequences = [];
+                
+                // Build Hierarchy HTML
+                var hierarchyHtml = '<div class="graph-links" style="font-size:0.9em;">';
+                
                 Object.keys(featureMap).forEach(function(genomeId) {
-                    var genomeName = genomeId;
                     var contigs = featureMap[genomeId];
-                    var features = [];
-                    Object.keys(contigs).forEach(function(k){ features = features.concat(contigs[k]); });
+                    var genomeSequences = Object.keys(contigs);
+                    allSequences = allSequences.concat(genomeSequences);
                     
-                    if(features.length > 0 && recordMap[features[0]] && recordMap[features[0]].genome_name){
-                        genomeName = recordMap[features[0]].genome_name;
+                    // Genome Name Lookup
+                    var genomeName = genomeId;
+                    // Try to find a real name from the API records
+                    var firstSeq = genomeSequences[0];
+                    if(firstSeq && contigs[firstSeq][0] && recordMap[contigs[firstSeq][0]]){
+                        genomeName = recordMap[contigs[firstSeq][0]].genome_name;
                     }
 
-                    html += '<div style="margin-top:10px;">';
-                    html += '<b>' + genomeName + '</b>';
-                    html += '<ul style="margin-top:2px; padding-left:20px; list-style-type: square;">';
-                    
-                    features.forEach(function(fid) {
-                        html += '<li><a href="javascript:void(0)" onclick="window.displayPath(undefined, \'' + fid + '\', undefined); return false;">' + fid + '</a></li>';
+                    // Genome Link (calls displayPath with attr 'genomes')
+                    hierarchyHtml += '<div style="margin-top:5px;">';
+                    hierarchyHtml += '<a href="javascript:void(0)" style="font-weight:bold;" onclick="window.displayPath(undefined, \'' + genomeId + '\', \'genomes\'); return false;">' + genomeName + '</a>:';
+                    hierarchyHtml += '<div style="padding-left:10px;">';
+
+                    Object.keys(contigs).forEach(function(contigId) {
+                        // Sequence Link (calls displayPath with attr 'sequences')
+                        hierarchyHtml += '<div><a href="javascript:void(0)" onclick="window.displayPath(undefined, \'' + contigId + '\', \'sequences\'); return false;">' + contigId + '</a>:</div>';
+                        
+                        // Features (Text Only, matching legacy)
+                        var features = contigs[contigId];
+                        hierarchyHtml += '<div style="padding-left:10px; color:#666;">[' + features.join(', ') + ']</div>';
                     });
-                    
-                    html += '</ul></div>';
+                    hierarchyHtml += '</div></div>';
                 });
+                hierarchyHtml += '</div>';
 
-            } else {
-                // GENOME NODE LOGIC
-                html += '<ul style="margin-top:10px; padding-left:20px; list-style-type: square;">';
-                records.forEach(function(rec) {
-                    var id = rec.genome_id || rec.patric_id;
-                    var name = rec.genome_name || id;
-                    html += '<li><a href="javascript:void(0)" onclick="window.displayPath(undefined, \'' + id + '\', undefined); return false;">' + name + '</a></li>';
-                });
-                html += '</ul>';
+                // Summary Header (Genomes[N] Sequences[N])
+                var summaryHtml = '<div style="margin-bottom:10px; padding-bottom:5px; border-bottom:1px solid #ccc;">';
+                // Note: We join IDs with commas for the batch highlight
+                summaryHtml += '<b><a href="javascript:void(0)" onclick="window.displayPath(undefined, \'' + allGenomes.join(',') + '\', \'genomes\'); return false;">Genomes[' + allGenomes.length + ']</a></b> ';
+                summaryHtml += '<b><a href="javascript:void(0)" onclick="window.displayPath(undefined, \'' + allSequences.join(',') + '\', \'sequences\'); return false;">Sequences[' + allSequences.length + ']</a></b> ';
+                summaryHtml += '</div>';
+
+                linksHtml = summaryHtml + hierarchyHtml;
             }
-            
-            customContainer.innerHTML = html;
 
-            // 4. INJECT: Place our custom container at the bottom of the IDP
-            // We use a slight timeout to ensure the IDP has finished clearing/rendering its own content
-            setTimeout(lang.hitch(this, function(){
-                // The IDP usually renders into 'this.itemDetailPanel.containerNode'
-                //this.countDisplayNode.innerHTML
-                domConstruct.empty(this.itemDetailPanel.customDisplayNode);
-                domConstruct.place(customContainer, this.itemDetailPanel.customDisplayNode, "only");
-            }), 10);
-        },
-        // -------------------------------------
+            // D. Neighbors (Optional: replicate "Neighbors" section)
+            // This requires iterating edges, which can be expensive on large graphs. 
+            // Only implement if strictly necessary.
+            
+            // 3. Assemble Content
+            var content = '<div style="padding:10px;">';
+            content += '<h3 style="margin-top:0; word-wrap:break-word;">' + node.label + '</h3>';
+            content += attrHtml;
+            content += linksHtml;
+            content += '</div>';
+
+            // 4. Update IDP
+            // We target the custom node you added to the template
+            if (this.itemDetailPanel.customDisplayNode) {
+                // Clear any previous selection logic to prevent conflicts
+                //this.itemDetailPanel.set('selection', []); 
+                this.itemDetailPanel.customDisplayNode.innerHTML = content;
+            } else {
+                // Fallback if custom node missing
+                console.warn("customDisplayNode not found in ItemDetailPanel");
+                this.itemDetailPanel.set('content', content);
+            }
+        },        // -------------------------------------
 
         resize: function(){
             this.inherited(arguments);
