@@ -4,7 +4,9 @@ define([
     "../../WorkspaceManager", "../../util/PathJoin", 
     "dojo/query", "dojo/dom-geometry", "dojo/dom-style", "dojo/dom-construct",
     "../ActionBar", "../ItemDetailPanel", "../PerspectiveToolTip", "dojo/dom-class",
-    "../SelectionToGroup", "dijit/Dialog" 
+    "../SelectionToGroup", "dijit/Dialog",
+    "dijit/TooltipDialog", "dijit/popup"
+ 
 
 ], function(
     declare, BorderContainer, ContentPane, 
@@ -12,7 +14,8 @@ define([
     WorkspaceManager, PathJoin, 
     query, domGeom, domStyle, domConstruct,
     ActionBar, ItemDetailPanel, PerspectiveToolTipDialog, domClass,
-    SelectionToGroup, Dialog
+    SelectionToGroup, Dialog,
+    TooltipDialog, popup
 ){
     var scriptsReady = false;
     var pendingCallbacks = [];
@@ -188,6 +191,47 @@ define([
                 true
             ],
             [
+                "ColorSelection",
+                "fa icon-paint-brush fa-2x",
+                {
+                    label: "PIN",
+                    persistent: true,
+                    validTypes: ["*"],
+                    validContainerTypes:["*"],
+                    tooltip: "Color Current Graph Selection",
+                    ignoreDataType: true
+                },
+                function (selection) {
+                    // Open the tooltip dialog we built in postCreate
+                    popup.open({
+                        popup: this.colorMenu,
+                        around: this.selectionActionBar._actions.ColorSelection.button,
+                        orient: ["above", "below"] // Action bar is on bottom right, "above" works well
+                    });
+                },
+                true
+            ],
+            [
+                "HighlightColor",
+                "fa icon-eye fa-2x", // Or any icon you prefer, e.g., icon-magic
+                {
+                    label: "HIGHLIGHT",
+                    persistent: true,
+                    validTypes: ["*"],
+                    validContainerTypes:["*"],
+                    tooltip: "Set Highlight Color Override",
+                    ignoreDataType: true
+                },
+                function (selection) {
+                    popup.open({
+                        popup: this.hlColorMenu,
+                        around: this.selectionActionBar._actions.HighlightColor.button,
+                        orient: ["above", "below"]
+                    });
+                },
+                true
+            ],
+            [
                 "ResetColors",
                 "fa icon-reset fa-2x",
                 {
@@ -205,6 +249,26 @@ define([
                     }
                 },
                 true
+            ],
+            [
+                "BackgroundColor",
+                "fa icon-desktop fa-2x", // Standard icon for background/display 
+                {
+                    label: "BG COLOR",
+                    persistent: true,
+                    validTypes: ["*"],
+                    validContainerTypes:["*"],
+                    tooltip: "Set Graph Background Color",
+                    ignoreDataType: true
+                },
+                function (selection) {
+                    popup.open({
+                        popup: this.bgColorMenu,
+                        around: this.selectionActionBar._actions.BackgroundColor.button,
+                        orient: ["above", "below"]
+                    });
+                },
+                true // Enabled by default
             ],
             [
                 "ViewFeatureItem",
@@ -296,7 +360,104 @@ define([
 
         postCreate: function(){
             this.inherited(arguments); // Calls BorderContainer postCreate
+            var colorMenuDiv = domConstruct.create("div", {
+                innerHTML: '<div style="padding: 5px;">Select Color: <input type="color" id="gexfColorPicker" value="#ff0000" style="vertical-align: middle;"></div>' +
+                           '<div style="text-align:center; margin-top:5px;"><button id="gexfColorApply" style="padding: 3px 10px; cursor: pointer;">Apply</button></div>'
+            });
+
+            this.colorMenu = new TooltipDialog({
+                content: colorMenuDiv,
+                //onMouseLeave: lang.hitch(this, function () {
+                //    popup.close(this.colorMenu);
+                //})
+            });
+
+            // When the Apply button is clicked, trigger the color logic
+            on(colorMenuDiv, "#gexfColorApply:click", lang.hitch(this, function() {
+                var color = document.getElementById('gexfColorPicker').value;
+                this.applyColorToGraph(color);
+                popup.close(this.colorMenu);
+            }));
+
+            var hlColorMenuDiv = domConstruct.create("div", {
+                innerHTML: '<div style="padding: 5px;">Highlight Color: <input type="color" id="gexfHlColorPicker" value="#ff00ff" style="vertical-align: middle;"></div>' +
+                           '<div style="text-align:center; margin-top:5px;">' + 
+                           '<button id="gexfHlColorApply" style="padding: 3px 10px; cursor: pointer; margin-right: 5px;">Apply</button>' +
+                           '<button id="gexfHlColorClear" style="padding: 3px 10px; cursor: pointer;">Clear</button>' +
+                           '</div>'
+            });
+
+            this.hlColorMenu = new TooltipDialog({
+                content: hlColorMenuDiv
+                // No onMouseLeave, so the native picker doesn't close it
+            });
+
+            // Apply button logic
+            on(hlColorMenuDiv, "#gexfHlColorApply:click", lang.hitch(this, function() {
+                var color = document.getElementById('gexfHlColorPicker').value;
+                if (window.GexfJS && GexfJS.params) {
+                    GexfJS.params.highlightColorOverride = color;
+                    delete GexfJS.oldParams.zoomLevel; // Force redraw
+                }
+                popup.close(this.hlColorMenu);
+            }));
+
+            // Clear button logic (revert to default colors)
+            on(hlColorMenuDiv, "#gexfHlColorClear:click", lang.hitch(this, function() {
+                if (window.GexfJS && GexfJS.params) {
+                    GexfJS.params.highlightColorOverride = null;
+                    delete GexfJS.oldParams.zoomLevel; // Force redraw
+                }
+                popup.close(this.hlColorMenu);
+            }));
             
+            var bgColorMenuDiv = domConstruct.create("div", {
+                innerHTML: '<div style="padding: 5px;">Background: <input type="color" id="gexfBgColorPicker" value="#ffffff" style="vertical-align: middle;"></div>' +
+                           '<div style="text-align:center; margin-top:5px;">' + 
+                           '<button id="gexfBgColorApply" style="padding: 3px 10px; cursor: pointer; margin-right: 5px;">Apply</button>' +
+                           '<button id="gexfBgColorReset" style="padding: 3px 10px; cursor: pointer;">Reset</button>' +
+                           '</div>'
+            });
+
+            this.bgColorMenu = new TooltipDialog({
+                content: bgColorMenuDiv
+            });
+
+            // Apply custom background color
+            on(bgColorMenuDiv, "#gexfBgColorApply:click", lang.hitch(this, function() {
+                var color = document.getElementById('gexfBgColorPicker').value;
+                var zc = document.getElementById('zonecentre');
+                var oc = document.getElementById('overviewzone'); // Update mini-map too
+                
+                if (zc) {
+                    domClass.remove(zc, 'gradient');
+                    domStyle.set(zc, 'background', color);
+                }
+                if (oc) {
+                    domClass.remove(oc, 'gradient');
+                    domStyle.set(oc, 'background', color);
+                }
+                popup.close(this.bgColorMenu);
+            }));
+
+            // Reset back to default gradient
+            on(bgColorMenuDiv, "#gexfBgColorReset:click", lang.hitch(this, function() {
+                var zc = document.getElementById('zonecentre');
+                var oc = document.getElementById('overviewzone');
+                
+                if (zc) {
+                    domStyle.set(zc, 'background', ''); // Clear inline style
+                    domClass.add(zc, 'gradient');       // Restore class
+                }
+                if (oc) {
+                    domStyle.set(oc, 'background', '');
+                    domClass.add(oc, 'gradient');
+                }
+                popup.close(this.bgColorMenu);
+            }));
+
+            this.viewerPane = new ContentPane({ region: "center", content: this.graphTemplateString, style: "padding:0; overflow:hidden;" });
+
             // 1. Create the Center Pane (The Graph)
             this.viewerPane = new ContentPane({
                 region: "center",
@@ -512,6 +673,36 @@ define([
             GexfJS.timeRefresh = setInterval(window.traceMap, 60);
         },
 
+        applyColorToGraph: function(color) {
+            if (!window.GexfJS || !GexfJS.params) return;
+            
+            if (!GexfJS.params.pinnedElements) {
+                GexfJS.params.pinnedElements = {};
+            }
+            
+            var pinned = GexfJS.params.pinnedElements;
+            var applied = false;
+
+            // If paths are currently highlighted in the graph, color those Edges
+            if (GexfJS.params.path_active && GexfJS.params.activeEdges) {
+                Object.keys(GexfJS.params.activeEdges).forEach(function(edgeId) {
+                    pinned['e_' + edgeId] = color;
+                    applied = true;
+                });
+            } 
+            // Otherwise, if a specific Node is selected, color that Node
+            else if (GexfJS.params.currentNode !== -1) {
+                var nodeId = GexfJS.params.currentNode;
+                pinned['n_' + nodeId] = color;
+                applied = true;
+            }
+
+            // Force the graph to redraw to show the new colors
+            if (applied) {
+                delete GexfJS.oldParams.zoomLevel; 
+            }
+        },
+
         // --- UPDATED SELECTION LOGIC ---
         onGraphSelection: function(ids, featureMap, node) {
             if (!ids || ids.length === 0) return;
@@ -634,14 +825,14 @@ define([
 
                     hierarchyHtml += '<div style="margin-top:5px;">';
                     // COLOR PICKER: Genome (Edge Group)
-                    hierarchyHtml += colorInput(genomeId, 'path');
+                    //hierarchyHtml += colorInput(genomeId, 'path');
                     hierarchyHtml += '<a href="javascript:void(0)" style="font-weight:bold;" onclick="window.displayPath(undefined, \'' + genomeId + '\', \'' + genomeAttrId + '\'); return false;">' + genomeName + '</a>:';
                     hierarchyHtml += '<div style="padding-left:20px;">';
 
                     Object.keys(contigs).forEach(function(contigId) {
                         hierarchyHtml += '<div>';
                         // COLOR PICKER: Sequence (Edge Group)
-                        hierarchyHtml += colorInput(contigId, 'path');
+                        //hierarchyHtml += colorInput(contigId, 'path');
                         hierarchyHtml += '<a href="javascript:void(0)" onclick="window.displayPath(undefined, \'' + contigId + '\', \'' + sequenceAttrId + '\'); return false;">' + contigId + '</a>:';
                         hierarchyHtml += '</div>';
                         
@@ -656,11 +847,11 @@ define([
                 var summaryHtml = '<div style="margin-bottom:10px; padding-bottom:5px; border-bottom:1px solid #ccc;">';
                 
                 // COLOR PICKER: All Genomes
-                summaryHtml += '<div>' + colorInput(allGenomes.join(','), 'path');
+                //summaryHtml += '<div>' + colorInput(allGenomes.join(','), 'path');
                 summaryHtml += '<b><a href="javascript:void(0)" onclick="window.displayPath(undefined, \'' + allGenomes.join(',') + '\', \'' + genomeAttrId + '\'); return false;">Genomes[' + allGenomes.length + ']</a></b></div>';
                 
                 // COLOR PICKER: All Sequences
-                summaryHtml += '<div>' + colorInput(allSequences.join(','), 'path');
+                //summaryHtml += '<div>' + colorInput(allSequences.join(','), 'path');
                 summaryHtml += '<b><a href="javascript:void(0)" onclick="window.displayPath(undefined, \'' + allSequences.join(',') + '\', \'' + sequenceAttrId + '\'); return false;">Sequences[' + allSequences.length + ']</a></b></div>';
                 
                 summaryHtml += '</div>';
