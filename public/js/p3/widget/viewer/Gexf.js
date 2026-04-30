@@ -349,8 +349,46 @@ define([
 
                 },
                 false
+            ],
+            [
+            "LabelSettings",
+                "fa icon-tag fa-2x", 
+                {
+                    label: "LABELS",
+                    persistent: true,
+                    validTypes:["*"],
+                    validContainerTypes:["*"],
+                    tooltip: "Adjust Node Labels",
+                    ignoreDataType: true
+                },
+                function (selection) {
+                    // 1. OPEN THE POPUP FIRST
+                    // This injects the tooltip into the actual page DOM.
+                    popup.open({
+                        popup: this.labelMenu,
+                        around: this.selectionActionBar._actions.LabelSettings.button,
+                        orient: ["above", "below"]
+                    });
+                    
+                    // 2. SET THE VALUES AFTER IT IS OPEN
+                    // Now document.getElementById will successfully find the elements.
+                    if (window.GexfJS && GexfJS.params) {
+                        var toggleInput = document.getElementById('gexfLabelToggle');
+                        if (toggleInput) {
+                            // Use the dedicated boolean we set up in the last step
+                            toggleInput.checked = (GexfJS.params.showNodeLabels !== false); 
+                        }
+                        
+                        var sizeInput = document.getElementById('gexfLabelSize');
+                        if (sizeInput) {
+                            sizeInput.value = GexfJS.params.labelSizeFactor || 1.0;
+                        }
+                    }
+                },
+                true
             ]
         ],
+        
 
         setupActions: function () {
             this.selectionActions.forEach(function (a) {
@@ -360,101 +398,134 @@ define([
 
         postCreate: function(){
             this.inherited(arguments); // Calls BorderContainer postCreate
+
+            // --- 1. Pinned Color Menu ---
             var colorMenuDiv = domConstruct.create("div", {
-                innerHTML: '<div style="padding: 5px;">Select Color: <input type="color" id="gexfColorPicker" value="#ff0000" style="vertical-align: middle;"></div>' +
-                           '<div style="text-align:center; margin-top:5px;"><button id="gexfColorApply" style="padding: 3px 10px; cursor: pointer;">Apply</button></div>'
+                innerHTML: '<div style="padding: 8px; display: flex; align-items: center; white-space: nowrap;">' +
+                           '<span style="margin-right: 10px; font-weight: bold;">Node/Edge Color:</span>' + 
+                           '<input type="color" id="gexfColorPicker" value="#ff0000" style="cursor: pointer; margin-right: 15px; width: 30px; height: 30px; padding: 0; border: 1px solid #ccc;">' +
+                           '<button id="gexfColorApply" style="padding: 4px 10px; cursor: pointer; margin-right: 5px;">Apply</button>' +
+                           '<button id="gexfColorCancel" style="padding: 4px 10px; cursor: pointer;">Close</button>' +
+                           '</div>'
             });
 
-            this.colorMenu = new TooltipDialog({
-                content: colorMenuDiv,
-                //onMouseLeave: lang.hitch(this, function () {
-                //    popup.close(this.colorMenu);
-                //})
-            });
+            this.colorMenu = new TooltipDialog({ content: colorMenuDiv });
 
-            // When the Apply button is clicked, trigger the color logic
             on(colorMenuDiv, "#gexfColorApply:click", lang.hitch(this, function() {
                 var color = document.getElementById('gexfColorPicker').value;
                 this.applyColorToGraph(color);
                 popup.close(this.colorMenu);
             }));
 
+            // Explicit Close button handler
+            on(colorMenuDiv, "#gexfColorCancel:click", lang.hitch(this, function() {
+                popup.close(this.colorMenu);
+            }));
+
+            // --- 2. Highlight Color Override Menu ---
             var hlColorMenuDiv = domConstruct.create("div", {
-                innerHTML: '<div style="padding: 5px;">Highlight Color: <input type="color" id="gexfHlColorPicker" value="#ff00ff" style="vertical-align: middle;"></div>' +
-                           '<div style="text-align:center; margin-top:5px;">' + 
-                           '<button id="gexfHlColorApply" style="padding: 3px 10px; cursor: pointer; margin-right: 5px;">Apply</button>' +
-                           '<button id="gexfHlColorClear" style="padding: 3px 10px; cursor: pointer;">Clear</button>' +
+                innerHTML: '<div style="padding: 8px; display: flex; align-items: center; white-space: nowrap;">' +
+                           '<span style="margin-right: 10px; font-weight: bold;">Highlight Color:</span>' + 
+                           '<input type="color" id="gexfHlColorPicker" value="#ff00ff" style="cursor: pointer; margin-right: 15px; width: 30px; height: 30px; padding: 0; border: 1px solid #ccc;">' +
+                           '<button id="gexfHlColorApply" style="padding: 4px 10px; cursor: pointer; margin-right: 5px;">Apply</button>' +
+                           '<button id="gexfHlColorClear" style="padding: 4px 10px; cursor: pointer; margin-right: 5px;">Clear</button>' +
+                           '<button id="gexfHlColorCancel" style="padding: 4px 10px; cursor: pointer;">Close</button>' +
                            '</div>'
             });
 
-            this.hlColorMenu = new TooltipDialog({
-                content: hlColorMenuDiv
-                // No onMouseLeave, so the native picker doesn't close it
-            });
+            this.hlColorMenu = new TooltipDialog({ content: hlColorMenuDiv });
 
-            // Apply button logic
             on(hlColorMenuDiv, "#gexfHlColorApply:click", lang.hitch(this, function() {
                 var color = document.getElementById('gexfHlColorPicker').value;
                 if (window.GexfJS && GexfJS.params) {
                     GexfJS.params.highlightColorOverride = color;
-                    delete GexfJS.oldParams.zoomLevel; // Force redraw
+                    delete GexfJS.oldParams.zoomLevel;
                 }
                 popup.close(this.hlColorMenu);
             }));
 
-            // Clear button logic (revert to default colors)
             on(hlColorMenuDiv, "#gexfHlColorClear:click", lang.hitch(this, function() {
                 if (window.GexfJS && GexfJS.params) {
                     GexfJS.params.highlightColorOverride = null;
-                    delete GexfJS.oldParams.zoomLevel; // Force redraw
+                    delete GexfJS.oldParams.zoomLevel;
                 }
                 popup.close(this.hlColorMenu);
             }));
+
+            // Explicit Close button handler
+            on(hlColorMenuDiv, "#gexfHlColorCancel:click", lang.hitch(this, function() {
+                popup.close(this.hlColorMenu);
+            }));
+
             
+            // --- 3. Background Color Menu ---
             var bgColorMenuDiv = domConstruct.create("div", {
-                innerHTML: '<div style="padding: 5px;">Background: <input type="color" id="gexfBgColorPicker" value="#ffffff" style="vertical-align: middle;"></div>' +
-                           '<div style="text-align:center; margin-top:5px;">' + 
-                           '<button id="gexfBgColorApply" style="padding: 3px 10px; cursor: pointer; margin-right: 5px;">Apply</button>' +
-                           '<button id="gexfBgColorReset" style="padding: 3px 10px; cursor: pointer;">Reset</button>' +
+                innerHTML: '<div style="padding: 8px; display: flex; align-items: center; white-space: nowrap;">' +
+                           '<span style="margin-right: 10px; font-weight: bold;">Background:</span>' + 
+                           '<input type="color" id="gexfBgColorPicker" value="#ffffff" style="cursor: pointer; margin-right: 15px; width: 30px; height: 30px; padding: 0; border: 1px solid #ccc;">' +
+                           '<button id="gexfBgColorApply" style="padding: 4px 10px; cursor: pointer; margin-right: 5px;">Apply</button>' +
+                           '<button id="gexfBgColorReset" style="padding: 4px 10px; cursor: pointer; margin-right: 5px;">Reset</button>' +
+                           '<button id="gexfBgColorCancel" style="padding: 4px 10px; cursor: pointer;">Close</button>' +
                            '</div>'
             });
 
-            this.bgColorMenu = new TooltipDialog({
-                content: bgColorMenuDiv
-            });
+            this.bgColorMenu = new TooltipDialog({ content: bgColorMenuDiv });
 
-            // Apply custom background color
             on(bgColorMenuDiv, "#gexfBgColorApply:click", lang.hitch(this, function() {
                 var color = document.getElementById('gexfBgColorPicker').value;
                 var zc = document.getElementById('zonecentre');
-                var oc = document.getElementById('overviewzone'); // Update mini-map too
+                var oc = document.getElementById('overviewzone');
                 
-                if (zc) {
-                    domClass.remove(zc, 'gradient');
-                    domStyle.set(zc, 'background', color);
-                }
-                if (oc) {
-                    domClass.remove(oc, 'gradient');
-                    domStyle.set(oc, 'background', color);
-                }
+                if (zc) { domClass.remove(zc, 'gradient'); domStyle.set(zc, 'background', color); }
+                if (oc) { domClass.remove(oc, 'gradient'); domStyle.set(oc, 'background', color); }
                 popup.close(this.bgColorMenu);
             }));
 
-            // Reset back to default gradient
             on(bgColorMenuDiv, "#gexfBgColorReset:click", lang.hitch(this, function() {
                 var zc = document.getElementById('zonecentre');
                 var oc = document.getElementById('overviewzone');
                 
-                if (zc) {
-                    domStyle.set(zc, 'background', ''); // Clear inline style
-                    domClass.add(zc, 'gradient');       // Restore class
-                }
-                if (oc) {
-                    domStyle.set(oc, 'background', '');
-                    domClass.add(oc, 'gradient');
-                }
+                if (zc) { domStyle.set(zc, 'background', ''); domClass.add(zc, 'gradient'); }
+                if (oc) { domStyle.set(oc, 'background', ''); domClass.add(oc, 'gradient'); }
                 popup.close(this.bgColorMenu);
             }));
+
+            // Explicit Close button handler
+            on(bgColorMenuDiv, "#gexfBgColorCancel:click", lang.hitch(this, function() {
+                popup.close(this.bgColorMenu);
+            }));
+
+            var labelMenuDiv = domConstruct.create("div", {
+                innerHTML: '<div style="padding: 8px; white-space: nowrap;">' +
+                           '<div style="margin-bottom: 5px;"><label><input type="checkbox" id="gexfLabelToggle" checked style="vertical-align:middle; cursor:pointer;"> Show Node Labels</label></div>' +
+                           '<div style="margin-bottom: 10px;"><label>Text Size Multiplier: <input type="number" id="gexfLabelSize" value="1.0" step="0.2" min="0.2" max="5.0" style="width: 50px; text-align:center;"></label></div>' +
+                           '<div style="text-align:right;">' +
+                           '<button id="gexfLabelApply" style="padding: 4px 10px; cursor: pointer; margin-right: 5px;">Apply</button>' +
+                           '<button id="gexfLabelCancel" style="padding: 4px 10px; cursor: pointer;">Close</button>' +
+                           '</div></div>'
+            });
+
+            this.labelMenu = new TooltipDialog({ content: labelMenuDiv });
+
+            on(labelMenuDiv, "#gexfLabelApply:click", lang.hitch(this, function() {
+                var showLabels = document.getElementById('gexfLabelToggle').checked;
+                var labelSize = parseFloat(document.getElementById('gexfLabelSize').value) || 1.0;
+                
+                if (window.GexfJS && GexfJS.params) {
+                    // --- CHANGED: Use a dedicated boolean, don't touch the threshold ---
+                    GexfJS.params.showNodeLabels = showLabels; 
+                    GexfJS.params.labelSizeFactor = labelSize;
+                    
+                    delete GexfJS.oldParams.zoomLevel; // Force redraw
+                }
+                popup.close(this.labelMenu);
+            }));
+
+            // Close Button Logic
+            on(labelMenuDiv, "#gexfLabelCancel:click", lang.hitch(this, function() {
+                popup.close(this.labelMenu);
+            }));
+            
 
             this.viewerPane = new ContentPane({ region: "center", content: this.graphTemplateString, style: "padding:0; overflow:hidden;" });
 
@@ -561,6 +632,8 @@ define([
                         // Flatten to get IDs for API query
                         Object.keys(featureMap).forEach(function(genomeId) {
                             var contigs = featureMap[genomeId];
+                            //if it is "info" go to the next genomeId
+                            if (genomeId === "info") return;
                             Object.keys(contigs).forEach(function(contigId) {
                                 var features = contigs[contigId];
                                 features.forEach(function(fid) {
@@ -657,7 +730,10 @@ define([
                 genome_url: 'https://www.bv-brc.org/api/genome?in(genome_id,(GIDSTRING))&select(genome_id,genome_name)&limit(500)&http_accept=application/solr+json',
                 location_url: 'https://www.bv-brc.org/api/genome_sequence?in(sequence_id,(SIDSTRING))&select(sequence_id,description)&facet((pivot,(genome_id,genome_name,sequence_id)))&http_accept=application/solr+json',
                 replicon_url: 'https://www.bv-brc.org/api/genome_sequence?in(genome_id,(GIDSTRING))&select(sequence_id,description)&facet((pivot,(genome_id,genome_name,sequence_id)))&http_accept=application/solr+json',
-                language: false
+                language: false,
+                textDisplayThreshold: 12, // Leave this at its normal default
+                showNodeLabels: true,    // NEW: Our dedicated toggle
+                labelSizeFactor: 1.0    // NEW: Our size multiplier
             };
             setParams(graph_params);
 
@@ -808,6 +884,8 @@ define([
                 var hierarchyHtml = '<div class="graph-links" style="font-size:0.9em;">';
                 
                 Object.keys(featureMap).forEach(function(genomeId) {
+                    //if genomeId is "info" skip it
+                    if (genomeId === "info") return;
                     var contigs = featureMap[genomeId];
                     var genomeSequences = Object.keys(contigs);
                     allSequences = allSequences.concat(genomeSequences);
