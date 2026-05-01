@@ -695,18 +695,13 @@ define([
             window.highlightSpecial = lang.hitch(this, function(type) {
                 if (!window.GexfJS || !GexfJS.params) return;
                 
-                // --- CRITICAL FIX: Deep clear of ALL highlight states ---
+                // Deep clear of ALL highlight states
                 GexfJS.params.activeEdges = {};
-                GexfJS.params.activeNodes = {};
-
-                var forceFadeMode = false;
                 GexfJS.params.path_active = false;
                 GexfJS.params.pinnedElements = {};
-                
-                // Forcefully clear any lingering Node selections that prevent backgrounding
                 GexfJS.params.activeNode = -1; 
                 GexfJS.params.currentNode = -1;
-                // --------------------------------------------------------
+                GexfJS.params.activeNodes = {}; // Clean slate!
                 
                 if (type === 'inversions') {
                     var attrId = GexfJS._edge_attr_value['is_inversion'];
@@ -714,7 +709,17 @@ define([
                         var edgesWithInversion = GexfJS.path_highlights[attrId]['true']; 
                         if (edgesWithInversion) {
                             for (var edgeId in edgesWithInversion) {
+                                // 1. Activate the Edge
                                 GexfJS.params.activeEdges[edgeId] = true;
+                                
+                                // 2. NEW: Activate the connected Nodes
+                                var edgeObj = GexfJS.graph.edgeLookup[edgeId];
+                                if (edgeObj) {
+                                    var sourceNode = GexfJS.graph.nodeList[edgeObj.source];
+                                    var targetNode = GexfJS.graph.nodeList[edgeObj.target];
+                                    if (sourceNode) GexfJS.params.activeNodes[sourceNode.id] = true;
+                                    if (targetNode) GexfJS.params.activeNodes[targetNode.id] = true;
+                                }
                             }
                         }
                     }
@@ -724,7 +729,17 @@ define([
                         var edgesWithTranslocation = GexfJS.path_highlights[attrId]['true']; 
                         if (edgesWithTranslocation) {
                             for (var edgeId in edgesWithTranslocation) {
+                                // 1. Activate the Edge
                                 GexfJS.params.activeEdges[edgeId] = true;
+                                
+                                // 2. NEW: Activate the connected Nodes
+                                var edgeObj = GexfJS.graph.edgeLookup[edgeId];
+                                if (edgeObj) {
+                                    var sourceNode = GexfJS.graph.nodeList[edgeObj.source];
+                                    var targetNode = GexfJS.graph.nodeList[edgeObj.target];
+                                    if (sourceNode) GexfJS.params.activeNodes[sourceNode.id] = true;
+                                    if (targetNode) GexfJS.params.activeNodes[targetNode.id] = true;
+                                }
                             }
                         }
                     }
@@ -733,15 +748,15 @@ define([
                     if (typeof attrId !== 'undefined') {
                         GexfJS.graph.nodeList.forEach(function(node) {
                             if (node.attributes && node.attributes[attrId] != null && node.attributes[attrId] !== "" && node.attributes[attrId] !== "0") {
-                                GexfJS.params.pinnedElements['n_' + node.id] = '#ff00ff';
-                                forceFadeMode = true; 
+                                GexfJS.params.pinnedElements['n_' + node.id] = '#ff00ff'; 
+                                GexfJS.params.activeNodes[node.id] = true; 
                             }
                         });
                     }
                 }
                 
                 // Re-evaluate path_active based on whether edges were actually found
-                GexfJS.params.path_active = forceFadeMode || !jQuery.isEmptyObject(GexfJS.params.activeEdges);
+                GexfJS.params.path_active = !jQuery.isEmptyObject(GexfJS.params.activeEdges);
                 
                 delete GexfJS.oldParams.zoomLevel; // Force redraw
             });
