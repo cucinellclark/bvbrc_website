@@ -71,6 +71,7 @@ define([
         "path": "",
         "file": null,
         "gutters": false, // No spacing between regions
+        "graphSummary": null,
         "design": "headline",
         _resizeHandle: null,
         
@@ -602,15 +603,160 @@ define([
                 }));
             }));
         },
+
+        showDefaultSummary: function() {
+            if (!this.graphSummary || !this.itemDetailPanel || !this.itemDetailPanel.customDisplayNode) {
+                // If no summary exists, default to clearing the panel
+                this.itemDetailPanel.set('selection',[]);
+                return;
+            }
+
+            var s = this.graphSummary;
+            
+            // Resolve edge attribute IDs for safe displayPath calls
+            var genomeAttrId = 'genomes';
+            var sequenceAttrId = 'sequences';
+            if (window.GexfJS && GexfJS._edge_attr_value) {
+                if (GexfJS._edge_attr_value['genomes']) genomeAttrId = GexfJS._edge_attr_value['genomes'];
+                if (GexfJS._edge_attr_value['sequences']) sequenceAttrId = GexfJS._edge_attr_value['sequences'];
+            }
+
+            var html = '<div style="padding:10px;">';
+            html += '<h3 style="margin-top:0;">Graph Summary</h3>';
+            
+            // Statistics Table
+            html += '<table style="width:100%; font-size:0.95em; margin-bottom:15px; border-collapse: collapse;">';
+            html += '<tr style="border-bottom: 1px solid #eee;"><td><b>Total Genomes:</b></td><td style="text-align:right;">' + (s.total_genomes || 0) + '</td></tr>';
+            html += '<tr style="border-bottom: 1px solid #eee;"><td><b>Total Contigs:</b></td><td style="text-align:right;">' + (s.total_contigs || 0) + '</td></tr>';
+            html += '<tr style="border-bottom: 1px solid #eee;"><td><b>Total Features:</b></td><td style="text-align:right;">' + (s.total_features || 0) + '</td></tr>';
+            html += '<tr style="border-bottom: 1px solid #eee;"><td><b>Total Nodes:</b></td><td style="text-align:right;">' + (s.total_nodes || 0) + '</td></tr>';
+            
+            // Special Interactive Stat Links
+            html += '<tr style="border-bottom: 1px solid #eee;"><td><b>CNV Clusters:</b></td><td style="text-align:right;"><a href="javascript:void(0)" onclick="window.highlightSpecial(\'cnv\'); return false;" title="Highlight Nodes with CNV Clusters">' + (s.cnv_clusters || 0) + '</a></td></tr>';
+            html += '<tr style="border-bottom: 1px solid #eee;"><td><b>Inversions:</b></td><td style="text-align:right;"><a href="javascript:void(0)" onclick="window.highlightSpecial(\'inversions\'); return false;" title="Highlight Inversion Edges">' + (s.inversions || 0) + '</a></td></tr>';
+            html += '<tr><td><b>Translocations:</b></td><td style="text-align:right;"><a href="javascript:void(0)" onclick="window.highlightSpecial(\'translocations\'); return false;" title="Highlight Translocation Edges">' + (s.translocations || 0) + '</a></td></tr>';
+            html += '</table>';
+
+            // Parameters
+            if (s.parameters) {
+                var paramsText = JSON.stringify(s.parameters).replace(/[{""}]/g, '').replace(/:/g, ': ');
+                html += '<div style="font-size:0.9em; margin-bottom:15px; color:#666;"><b>Params:</b> ' + paramsText + '</div>';
+            }
+
+            // Genome Manifest (Collapsible)
+            if (s.contig_map) {
+                html += '<h4 style="margin-bottom:5px;">Genome Manifest</h4>';
+                html += '<div style="max-height: 350px; overflow-y: auto; border: 1px solid #ccc; padding: 5px; font-size: 0.9em; background-color: #fafafa;">';
+                
+                Object.keys(s.contig_map).forEach(function(genomeId) {
+                    var contigs = s.contig_map[genomeId];
+                    // Using native HTML5 details/summary for expand & collapse
+                    html += '<details style="margin-bottom: 4px;">';
+                    html += '<summary style="cursor:pointer; outline:none; font-weight:bold;">';
+                    html += '<a href="javascript:void(0)" onclick="window.displayPath(undefined, \'' + genomeId + '\', \'' + genomeAttrId + '\'); return false;" title="Highlight Genome">' + genomeId + '</a>';
+                    html += ' <span style="font-weight:normal; color:#666;">(' + contigs.length + ' contigs)</span>';
+                    html += '</summary>';
+                    
+                    html += '<ul style="margin-top:2px; padding-left:25px; list-style-type: square;">';
+                    contigs.forEach(function(contigId) {
+                        html += '<li><a href="javascript:void(0)" onclick="window.displayPath(undefined, \'' + contigId + '\', \'' + sequenceAttrId + '\'); return false;" title="Highlight Contig">' + contigId + '</a></li>';
+                    });
+                    html += '</ul>';
+                    html += '</details>';
+                });
+                
+                html += '</div>';
+            }
+
+            html += '</div>';
+            
+            // Clear current selection state to reset action bar
+            this.itemDetailPanel.set('selection',[]);
+            this.itemDetailPanel.customDisplayNode.innerHTML = html;
+        },
         
         renderGraph: function(gexfXMLData){
             if (!window.startGraphViewer || !window.GexfJS) return;
 
+            var gexf_dom = (new window.DOMParser()).parseFromString(gexfXMLData, "text/xml");
+
+            // ---  EXTRACT SUMMARY JSON ---
+            var summaryNode = gexf_dom.querySelector("meta > summary");
+            if (summaryNode) {
+                try {
+                    this.graphSummary = JSON.parse(summaryNode.textContent);
+                } catch(e) {
+                    console.error("Error parsing GEXF summary:", e);
+                    this.graphSummary = null;
+                }
+            }
+
+            // ---  CREATE SPECIAL HIGHLIGHT FUNCTION ---
+            window.highlightSpecial = lang.hitch(this, function(type) {
+                if (!window.GexfJS || !GexfJS.params) return;
+                
+                // Reset all highlights and pins
+                GexfJS.params.activeEdges = {};
+                GexfJS.params.path_active = false;
+                GexfJS.params.pinnedElements = {};
+                
+                if (type === 'inversions') {
+                    var attrId = GexfJS._edge_attr_value['is_inversion'];
+                    
+                    // Use the path_highlights table to find all edges where this attribute is "true"
+                    if (typeof attrId !== 'undefined' && GexfJS.path_highlights && GexfJS.path_highlights[attrId]) {
+                        var edgesWithInversion = GexfJS.path_highlights[attrId]['true']; // Lookup by string "true"
+                        
+                        if (edgesWithInversion) {
+                            Object.keys(edgesWithInversion).forEach(function(edgeId) {
+                                GexfJS.params.activeEdges[edgeId] = true;
+                            });
+                        }
+                    }
+                    GexfJS.params.path_active = !jQuery.isEmptyObject(GexfJS.params.activeEdges);
+                    
+                } else if (type === 'translocations') {
+                    var attrId = GexfJS._edge_attr_value['is_translocation'];
+                    
+                    // Use the path_highlights table
+                    if (typeof attrId !== 'undefined' && GexfJS.path_highlights && GexfJS.path_highlights[attrId]) {
+                        var edgesWithTranslocation = GexfJS.path_highlights[attrId]['true']; // Lookup by string "true"
+                        
+                        if (edgesWithTranslocation) {
+                            Object.keys(edgesWithTranslocation).forEach(function(edgeId) {
+                                GexfJS.params.activeEdges[edgeId] = true;
+                            });
+                        }
+                    }
+                    GexfJS.params.path_active = !jQuery.isEmptyObject(GexfJS.params.activeEdges);
+                    
+                } else if (type === 'cnv') {
+                    // Nodes DO have attributes saved, so this part remains the same
+                    var attrId = GexfJS._node_attr_value['cnv_cluster_id'];
+                    if (typeof attrId !== 'undefined') {
+                        GexfJS.graph.nodeList.forEach(function(node) {
+                            if (node.attributes && node.attributes[attrId] != null && node.attributes[attrId] !== "" && node.attributes[attrId] !== "0") {
+                                // Pin CNV clusters to Magenta
+                                GexfJS.params.pinnedElements['n_' + node.id] = '#ff00ff'; 
+                            }
+                        });
+                    }
+                }
+                
+                delete GexfJS.oldParams.zoomLevel; // Force redraw
+        });
+
             var originalDisplayNode = window.displayNode;
-            
+
             // --- BRIDGE: Intercept Node Clicks ---
             window.displayNode = lang.hitch(this, function(nodeIndex) {
                 if (originalDisplayNode) originalDisplayNode(nodeIndex);
+
+                // Check for Deselect (Clicking the background passes -1 or undefined)
+                if (nodeIndex === -1 || typeof nodeIndex === 'undefined') {
+                    this.showDefaultSummary();
+                    return;
+                }
 
                 var node = GexfJS.graph.nodeList[nodeIndex];
                 if (!node) return;
@@ -747,6 +893,8 @@ define([
 
             this.resize();
             GexfJS.timeRefresh = setInterval(window.traceMap, 60);
+            this.showDefaultSummary();
+
         },
 
         applyColorToGraph: function(color) {
