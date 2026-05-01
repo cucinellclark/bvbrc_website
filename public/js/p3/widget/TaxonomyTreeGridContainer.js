@@ -29,13 +29,14 @@ define([
   });
 
   return declare([GridContainer], {
-    'class': 'GridContainer TaxonTreeGrid',
+    'class': 'GridContainer TaxonTreeGrid no-phylo-col',
     facetFields: [],
     enableFilterPanel: false,
     dataModel: 'taxonomy',
     containerType: 'taxonomy_data',
     tutorialLink: 'quick_references/organisms_taxon/taxonomy.html',
     tooltip: 'The "Taxonomy" tab provides taxonomy subtree for the current taxon level.',
+    _treeFilterActive: false,
     onSetState: function (attr, oldState, state) {
       // console.log("GridContainer onSetState: ", state, " oldState:", oldState);
       if (!state) {
@@ -85,10 +86,54 @@ define([
         true
       ]
     ]),
+    selectionActions: GridContainer.prototype.selectionActions.concat([
+      [
+        'ShowWithTrees',
+        'fa icon-tree2 fa-2x',
+        {
+          label: 'HIGHLIGHT',
+          persistent: true,
+          validTypes: ['*'],
+          tooltip: 'Highlight rows with phylogenetic trees'
+        },
+        function (selection, container, button) {
+          this._treeFilterActive = !this._treeFilterActive;
+          domClass.toggle(this.domNode, 'trees-only-mode', this._treeFilterActive);
+          var iconNode = button.querySelector('.ActionButton');
+          if (iconNode) {
+            domClass.toggle(iconNode, 'ActiveActionButton', this._treeFilterActive);
+          }
+          var labelNode = button.querySelector('.ActionButtonText');
+          if (labelNode) {
+            labelNode.textContent = this._treeFilterActive ? 'RESET' : 'HIGHLIGHT';
+          }
+        },
+        true // visibility is controlled by CSS (.no-phylo-col hides it)
+      ]
+    ]),
+
     gridCtor: Grid,
 
     setVirusContext: function (isVirus) {
       domClass.toggle(this.domNode, 'no-phylo-col', !isVirus);
+      // Reset highlight filter when leaving virus context
+      if (!isVirus && this._treeFilterActive) {
+        this._treeFilterActive = false;
+        domClass.remove(this.domNode, 'trees-only-mode');
+        var btn = this.selectionActionBar &&
+          this.selectionActionBar._actions.ShowWithTrees &&
+          this.selectionActionBar._actions.ShowWithTrees.button;
+        if (btn) {
+          var iconNode = btn.querySelector('.ActionButton');
+          if (iconNode) {
+            domClass.remove(iconNode, 'ActiveActionButton');
+          }
+          var labelNode = btn.querySelector('.ActionButtonText');
+          if (labelNode) {
+            labelNode.textContent = 'HIGHLIGHT';
+          }
+        }
+      }
     },
 
     setPhyloManifest: function (manifest) {

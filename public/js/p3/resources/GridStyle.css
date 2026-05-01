@@ -239,6 +239,20 @@
     display: none;
 }
 
+/* Hide the HIGHLIGHT action button on non-virus taxonomy pages */
+.TaxonTreeGrid.no-phylo-col .ActionButtonWrapper[rel="ShowWithTrees"] {
+    display: none;
+}
+
+/* Filter: dim rows with no phylo tree data when the TREES toggle is active */
+.TaxonTreeGrid.trees-only-mode .dgrid-row:not(.has-phylo) {
+    opacity: 0.25;
+}
+
+.TaxonTreeGrid.trees-only-mode .dgrid-row.has-phylo {
+    background-color: rgba(44, 122, 123, 0.07);
+}
+
 .service_form {
     margin-top: 10px;
 }

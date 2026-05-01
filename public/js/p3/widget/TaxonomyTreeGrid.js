@@ -1,12 +1,12 @@
 define([
   'dojo/_base/declare', 'dgrid/OnDemandGrid', 'dgrid/tree', 'dojo/on', 'dgrid/Selection',
   '../store/TaxonomyJsonRest', 'dgrid/extensions/DijitRegistry', 'dojo/_base/lang', './GridSelector',
-  'dojo/dom-construct', 'dojo/query'
+  'dojo/dom-construct', 'dojo/dom-class', 'dojo/query'
 
 ], function (
   declare, Grid, Tree, on, Selection,
   Store, DijitRegistryExt, lang, selector,
-  domConstruct, query
+  domConstruct, domClass, query
 ) {
   return declare([Grid, DijitRegistryExt, Selection], {
     _phyloManifest: null,
@@ -18,7 +18,7 @@ define([
       }
       this._phyloManifest = manifest;
       if (this._started) {
-        this.refresh();
+        this._updateManifestCells();
       }
     },
 
@@ -42,6 +42,46 @@ define([
       if (this._started) {
         this._updateTreeCountCells();
       }
+    },
+
+    _createPhyloLink: function (taxonId, familyName, container) {
+      domConstruct.create('a', {
+        className: 'fa icon-tree2',
+        href: '/view/Taxonomy/' + taxonId + '#view_tab=phylogenyVirus',
+        title: 'View phylogenetic trees for ' + familyName,
+        style: 'color:#2c7a7b; font-size:13px; text-decoration:none; display:inline-block; padding:2px 4px;'
+      }, container);
+    },
+
+    // Patch cells for rows that have a direct tree in the manifest (called instead of refresh())
+    _updateManifestCells: function () {
+      var _self = this;
+      var manifest = this._phyloManifest;
+      if (!manifest) {
+        return;
+      }
+
+      var rows = query('.dgrid-row', this.domNode);
+
+      rows.forEach(function (rowNode) {
+        var rowObj = _self.row(rowNode);
+        if (!rowObj || !rowObj.data) {
+          return;
+        }
+
+        var sid = String(rowObj.data.taxon_id);
+        if (!manifest.hasOwnProperty(sid)) {
+          return;
+        }
+
+        var cell = query('.field-phylo_trees', rowNode)[0];
+        if (!cell || cell.querySelector('a.fa')) {
+          return; // already rendered
+        }
+
+        _self._createPhyloLink(sid, manifest[sid] || 'Phylogeny', cell);
+        domClass.add(rowNode, 'has-phylo');
+      });
     },
 
     // Update cells that were already rendered before manifestData arrived
@@ -78,6 +118,7 @@ define([
         cell.textContent = count > 0 ? String(count) : '';
         if (count > 0) {
           cell.title = count + ' famil' + (count === 1 ? 'y has' : 'ies have') + ' phylogenetic trees in this group';
+          domClass.add(rowNode, 'has-phylo');
         }
       });
     },
@@ -102,12 +143,7 @@ define([
       { label: 'Rank', field: 'taxon_rank' },
       { label: 'Genomes', field: 'genomes', style: 'width:50px;' },
       {
-        renderHeaderCell: function (th) {
-          domConstruct.create('i', {
-            className: 'fa icon-tree2',
-            title: 'Phylogenetic Trees'
-          }, th);
-        },
+        label: 'Trees',
         field: 'phylo_trees',
         get: function (item) {
           return item.taxon_id;
@@ -122,22 +158,31 @@ define([
           }
 
           var sid = String(value);
+          var shouldMark = false;
 
           if (manifest.hasOwnProperty(sid)) {
             // Direct phylogenetic tree — show clickable icon
-            var familyName = manifest[sid] || 'Phylogeny';
-            domConstruct.create('a', {
-              className: 'fa icon-tree2',
-              href: '/view/Taxonomy/' + value + '#view_tab=phylogenyVirus',
-              title: 'View phylogenetic trees for ' + familyName,
-              style: 'color:#2c7a7b; font-size:13px; text-decoration:none; display:inline-block; padding:2px 4px;'
-            }, td);
+            grid._createPhyloLink(value, manifest[sid] || 'Phylogeny', td);
+            shouldMark = true;
           } else if (treeCount) {
             var count = treeCount[sid] || 0;
             if (count > 0) {
               td.textContent = String(count);
               td.title = count + ' famil' + (count === 1 ? 'y has' : 'ies have') + ' phylogenetic trees in this group';
+              shouldMark = true;
             }
+          }
+
+          // td.parentNode is null at renderCell time (dgrid appends td to tr *after*
+          // the callback returns), so defer the row marking until the row is in the DOM.
+          if (shouldMark) {
+            var taxonId = item.taxon_id;
+            setTimeout(function () {
+              var rowObj = grid.row(taxonId);
+              if (rowObj && rowObj.element) {
+                domClass.add(rowObj.element, 'has-phylo');
+              }
+            }, 0);
           }
         }
       }
