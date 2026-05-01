@@ -691,60 +691,60 @@ define([
                 }
             }
 
-            // ---  CREATE SPECIAL HIGHLIGHT FUNCTION ---
+            // --- 2. CREATE SPECIAL HIGHLIGHT FUNCTION ---
             window.highlightSpecial = lang.hitch(this, function(type) {
                 if (!window.GexfJS || !GexfJS.params) return;
                 
-                // Reset all highlights and pins
+                // --- CRITICAL FIX: Deep clear of ALL highlight states ---
                 GexfJS.params.activeEdges = {};
+                GexfJS.params.activeNodes = {};
+
+                var forceFadeMode = false;
                 GexfJS.params.path_active = false;
                 GexfJS.params.pinnedElements = {};
                 
+                // Forcefully clear any lingering Node selections that prevent backgrounding
+                GexfJS.params.activeNode = -1; 
+                GexfJS.params.currentNode = -1;
+                // --------------------------------------------------------
+                
                 if (type === 'inversions') {
                     var attrId = GexfJS._edge_attr_value['is_inversion'];
-                    
-                    // Use the path_highlights table to find all edges where this attribute is "true"
                     if (typeof attrId !== 'undefined' && GexfJS.path_highlights && GexfJS.path_highlights[attrId]) {
-                        var edgesWithInversion = GexfJS.path_highlights[attrId]['true']; // Lookup by string "true"
-                        
+                        var edgesWithInversion = GexfJS.path_highlights[attrId]['true']; 
                         if (edgesWithInversion) {
-                            Object.keys(edgesWithInversion).forEach(function(edgeId) {
+                            for (var edgeId in edgesWithInversion) {
                                 GexfJS.params.activeEdges[edgeId] = true;
-                            });
+                            }
                         }
                     }
-                    GexfJS.params.path_active = !jQuery.isEmptyObject(GexfJS.params.activeEdges);
-                    
                 } else if (type === 'translocations') {
                     var attrId = GexfJS._edge_attr_value['is_translocation'];
-                    
-                    // Use the path_highlights table
                     if (typeof attrId !== 'undefined' && GexfJS.path_highlights && GexfJS.path_highlights[attrId]) {
-                        var edgesWithTranslocation = GexfJS.path_highlights[attrId]['true']; // Lookup by string "true"
-                        
+                        var edgesWithTranslocation = GexfJS.path_highlights[attrId]['true']; 
                         if (edgesWithTranslocation) {
-                            Object.keys(edgesWithTranslocation).forEach(function(edgeId) {
+                            for (var edgeId in edgesWithTranslocation) {
                                 GexfJS.params.activeEdges[edgeId] = true;
-                            });
+                            }
                         }
                     }
-                    GexfJS.params.path_active = !jQuery.isEmptyObject(GexfJS.params.activeEdges);
-                    
                 } else if (type === 'cnv') {
-                    // Nodes DO have attributes saved, so this part remains the same
                     var attrId = GexfJS._node_attr_value['cnv_cluster_id'];
                     if (typeof attrId !== 'undefined') {
                         GexfJS.graph.nodeList.forEach(function(node) {
                             if (node.attributes && node.attributes[attrId] != null && node.attributes[attrId] !== "" && node.attributes[attrId] !== "0") {
-                                // Pin CNV clusters to Magenta
-                                GexfJS.params.pinnedElements['n_' + node.id] = '#ff00ff'; 
+                                GexfJS.params.pinnedElements['n_' + node.id] = '#ff00ff';
+                                forceFadeMode = true; 
                             }
                         });
                     }
                 }
                 
+                // Re-evaluate path_active based on whether edges were actually found
+                GexfJS.params.path_active = forceFadeMode || !jQuery.isEmptyObject(GexfJS.params.activeEdges);
+                
                 delete GexfJS.oldParams.zoomLevel; // Force redraw
-        });
+            });
 
             var originalDisplayNode = window.displayNode;
 
@@ -800,7 +800,7 @@ define([
                 }
             });
 
-                        // --- NEW: Global Pin Color Function ---
+            // --- NEW: Global Pin Color Function ---
             window.pinColor = lang.hitch(this, function(ids, type, colorValue) {
                 if (!window.GexfJS || !GexfJS.params.pinnedElements) return;
 
