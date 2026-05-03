@@ -19,7 +19,7 @@ define([
     title: 'Measles 2025 Outbreak',
     segments: {1: 'PB2', 2: 'PB1', 3: 'PA', 4: 'HA', 5: 'NP', 6: 'NA', 7: 'M1, M2', 8: 'NS1, NEP'},
     googleNewsCount: 100,
-    googleNewsRSS: 'https://news.google.com/rss/search?q=measles+(%22www.cdc.gov%22+OR+%22news.un.org%22+OR+%22www.who.int%22+OR+%22www.reuters.com%22+OR+%22cidrap.umn.edu%22)&hl=en-US&gl=US&ceid=US:en',
+    googleNewsRSS: 'measles',
 
     onSetState: function (attr, oldVal, state) {
       if (!state) {
@@ -52,7 +52,7 @@ define([
 
       switch (active) {
         case 'phylogenetics':
-          this.phylogenyMeasles.set('state', lang.mixin({}, this.state));
+          this.phylogenyCompleteMeasles.set('state', lang.mixin({}, this.state));
           break;
 
         default:
@@ -219,10 +219,10 @@ define([
       settings.showExternalNodesButton = false;
       settings.showInternalNodesButton = false;
 
-      const phylogenyId = 'phylogenyMeasles';
-      this[phylogenyId] = new OutbreaksPhylogenyTreeViewer({
-        title: `Measles`,
-        id: this.viewer.id + '_' + phylogenyId,
+      const phylogenyCompleteMeasles = 'phylogenyCompleteMeasles';
+      this[phylogenyCompleteMeasles] = new OutbreaksPhylogenyTreeViewer({
+        title: 'Measles complete genomes',
+        id: this.viewer.id + '_' + phylogenyCompleteMeasles,
         phyloxmlTreeURL: 'https://www.bv-brc.org/api/content/phyloxml_trees/measles/measles.xml',
         updateState: true,
         settings: settings,
@@ -231,10 +231,22 @@ define([
         specialVisualizations: nodeLabels
       });
 
+      const phylogenyNGeneMeasles = 'phylogenyNGeneMeasles';
+      this[phylogenyNGeneMeasles] = new OutbreaksPhylogenyTreeViewer({
+        title: 'Measles N gene tree',
+        id: this.viewer.id + '_' + phylogenyNGeneMeasles,
+        phyloxmlTreeURL: 'https://www.bv-brc.org/api/content/phyloxml_trees/measles/measles_n_gene.xml',
+        updateState: true,
+        settings: settings,
+        options: options,
+        nodeVisualizations: nodeVisualizations,
+        specialVisualizations: nodeLabels
+      });
+
       this.phylogenetics = new OutbreaksTabContainer({
-        title: 'Phylogenetics',
+        title: 'Phylogeny',
         id: this.viewer.id + '_phylogenetics',
-        tabContainers: [this[phylogenyId]]
+        tabContainers: [this[phylogenyCompleteMeasles], this[phylogenyNGeneMeasles]]
       });
 
       this.resources = new OutbreaksTab({
@@ -265,7 +277,7 @@ define([
       this.viewer.addChild(this.clt);
 
       // Fetch geomap data
-      xhr.get(PathJoin(this.apiServiceUrl, 'genome') + '/?eq(taxon_lineage_ids,11234)&eq(collection_year,"2025")&in(genome_status,("Complete","Partial"))&select(genome_name,subclade,isolation_country,state_province)&limit(100000)', {
+      xhr.get(PathJoin(this.apiServiceUrl, 'genome') + '/?eq(taxon_lineage_ids,11234)&in(collection_year,("2025","2026"))&in(genome_status,("Complete","Partial"))&select(genome_name,subclade,isolation_country,state_province)&limit(100000)', {
         headers: {
           accept: 'application/json',
           'Content-Type': 'application/rqlquery+x-www-form-urlencoded',
@@ -340,46 +352,37 @@ define([
         this.map.set('data', distinctLocations);
       })).catch(err => console.log('error', err));
 
-      xhr.get('/google/news/?url=' + encodeURIComponent(this.googleNewsRSS) + '&count=' + this.googleNewsCount,
-        {handleAs: 'xml'})
-        .then(lang.hitch(this, function (data) {
-          // TODO: move parsing to server side
-          const doc = domParser.parse(data);
-          const items = Array.from(doc.getElementsByTagName('item'));
-
-          // Filter out before 2023 and sort items by pubDate
-          const filteredItems = items
-            .reduce((acc, item) => {
-              const pubDateText = this.getNode(item, 'pubDate');
-              const pubDate = new Date(pubDateText);
-
-              // Only include items with pubDate in 2023 or later
-              if (pubDate.getFullYear() >= 2023) {
-                const link = this.getNode(item, 'link');
-                const title = this.getNode(item, 'title');
-
-                acc.push({link, title, pubDate});
-              }
-              return acc;
-            }, [])
-            .sort((a, b) => b.pubDate - a.pubDate);
-
-          // Determine the number of items to process
-          const numItems = Math.min(this.googleNewsCount, filteredItems.length);
+      xhr.get(`/google/news/?feed=${this.googleNewsRSS}&count=${this.googleNewsCount}`,
+        {handleAs: 'json'})
+        .then(lang.hitch(this, function (items) {
           const newsList = domConstruct.create('ul');
           const options = {weekday: 'short', year: 'numeric', month: 'short', day: 'numeric', timeZone: 'UTC'};
-          for (let i = 0; i < numItems; ++i) {
+
+          // Helper to validate URLs are safe HTTP/HTTPS
+          const isValidHttpUrl = (str) => {
+            try {
+              const url = new URL(str);
+              return url.protocol === 'http:' || url.protocol === 'https:';
+            } catch {
+              return false;
+            }
+          };
+
+          items.forEach(item => {
             const li = domConstruct.create('li', {}, newsList);
-            const pubDate = filteredItems[i].pubDate.toLocaleDateString('en-US', options);
+            const pubDate = new Date(item.pubDate).toLocaleDateString('en-US', options);
             domConstruct.create('div', {
               innerHTML: pubDate
             }, li);
+
+            // Use textContent to prevent XSS, validate URL
+            const safeLink = isValidHttpUrl(item.link) ? item.link : '#';
             domConstruct.create('a', {
-              href: filteredItems[i].link,
+              href: safeLink,
               target: '_blank',
-              innerHTML: filteredItems[i].title
+              textContent: item.title
             }, li);
-          }
+          });
           domConstruct.place(newsList, 'newsList');
         })).catch(error => {
         console.log(error);
@@ -427,7 +430,7 @@ define([
         } else {
           let td = domConstruct.create('td', {}, tr);
           domConstruct.create('a', {
-            href: `/view/Taxonomy/11234#view_tab=genomes&filter=and(or(eq(genome_status,"Complete"),eq(genome_status,"Partial")),eq(collection_year,"2025")${locationFilter},eq(subclade,"${encodeURIComponent(subclade)}"))&defaultColumns=-cds,subclade,collection_date&defaultSort=genome_name,subclade`,
+            href: `/view/Taxonomy/11234#view_tab=genomes&filter=and(or(eq(genome_status,"Complete"),eq(genome_status,"Partial")),in(collection_year,("2025","2026"))${locationFilter},eq(subclade,"${encodeURIComponent(subclade)}"))&defaultColumns=-cds,subclade,collection_date&defaultSort=genome_name,subclade`,
             target: '_blank',
             innerHTML: subclade
           }, td);

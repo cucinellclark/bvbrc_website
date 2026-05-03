@@ -34,6 +34,7 @@ define([], function () {
         'MetagenomeBinning': 'MetagenomicBinning',
         'MetagenomicReadMapping': 'MetagenomicReadMapping',
         'MSA': 'MSA',
+        'PredictStructure': 'PredictStructure',
         'CodonTree': 'PhylogeneticTree',
         'PrimerDesign': 'PrimerDesign',
         'RNASeq': 'Rnaseq',
@@ -42,8 +43,12 @@ define([], function () {
         'HASubtypeNumberingConversion': 'HASubtypeNumberingConversion',
         'TaxonomicClassification': 'TaxonomicClassification',
         'TnSeq': 'Tnseq',
+        'TreeSort': 'TreeSort',
         'Variation': 'Variation',
-        'ViralAssembly': 'ViralAssembly'
+        'ViralAssembly': 'ViralAssembly',
+        'CoreGenomeMLST': 'CoreGenomeMLST',
+        'WholeGenomeSNPAnalysis': 'WholeGenomeSNPAnalysis',
+        'MobileElementDetection': 'MobileElementDetection'
       };
 
       // TODO: addin modal parameter

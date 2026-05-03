@@ -33,6 +33,7 @@ define([
     { value: 'ZIKA', label: 'Flaviviridae - Zika virus [complete genome, genomic RNA]' },
     { type: 'separator' },
     { value: 'INFLUENZAH5', label: 'Orthomyxoviridae - Influenza A H5 [Hemagglutinin gene, genomic RNA]' },
+    { value: 'INFLUENZAH3N2', label: 'Orthomyxoviridae - Influenza A H3N2 [Hemagglutinin gene, genomic RNA]' },
     { value: 'SWINEH1', label: 'Orthomyxoviridae - Swine influenza H1 (global classification) [Hemagglutinin gene, genomic RNA]' },
     { value: 'SWINEH1US', label: 'Orthomyxoviridae – Swine influenza H1 (US classification) [Hemagglutinin gene, genomic RNA]' },
     { value: 'SWINEH3', label: 'Orthomyxoviridae - Swine influenza H3 (global classification, beta version) [Hemagglutinin gene, genomic RNA]' },
@@ -82,8 +83,9 @@ define([
       this.inherited(arguments);
 
       // activate genome group selector when user is logged in
-      if (window.App.user) {
-        this.defaultPath = WorkspaceManager.getDefaultFolder() || this.activeWorkspacePath;
+      this.defaultPath = WorkspaceManager.getDefaultFolder() || this.activeWorkspacePath;
+      if (this.output_path) {
+        this.output_path.set('value', this.defaultPath);
       }
 
       this.onInputChange(true);
@@ -263,15 +265,16 @@ define([
       if (s === 'fasta_data') {
         this.input_sequence.set('checked', true);
         this.input_fasta.set('checked', false);
+        this.onInputChange();
         this.sequence.set('value', job_data['input_fasta_data']);
       }
       else if (s === 'fasta_file') {
         this.input_fasta.set('checked', true);
         this.input_sequence.set('checked', false);
+        this.onInputChange();
         this.query_fasta.set('value', job_data['input_fasta_file']);
       }
 
-      this.output_path.set('value', job_data['output_path']);
       this.virus_type.set('value', job_data['virus_type']);
     }
   });

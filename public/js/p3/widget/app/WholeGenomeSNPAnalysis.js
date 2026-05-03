@@ -20,8 +20,8 @@ define([
     requireAuth: true,
     applicationLabel: 'Whole Genome SNP Analysis',
     applicationDescription: 'The Whole Genome SNP Analysis service accepts genome groups. This service will identify single nucleotide polymorphisms (SNPs) for tracking viral and bacterial pathogens during outbreaks. The software, kSNP4 will identify SNPs and estimate phylogenetic trees based on those SNPs.',
-    applicationHelp: 'quick_references/services/Whole Genome SNP Analysis_service.html',
-    tutorialLink: 'tutorial/WholeGenome SNPAnalysis/WholeGenomeSNPAnalysis.html',
+    applicationHelp: 'quick_references/services/whole_genome_snp_analysis_service.html',
+    tutorialLink: 'tutorial/whole_genome_snp_analysis/whole_genome_snp_analysis_service.html',
     videoLink: '',
     pageTitle: 'Whole Genome SNP Analysis Service | BV-BRC',
     appBaseURL: 'WholeGenomeSNPAnalysis',
@@ -60,25 +60,26 @@ define([
 
     onAddGenomeGroup: function () {
       console.log("Fetching genome group path...");
-      
+
       var path = this.input_genome_group;
       if (!path) {
         console.warn("No genome group path provided.");
         return;
       }
-    
+
       when(WorkspaceManager.getObject(path), lang.hitch(this, function (res) {
         if (typeof res.data === "string") {
           res.data = JSON.parse(res.data);
         }
-    
-        if (res?.data?.id_list?.genome_id) {
+
+        // rewritten to not use chaining; crashed the optimizer
+        if (res && res.data && res.data.id_list && res.data.id_list.genome_id) {
           var newGenomeIds = res.data.id_list.genome_id;
           this.checkBacterialGenomes(newGenomeIds, groupType, false, path);
         }
       }));
     },
-    
+
 
         // function is from phylogenetic tree
         //  TO DO update to check genome
@@ -124,38 +125,6 @@ define([
       return values;
     },
 
-    onChangeMinMidLinkage: function () {
-      console.log('called_onchange event minmid')
-      if (this.min_mid_linkage.value !== null) {
-        this.max_strong_linkage.set("value", this.min_mid_linkage.value);
-      }
-    },
-
-    // can delete if we field remains disabled
-    onChangeMaxStrongLinkage: function () {
-      console.log('called_onchange event max')
-      if (this.max_strong_linkage.value !== null) {
-        console.log(this.max_strong_linkage.value);
-        this.min_mid_linkage.set("value", this.max_strong_linkage.value);
-      }
-    },
-    
-    onChangeMaxMidLinkage: function () {
-      console.log('called_onchange event mix mid')
-      if (this.max_mid_linkage.value !== null) {
-        this.min_weak_linkage.set("value", this.max_mid_linkage.value);
-      }
-    },
-
-    // can delete if we field remains disabled
-    onChangeMinWeakLinkage: function () {
-      console.log('called_onchange event minweak')
-      if (this.min_weak_linkage.value !== null) {
-        console.log(this.min_weak_linkage.value);
-        this.max_mid_linkage.set("value", this.min_weak_linkage.value);
-      }
-    },
-
     checkBaseParameters: function (values, seqcomp_values) {
       seqcomp_values.output_path = values.output_path;
       this.output_folder = values.output_path;
@@ -175,12 +144,21 @@ define([
           var sessionStorage = window.sessionStorage;
           if (sessionStorage.hasOwnProperty(rerun_key)) {
             var job_data = JSON.parse(sessionStorage.getItem(rerun_key));
-            this.setStatusFormFill(job_data);
-            this.setAlphabetFormFill(job_data);
-            this.setUnalignedInputFormFill(job_data);
-            this.setReferenceFormFill(job_data);
-            // this.addSequenceFilesFormFill(job_data);
-            this.setAlignerFormFill(job_data);
+
+            // Populate genome group selector
+            if (job_data.input_genome_group) {
+              var genome_group = job_data.input_genome_group;
+              if (Array.isArray(genome_group)) {
+                genome_group = genome_group[0];
+              }
+              this.input_genome_group.set('value', genome_group);
+            }
+
+            // Populate majority SNP threshold
+            if (job_data['majority-threshold']) {
+              this['majority-threshold'].set('value', job_data['majority-threshold']);
+            }
+
             this.form_flag = true;
           }
         } catch (error) {

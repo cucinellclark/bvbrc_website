@@ -20,8 +20,8 @@ define([
     requireAuth: true,
     applicationLabel: 'Core Genome MLST',
     applicationDescription: 'The Core Genome MLST service accepts genome groups. The genome groups are used to create and evaulate a core genome through MultiLocus Sequence Typing (MLST). The service uses a software tool called chewBBACA. This list of bacterial species this service supports are available at',
-    applicationHelp: 'quick_references/services/CoreGenomeMLST_service.html',
-    tutorialLink: 'tutorial/CoreGenomeMLST/CoreGenomeMLST.html',
+    applicationHelp: 'quick_references/services/core_genome_mlst.html',
+    tutorialLink: 'tutorial/core_genome_mlst/core_genome_mlst.html',
     videoLink: '',
     pageTitle: 'Core Genome MLST Service | BV-BRC',
     appBaseURL: 'CoreGenomeMLST',
@@ -39,36 +39,27 @@ define([
     startup: function () {
       var _self = this;
 
-      this.inherited(arguments);
       if (this._started) {
         return;
       }
-
-
-      // Call the startup of the base class explicitly
-      this.constructor.superclass.startup.apply(this, arguments);
-      this.inherited(arguments);
-
       if (this.requireAuth && (window.App.authorizationToken === null || window.App.authorizationToken === undefined)) {
         return;
       }
 
-      // Ensure FilteringSelect is preloaded
-        require(["dijit/form/FilteringSelect"], function(FilteringSelect) {
-        _self.inherited(arguments);
-        _self._started = true;
-        _self.defaultPath = WorkspaceManager.getDefaultFolder() || _self.activeWorkspacePath;
-        _self.output_path.set('value', _self.defaultPath);
+      this.inherited(arguments);
+      _self.defaultPath = WorkspaceManager.getDefaultFolder() || _self.activeWorkspacePath;
+      _self.output_path.set('value', _self.defaultPath);
 
-        // Initialize FilteringSelect manually
-        _self.initFilteringSelect();
+      // Initialize FilteringSelect manually
+      _self.initFilteringSelect();
 
-        try {
-          _self.intakeRerunForm();
-        } catch (error) {
-          console.error(error);
-        }
-      });
+      this._started = true;
+      this.form_flag = false;
+      try {
+        this.intakeRerunForm();
+      } catch (error) {
+        console.error(error);
+      }
     },
 
     initFilteringSelect(storeData) {
@@ -104,7 +95,8 @@ define([
           res.data = JSON.parse(res.data);
         }
 
-        if (res?.data?.id_list?.genome_id) {
+	// rewritten to not use chaining; crashed the optimizer
+        if (res && res.data && res.data.id_list && res.data.id_list.genome_id) {
           var newGenomeIds = res.data.id_list.genome_id;
           this.checkBacterialGenomes(newGenomeIds, groupType, false, path);
         }
@@ -224,12 +216,25 @@ define([
           var sessionStorage = window.sessionStorage;
           if (sessionStorage.hasOwnProperty(rerun_key)) {
             var job_data = JSON.parse(sessionStorage.getItem(rerun_key));
-            this.setStatusFormFill(job_data);
-            this.setAlphabetFormFill(job_data);
-            this.setUnalignedInputFormFill(job_data);
-            this.setReferenceFormFill(job_data);
-            // this.addSequenceFilesFormFill(job_data);
-            this.setAlignerFormFill(job_data);
+
+            // Populate genome group selector
+            if (job_data.input_genome_group) {
+              var genome_group = job_data.input_genome_group;
+              if (Array.isArray(genome_group)) {
+                genome_group = genome_group[0];
+              }
+              this.input_genome_group.set('value', genome_group);
+            }
+
+            // Populate reference schema selector
+            if (job_data.input_schema_selection) {
+              this.onSelectSchema();
+              var filteringSelect_ = registry.byId('input_schema_selection');
+              if (filteringSelect_) {
+                filteringSelect_.set('value', job_data.input_schema_selection);
+              }
+            }
+
             this.form_flag = true;
           }
         } catch (error) {

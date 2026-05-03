@@ -17,6 +17,7 @@ var google = require('./routes/google');
 var workspace = require('./routes/workspace');
 var outbreaks = require('./routes/outbreaks');
 var viewers = require('./routes/viewers');
+var auspice = require('./routes/auspice');
 var remotePage = require('./routes/remotePage');
 var search = require('./routes/search');
 var contentViewer = require('./routes/content');
@@ -29,20 +30,91 @@ var app = express();
 var httpProxy = require('http-proxy');
 var apiProxy = httpProxy.createProxyServer();
 
+// Trust the first proxy hop (reverse proxy like nginx/Apache)
+// This is required for express-rate-limit to correctly identify client IPs
+// when running behind a proxy that sets X-Forwarded-For
+app.set('trust proxy', 1);
+
+// Security middleware imports
+const helmet = require('helmet');
+const rateLimit = require('express-rate-limit');
+const { sanitizeUrlPath } = require('./lib/securityUtils');
+
+// Rate limiters for different route types
+const problemReportLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000, // 15 minutes
+  max: 10, // 10 requests per window per IP
+  message: { error: 'Too many problem reports submitted. Please try again later.' },
+  standardHeaders: true,
+  legacyHeaders: false
+});
+
+const feedLimiter = rateLimit({
+  windowMs: 1 * 60 * 1000, // 1 minute
+  max: 30, // 30 requests per minute per IP
+  message: { error: 'Too many feed requests. Please slow down.' },
+  standardHeaders: true,
+  legacyHeaders: false
+});
+
 // view engine setup
 app.set('views', path.join(__dirname, 'views'));
 app.set('view engine', 'ejs');
-app.use(favicon(path.join(__dirname, '/public/favicon.ico')));
+app.use(favicon(path.join(__dirname, '/public/favicon.ico'), { maxAge: '365d' }));
 app.use(logger('dev'));
 app.use(cookieParser(config.get('cookieSecret')));
+
+// Security headers with Helmet
+// CSP is disabled due to incompatibility with Dojo framework
+// Other important security headers are still applied:
+// - X-Frame-Options (prevents clickjacking)
+// - X-Content-Type-Options (prevents MIME sniffing)
+// - Strict-Transport-Security (enforces HTTPS)
+// - X-DNS-Prefetch-Control
+// - Referrer-Policy
+app.use(helmet({
+  contentSecurityPolicy: false,  // Disabled - Dojo framework incompatible
+  crossOriginEmbedderPolicy: false,  // Allow embedded content
+  crossOriginResourcePolicy: { policy: "cross-origin" },
+  hsts: {
+    maxAge: 31536000,  // 1 year in seconds
+    includeSubDomains: true,
+    preload: true
+  }
+}));
+
+// Block access to demo directories with legacy/vulnerable jQuery versions
+app.use(['/js/jDataView/demo', '/js/phyloview/testTree.html'], function(req, res) {
+  res.status(404).send('Not Found');
+});
+
+const proxyConfig = config.get('proxyConfig');
+if (proxyConfig) {
+  const proxy = require("express-http-proxy");
+  var prox;
+
+  for (const prox of proxyConfig) {
+    console.log(prox);
+    app.use(prox.local, proxy(prox.site, {
+      proxyReqPathResolver: req => req.originalUrl.replace(prox.local, ""),
+      https: true
+    }));
+  }
+}
 
 app.use(function (req, res, next) {
   // console.log("Config.production: ", config.production);
   // console.log("Session Data: ", req.session);
   req.config = config;
   req.production = config.get('production') || false;
-  req.productionLayers = ['p3/layer/core'];
+  req.productionLayers = [
+    'p3/layer/core'
+  ];
   req.package = packageJSON;
+
+  // Sanitize originalUrl for safe use in templates (prevents XSS in canonical URLs)
+  req.safeOriginalUrl = sanitizeUrlPath(req.originalUrl || '');
+
   // var authToken = "";
   // var userProf = "";
   req.applicationOptions = {
@@ -52,6 +124,7 @@ app.use(function (req, res, next) {
     probModelSeedServiceURL: config.get('probModelSeedServiceURL'), // for dashboard
     shockServiceURL: config.get('shockServiceURL'), // for dashboard
     workspaceServiceURL: config.get('workspaceServiceURL'),
+    workspaceDownloadServiceURL: config.get('workspaceDownloadServiceURL'),
     appBaseURL: config.get('appBaseURL'),
     appServiceURL: config.get('appServiceURL'),
     dataServiceURL: config.get('dataServiceURL'),
@@ -66,7 +139,16 @@ app.use(function (req, res, next) {
     jiraLabel: config.get('jiraLabel'),
     appVersion: packageJSON.version,
     userServiceURL: config.get('userServiceURL'),
-    localStorageCheckInterval: config.get('localStorageCheckInterval')
+    copilotApiURL: config.get('copilotApiURL') || false,
+    copilotDbURL: config.get('copilotDbURL') || false,
+    workflow_url: config.get('workflow_url') || false,
+    copilotEnablePublications: config.get('copilotEnablePublications') || false,
+    copilotEnableEnhancePrompt: config.get('copilotEnableEnhancePrompt') || false,
+    copilotEnableModelSelector: config.get('copilotEnableModelSelector') || false,
+    copilotEnableRagSelector: config.get('copilotEnableRagSelector') || false,
+    copilotEnableShowPromptDetails: config.get('copilotEnableShowPromptDetails') || false,
+    localStorageCheckInterval: config.get('localStorageCheckInterval'),
+    workspaceSelectorExcludeFolders: config.get('workspaceSelectorExcludeFolders') || []
   };
   // console.log("Application Options: ", req.applicationOptions);
   next();
@@ -95,6 +177,13 @@ app.use('*jbrowse.conf', express.static(path.join(__dirname, 'public/js/jbrowse.
 const staticHeaders = {
   maxage: '356d',
   setHeaders: function (res, path) {
+    // Append 'immutable' to existing Cache-Control header set by Express
+    var existingCacheControl = res.getHeader('Cache-Control');
+    if (existingCacheControl) {
+      res.setHeader('Cache-Control', existingCacheControl + ', immutable');
+    } else {
+      res.setHeader('Cache-Control', 'public, max-age=30758400, immutable');
+    }
     var d = new Date();
     d.setYear(d.getFullYear() + 1);
     res.setHeader('Expires', d.toGMTString())
@@ -106,10 +195,27 @@ app.use('/js/' + packageJSON.version + '/', [
   express.static(path.join(__dirname, 'public/js/'),staticHeaders)
 ]);
 
-app.use('/js/', express.static(path.join(__dirname, 'public/js/')));
+app.use('/js/', express.static(path.join(__dirname, 'public/js/'), {
+  maxage: config.get('production') ? '365d' : '1h',
+  setHeaders: function (res, path) {
+    var d = new Date();
+    if (config.get('production')) {
+      d.setYear(d.getFullYear() + 1);
+    } else {
+      d.setHours(d.getHours() + 1);
+    }
+    res.setHeader('Expires', d.toGMTString());
+  }
+}));
 app.use('/patric/images', express.static(path.join(__dirname, 'public/patric/images/'), {
   maxage: '365d',
   setHeaders: function (res, path) {
+    var existingCacheControl = res.getHeader('Cache-Control');
+    if (existingCacheControl) {
+      res.setHeader('Cache-Control', existingCacheControl + ', immutable');
+    } else {
+      res.setHeader('Cache-Control', 'public, max-age=31536000, immutable');
+    }
     var d = new Date();
     d.setYear(d.getFullYear() + 1);
     res.setHeader('Expires', d.toGMTString());
@@ -120,14 +226,28 @@ app.use('/public/pdfs/', [
     res.redirect('https://docs.patricbrc.org/tutorial/');
   }
 ]);
-app.use('/patric/', express.static(path.join(__dirname, 'public/patric/')));
-app.use('/public/', express.static(path.join(__dirname, 'public/')));
+app.use('/patric/', express.static(path.join(__dirname, 'public/patric/'), {
+  maxage: '365d',
+  setHeaders: function (res, path) {
+    var d = new Date();
+    d.setYear(d.getFullYear() + 1);
+    res.setHeader('Expires', d.toGMTString());
+  }
+}));
+app.use('/public/', express.static(path.join(__dirname, 'public/'), {
+  maxage: '365d',
+  setHeaders: function (res, path) {
+    var d = new Date();
+    d.setYear(d.getFullYear() + 1);
+    res.setHeader('Expires', d.toGMTString());
+  }
+}));
 app.use('/', routes);
 // app.use('/home-prev', prevHome);
-app.post('/reportProblem', reportProblem);
-app.post('/notifySubmitSequence', notifySubmitSequence);
-app.use('/linkedin', linkedin);
-app.use('/google', google);
+app.post('/reportProblem', problemReportLimiter, reportProblem);
+app.post('/notifySubmitSequence', problemReportLimiter, notifySubmitSequence);
+app.use('/linkedin', feedLimiter, linkedin);
+app.use('/google', feedLimiter, google);
 app.use('/workspace', workspace);
 app.use('/content', contentViewer);
 app.use('/webpage', contentViewer);
@@ -149,6 +269,41 @@ app.use('/help', help);
 app.use('/uploads', uploads);
 app.use('/users', users);
 app.use('/vendor/gexf-js', express.static(path.join(__dirname, 'node_modules', 'gexf-js')));
+
+
+// Embedded Nextstrain/Auspice viewer
+app.use('/charon', auspice);
+// Use the custom Auspice build produced by `npm run build:nextstrain` (output: ./dist)
+var auspiceDist = path.join(__dirname, 'public/js/auspice-custom/dist');
+// Keep favicon served from the Auspice package itself
+// Auspice runtime loads chunks at /dist/* (absolute); serve same assets at both paths
+app.use('/dist', express.static(auspiceDist));
+app.use('/nextstrain-viewer/dist', express.static(auspiceDist));
+// Serve the Auspice index.html for any route under /nextstrain-viewer
+// so client-side routing (e.g. /nextstrain-viewer/dengue/all) works.
+function sendAuspiceIndex(req, res) {
+  var fs = require('fs');
+  var indexPath = path.join(auspiceDist, 'index.html');
+  fs.readFile(indexPath, 'utf8', function (err, html) {
+    if (err) {
+      res.setHeader('Cache-Control', 'no-cache');
+      res.type('html').status(200).send(
+        '<!DOCTYPE html><html><head><meta charset="utf-8"><title>Nextstrain viewer</title></head><body style="font-family:sans-serif;padding:2rem;max-width:40em;">' +
+        '<h1>Nextstrain viewer not built</h1>' +
+        '<p>The embedded Nextstrain/Auspice viewer has not been built yet. Build it with:</p>' +
+        '<pre style="background:#f0f0f0;padding:0.75rem;">npm run build:nextstrain</pre>' +
+        '<p>Optional: add datasets under <code>./datasets/</code> and run the build to view them here.</p>' +
+        '</body></html>'
+      );
+      return;
+    }
+    html = html.replace(/href="\/favicon\.png"/g, 'href="/nextstrain-viewer/favicon.png"');
+    res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
+    res.type('html').send(html);
+  });
+}
+app.get(['/nextstrain-viewer', '/nextstrain-viewer/', '/nextstrain-viewer/*'], sendAuspiceIndex);
+
 // MTB Taxon Overview Route
 app.use('/pathogens/mtb', [
   function (req, res, next) {
@@ -166,13 +321,16 @@ app.use(function (req, res, next) {
 // error handlers
 
 // development error handler
-// will print stacktrace
+// will print stacktrace only in true development environment
 if (app.get('env') === 'development') {
   app.use(function (err, req, res, next) {
+    // Log full error for debugging
+    console.error('Development error:', err);
     res.status(err.status || 500);
     res.render('error', {
       message: err.message,
-      error: err
+      // Double-check NODE_ENV to prevent accidental exposure
+      error: process.env.NODE_ENV === 'development' ? err : {}
     });
   });
 }

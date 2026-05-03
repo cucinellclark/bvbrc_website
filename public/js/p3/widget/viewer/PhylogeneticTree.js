@@ -50,8 +50,14 @@ define([
           handleAs: "json"
         }), function(exp){
 
-          self.queryNode.innerHTML = "<b>" + exp.title + "</b>";
-          self.totalCountNode.innerHTML = " ( " + exp.samples + " Comparisons )";
+          // Clear and build queryNode content safely with DOM construction
+          domConstruct.empty(self.queryNode);
+          domConstruct.create('b', {
+            textContent: exp.title
+          }, self.queryNode, 'last');
+
+          // Set totalCountNode safely
+          self.totalCountNode.textContent = " ( " + exp.samples + " Comparisons )";
         });
       } */
     },
@@ -164,7 +170,7 @@ define([
           });
       }
       else if (fileCheck && !isNaN(fileCheck.index)) {
-        var objPath = fileCheck[0].split('=')[1];
+        var objPath = decodeURIComponent(fileCheck[0].split('=')[1]);
         WorkspaceManager.getObjects([objPath]).then(lang.hitch(this, function (objs) {
           var obj = objs[0];
           var treeDat = {};

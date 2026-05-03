@@ -120,6 +120,12 @@ define([
       });
 
       on(window, 'message', function (evt) {
+        // Security: Only accept postMessages from same origin to prevent XSS
+        // via malicious cross-origin messages (TIKI-W094-1)
+        if (evt.origin !== window.location.origin) {
+          return;
+        }
+
         var msg = evt.data;
         // console.log("window.message: ", msg);
         /* istanbul ignore else */
@@ -137,6 +143,12 @@ define([
         Parser.parse().then(function () {
           // console.log("ApplicationContainer: ", _self.getApplicationContainer());
           _self.startup();
+
+          // Initialize chat button
+          var chatButton = Registry.byId('chatButton');
+          if (chatButton) {
+            chatButton.startup();
+          }
         });
       });
     },
@@ -280,8 +292,13 @@ define([
       });
       /* istanbul ignore next */
       on(window, 'message', function (msg) {
-        // console.log('onMessage: ', msg);
-        if (msg && (msg.data === 'RemoteReady' || !msg.data || msg.origin=="https://syndication.twitter.com")) {
+        // Security: Only accept postMessages from same origin (TIKI-W094-1)
+        if (!msg || !msg.data || msg.origin !== window.location.origin) {
+          return;
+        }
+
+        // Additional validation for string JSON messages
+        if (typeof msg.data !== 'string' || !msg.data.trim().startsWith('{')) {
           return;
         }
 
@@ -292,7 +309,7 @@ define([
            Topic.publish(msg.topic, msg.payload);
           }
         } catch (err){
-          console.log("Error handling window message: ", msg,err)
+          // Silently ignore parse errors from non-JSON messages
         }
       }, '*');
 
@@ -504,11 +521,19 @@ define([
       return ch[0];
     },
 
-    getConstructor: function (cls) {
+    getConstructor: function (cls,layers) {
       var def = new Deferred();
-      require([cls], function (ctor) {
-        def.resolve(ctor);
-      });
+      if (layers && layers.length > 0) {
+        require(layers, function () {
+          require([cls], function (ctor) {
+            def.resolve(ctor);
+          });
+        });
+      } else {
+        require([cls], function (ctor) {
+          def.resolve(ctor);
+        });
+      }
       return def.promise;
     },
 
@@ -525,7 +550,8 @@ define([
 
       /*  istanbul ignore else */
       if (newNavState.widgetClass) {
-        ctor = this.getConstructor(newNavState.widgetClass);
+        layers = (window.App && window.App.production && newNavState.layers)?newNavState.layers:[]
+        ctor = this.getConstructor(newNavState.widgetClass, layers);
       } else {
         ctor = ContentPane;
       }

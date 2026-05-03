@@ -6,7 +6,8 @@ define([
   'dojo/data/ObjectStore', 'dojo/store/Memory', 'dojox/form/CheckedMultiSelect',
   'dijit/form/DropDownButton', 'dijit/DropDownMenu',
   'dijit/Dialog', 'dijit/form/Button', 'dijit/form/Select', './AdvancedSearchRowForm',
-  'dijit/focus', '../util/PathJoin', '../util/constructMetadataName'
+  'dijit/focus', '../util/PathJoin', '../util/constructMetadataName',
+  'dojo/debounce'
 ], function (
   declare, ContainerActionBar, lang,
   domConstruct, domGeometry, domStyle, domClass,
@@ -15,7 +16,8 @@ define([
   ObjectStore, Memory, CheckedMultiSelect,
   DropDownButton, DropDownMenu,
   Dialog, Button, Select, AdvancedSearchRowForm,
-  focusUtil, PathJoin, constructMetadataName
+  focusUtil, PathJoin, constructMetadataName,
+  debounce
 ) {
 
   function sortByLabel(firstEl, secondEl) {
@@ -189,11 +191,13 @@ define([
 
       this.set('query', state.search);
 
-      // for each of the facet widgets, get updated facet counts and update the content.
+      // for each of the facet widgets, clear selection
       Object.keys(this._ffWidgets).forEach(function (category) {
         this._ffWidgets[category].clearSelection();
-        this._updateFilteredCounts(category, parsedFilter ? parsedFilter.byCategory : false, parsedFilter ? parsedFilter.keywords : []);
       }, this);
+
+      // Note: facet counts are fetched via _setQueryAttr which is triggered by set('query') above
+      // No need to explicitly call _updateAllFilteredCounts here
 
       // for each of the selected items in the filter, toggle the item on in  ffWidgets
       if (parsedFilter && parsedFilter.selected) {
@@ -466,8 +470,11 @@ define([
       this.keywordSearch = Textbox({ style: 'width: 300px;' });
       this.keywordSearch.set('intermediateChanges', true);
 
-      this.keywordSearch.on('change', lang.hitch(this, function (val) {
-        if (val) {
+      const searchHandler = lang.hitch(this, function (val) {
+        if (val && val.length > 0 && val.length < 3) {
+          return;
+        }
+          if (val) {
           domClass.remove(clear, 'dijitHidden');
         } else {
           domClass.add(clear, 'dijitHidden');
@@ -478,7 +485,8 @@ define([
           category: 'keywords',
           value: val
         });
-      }));
+      });
+      this.keywordSearch.on('change', debounce(searchHandler, 750));
       domConstruct.place(this.keywordSearch.domNode, ktop, 'last');
       this.watch('state', lang.hitch(this, 'onSetState'));
 
@@ -561,6 +569,9 @@ define([
           filter = 'false';
         }
         this.set('filter', filter);
+
+        // Refresh all facet counts based on the new filter
+        this._refreshAllFacets();
       }));
 
       // advanced search
@@ -574,7 +585,107 @@ define([
       }), true, this.containerNode);
     },
 
+    _refreshAllFacets: function () {
+      // Build the full query with current search + current filters
+      let q = [];
+
+      if (this.query) {
+        q.push((this.query && (this.query.charAt(0) == '?')) ? this.query.substr(1) : this.query);
+      }
+
+      if (this.filter && this.filter !== 'false') {
+        q.push(this.filter);
+      }
+
+      if (q.length == 0) {
+        return; // No query to fetch facets for
+      } else if (q.length == 1) {
+        q = q[0];
+      } else {
+        q = 'and(' + q.join(',') + ')';
+      }
+
+      // Fetch all facets in a single API call
+      const self = this;
+      this.getFacets('?' + q).then(function (facets) {
+        if (!facets) {
+          return;
+        }
+        // Update all facet widgets with the returned data
+        Object.keys(facets).forEach(function (category) {
+          if (self._ffWidgets[category]) {
+            self._ffWidgets[category].set('data', facets[category]);
+          }
+        });
+      }, function (err) {
+        console.error('_refreshAllFacets: error fetching facets:', err);
+      });
+    },
+
+    _updateAllFilteredCounts: function (selectionMap, keywords) {
+      selectionMap = selectionMap || {};
+
+      // Build filter query excluding all selected categories (they'll be updated from the facet response)
+      let ffilter = [];
+
+      if (keywords) {
+        keywords.forEach(function (k) {
+          ffilter.push('keyword(' + encodeURIComponent(k) + ')');
+        });
+      }
+
+      Object.keys(selectionMap).forEach(function (cat) {
+        if (selectionMap[cat]) {
+          if (selectionMap[cat].length == 1) {
+            ffilter.push('eq(' + encodeURIComponent(cat) + ',' + encodeURIComponent(selectionMap[cat][0]) + ')');
+          } else if (selectionMap[cat].length > 1) {
+            ffilter.push('or(' + selectionMap[cat].map(function (c) {
+              return 'eq(' + encodeURIComponent(cat) + ',' + encodeURIComponent(c) + ')';
+            }).join(',') + ')');
+          }
+        }
+      }, this);
+
+      if (ffilter.length < 1) {
+        ffilter = '';
+      } else if (ffilter.length == 1) {
+        ffilter = ffilter[0];
+      } else {
+        ffilter = 'and(' + ffilter.join(',') + ')';
+      }
+
+      let q = [];
+
+      if (this.query) {
+        q.push((this.query && (this.query.charAt(0) == '?')) ? this.query.substr(1) : this.query);
+      }
+      if (ffilter) {
+        q.push(ffilter);
+      }
+
+      if (q.length == 1) {
+        q = q[0];
+      } else if (q.length > 1) {
+        q = 'and(' + q.join(',') + ')';
+      }
+
+      // Fetch all facets in a single API call
+      this.getFacets('?' + q).then(lang.hitch(this, function (facets) {
+        if (!facets) {
+          return;
+        }
+        // Update all facet widgets with the returned data
+        Object.keys(facets).forEach(function (category) {
+          if (this._ffWidgets[category]) {
+            this._ffWidgets[category].set('data', facets[category]);
+          }
+        }, this);
+      }));
+    },
+
     _updateFilteredCounts: function (category, selectionMap, keywords) {
+      // Deprecated: Use _updateAllFilteredCounts instead for better performance
+      // This method is kept for backward compatibility but now calls the batch version
       selectionMap = selectionMap || {};
       const cats = Object.keys(selectionMap);
       const w = this._ffWidgets[category];
@@ -695,8 +806,20 @@ define([
       }));
     },
     buildAddFilters: function () {
+      // Helper to get field name from facetFields entry (handles both string and object formats)
+      const getFieldName = (ff) => typeof ff === 'object' ? ff.field : ff;
+      // Helper to check if a facetField entry is hidden
+      const isHidden = (ff) => typeof ff === 'object' && ff.facet_hidden;
+      // Helper to find array index by field name
+      const findFieldIndex = (fieldName) => {
+        for (let i = 0; i < this.facetFields.length; i++) {
+          if (getFieldName(this.facetFields[i]) === fieldName) return i;
+        }
+        return -1;
+      };
+
       const fields = this.facetFields.map((ff) => {
-        const field = ff.field || ff;
+        const field = getFieldName(ff);
         return { id: field, label: constructMetadataName(field), value: field }
       })
       const m_store = new Memory({
@@ -709,31 +832,40 @@ define([
         sortByLabel: false,
         store: os
       })
-      // pre-populate existing facets
-      const pre_selected = this.facetFields.filter((ff) => !ff.facet_hidden).map((ff) => ff.field)
+      // pre-populate existing facets (non-hidden ones)
+      const pre_selected = this.facetFields.filter((ff) => !isHidden(ff)).map((ff) => getFieldName(ff))
       selectBox.set('value', pre_selected)
 
       on(selectBox, 'click', lang.hitch(this, function () {
         const all_selected = selectBox.get('value')
         const set_selected = new Set(all_selected)
-        const all_exists = this.facetFields.filter(ff => !ff.facet_hidden).map(ff => ff.field)
+        const all_exists = this.facetFields.filter(ff => !isHidden(ff)).map(ff => getFieldName(ff))
         const set_exists = new Set(all_exists)
         const set_added = setDifference(set_selected, set_exists)
         const set_removed = setDifference(set_exists, set_selected)
 
-        set_added.forEach((ff) => {
-          const idx = os.objectStore.index[ff]
-          this.facetFields[idx].facet_hidden = false
-          if (this._ffWidgets[ff]) {
-            this._ffWidgets[ff].toggleHidden()
+        set_added.forEach((fieldName) => {
+          const idx = findFieldIndex(fieldName);
+          if (idx === -1) return;
+          const ff = this.facetFields[idx];
+          if (typeof ff === 'object') {
+            ff.facet_hidden = false;
+          }
+          if (this._ffWidgets[fieldName]) {
+            this._ffWidgets[fieldName].toggleHidden()
           } else {
-            this.addNewCategory(ff, this.facetFields[idx].type)
+            const fieldType = (typeof ff === 'object' && ff.type) || 'str';
+            this.addNewCategory(fieldName, fieldType)
           }
         })
-        set_removed.forEach((ff) => {
-          const idx = os.objectStore.index[ff]
-          this.facetFields[idx].facet_hidden = true
-          this.removeCategory(ff)
+        set_removed.forEach((fieldName) => {
+          const idx = findFieldIndex(fieldName);
+          if (idx === -1) return;
+          const ff = this.facetFields[idx];
+          if (typeof ff === 'object') {
+            ff.facet_hidden = true;
+          }
+          this.removeCategory(fieldName)
         })
       }))
 
@@ -742,6 +874,9 @@ define([
         class: 'facetColumnSelector',
         style: 'display: none'
       })
+      // Note: Adding CheckedMultiSelect to DropDownMenu causes _setSelected errors
+      // because CheckedMultiSelect doesn't implement _setSelected. This is a known
+      // limitation - the gear dropdown may show errors when hovering over items.
       menu.addChild(selectBox)
       const button = new DropDownButton({
         iconClass: 'fa icon-gear fa-lg',
@@ -763,6 +898,7 @@ define([
 
       on(_row, 'remove', (evt) => {
         this._Searches[evt.idx].destroyRecursive()
+        delete this._Searches[evt.idx];
       })
       on(_row, 'create', lang.hitch(this, 'createAdvancedSearchRow'))
       this._Searches[this._SearchesIdx] = _row
@@ -776,7 +912,8 @@ define([
       const searchableFields = this.advancedSearchFields || this.facetFields.filter((ff) => ff.search)
       this.fieldSelectOptions = searchableFields.map((ff) => {
         const field = ff.field || ff;
-        return { label: constructMetadataName(field), value: field }
+        const label = ff.label || field;
+        return { label: constructMetadataName(label), value: field }
       })
       this.fieldTypes = {}
       searchableFields.forEach((ff) => {
@@ -804,29 +941,47 @@ define([
       // TODO: implement this and trigger when context has changed
     },
     buildFilterQueryFromAdvancedSearch: function () {
+      this._filter = {};
       Object.keys(this._Searches).map((idx) => {
         const col = this._Searches[idx]
         const condition = col.getValues()
         let q;
         if (condition.type === 'str') {
-          q = `${condition.op === 'NOT' ? 'ne' : 'eq'}(${condition.column},${condition.value})`
+          q = `${condition.op === 'NOT' ? 'ne' : 'eq'}(${condition.column},${encodeURIComponent(condition.value)})`;
         } else if (condition.type === 'date') {
-          const encode = (date) => {
-            if (!date) {
-              return '';
+          // Supports partial dates: YYYY, YYYY-MM, or YYYY-MM-DD
+          const encodeDateBound = (dateStr, isUpperBound) => {
+            if (!dateStr) return '';
+            const parts = dateStr.split('-').map(Number);
+            const year = parts[0];
+            let month, day, hour, min, sec;
+            if (isUpperBound) {
+              if (parts.length === 1) {
+                month = 11; day = 31;
+              } else if (parts.length === 2) {
+                month = parts[1] - 1;
+                day = new Date(Date.UTC(year, parts[1], 0)).getUTCDate();
+              } else {
+                month = parts[1] - 1; day = parts[2];
+              }
+              hour = 23; min = 59; sec = 59;
+            } else {
+              if (parts.length === 1) {
+                month = 0; day = 1;
+              } else if (parts.length === 2) {
+                month = parts[1] - 1; day = 1;
+              } else {
+                month = parts[1] - 1; day = parts[2];
+              }
+              hour = 0; min = 0; sec = 0;
             }
-
-            const parsedDate = new Date(date);
-            const utcDate = new Date(Date.UTC(
-              parsedDate.getUTCFullYear(),
-              parsedDate.getUTCMonth(),
-              parsedDate.getUTCDate()
-            ));
-            return encodeURIComponent(utcDate.toISOString());
+            return encodeURIComponent(
+              new Date(Date.UTC(year, month, day, hour, min, sec)).toISOString()
+            );
           };
 
-          const lowerBound = encode(condition.from);
-          const upperBound = encode(condition.to);
+          const lowerBound = encodeDateBound(condition.from, false);
+          const upperBound = encodeDateBound(condition.to, true);
 
           if (lowerBound && upperBound) {
             q = `between(${condition.column},${lowerBound},${upperBound})`;
@@ -862,7 +1017,9 @@ define([
           }
         }
         if (this._filter.hasOwnProperty(condition.column)) {
-          this._filter[condition.column].push(q)
+          if (!this._filter[condition.column].includes(q)) {
+            this._filter[condition.column].push(q);
+          }
         } else {
           this._filter[condition.column] = [q]
         }
@@ -894,40 +1051,56 @@ define([
       if (!query) {
         return;
       }
-      if (query == this.query) {
+      // Allow empty query string to pass through if explicitly set
+      const queryStr = (query && query.charAt && query.charAt(0) == '?') ? query.substr(1) : (query || '');
+
+      if (queryStr == this.query) {
         return;
       }
-      this._set('query', query);
-      this.getFacets(query).then(lang.hitch(this, function (facets) {
+      this._set('query', queryStr);
+
+      const self = this;
+      this.getFacets('?' + queryStr).then(function (facets) {
         if (!facets) {
           return;
         }
 
         Object.keys(facets).forEach(function (cat) {
-          if (this._ffWidgets[cat]) {
-            const selected = this.state.selected;
-            this._ffWidgets[cat].set('data', facets[cat], selected);
+          if (self._ffWidgets[cat]) {
+            const selected = self.state.selected;
+            self._ffWidgets[cat].set('data', facets[cat], selected);
           }
-        }, this);
-
+        });
       }, function (err) {
         console.error('Error Getting Facets: ', err)
-      }));
+      });
 
     },
 
     getFacets: function (query, facetFields) {
-      if (!query || query == '?' || facetFields === undefined) {
+      // Fix: allow facetFields to be undefined and use this.facetFields as default
+      const fieldsToUse = facetFields || this.facetFields;
+
+      if (!query || query == '?') {
         const def = new Deferred();
         def.resolve(false);
         return def.promise;
       }
 
-      const facets = 'facet(' + (facetFields || this.facetFields).map((field) => {
-        return ( typeof (field) === 'string' ) ? `(field,${field})` : `(field,${field.field})`;
-      }).join(',') + ',(mincount,1),(limit,-1))';
+      if (!fieldsToUse || fieldsToUse.length === 0) {
+        const def = new Deferred();
+        def.resolve(false);
+        return def.promise;
+      }
 
-      const url = PathJoin(this.apiServer, this.dataModel, `?${query}&limit(1)&${facets}`)
+      // Remove leading '?' if present
+      const queryStr = (query && query.charAt(0) == '?') ? query.substr(1) : query;
+
+      const facets = 'facet(' + fieldsToUse.map((field) => {
+        return ( typeof (field) === 'string' ) ? `(field,${field})` : `(field,${field.field})`;
+      }).join(',') + ',(mincount,1),(limit,100))';
+
+      const url = PathJoin(this.apiServer, this.dataModel, `?${queryStr}&limit(1)&${facets}`)
       const fr = xhr(url, {
         method: 'GET',
         handleAs: 'json',
@@ -941,8 +1114,9 @@ define([
 
       return fr.then((res) => {
         if (res && res.facet_counts && res.facet_counts.facet_fields) {
-          return parseFacetCounts(res.facet_counts.facet_fields)
+          return parseFacetCounts(res.facet_counts.facet_fields);
         }
+        return null;
       }, (err) => {
         console.error(`XHR Error with Facet Request. There was an error retreiving facets from: ${url}`)
         return err

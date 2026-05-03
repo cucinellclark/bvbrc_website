@@ -18,7 +18,7 @@ define([
     requireAuth: true,
     applicationLabel: 'Similar Genome Finder',
     applicationDescription: 'The Similar Genome Finder Service will find similar public genomes in BV-BRC or compute genome distance estimation using Mash/MinHash. It returns a set of genomes matching the specified similarity criteria.',
-    videoLink: 'https://youtu.be/hZu2qK5TcgU',
+    videoLink: 'https://youtube.com/playlist?list=PLWfOyhOW_OashHfld0w1DUkO7rQz6s8SA&si=Enh6GME_i4LMcXL8',
     pageTitle: 'Similar Genome Finder Service | BV-BRC',
     appBaseURL: '',
     applicationHelp: 'quick_references/services/similar_genome_finder_service.html',
@@ -99,7 +99,8 @@ define([
     validate: function () {
       // console.log("validate", this.genome_id.get('value'), this.fasta.get('value'), !(this.genome_id.get('value') == '' && this.fasta.get('value') == ''));
       var input_genome_valid = this.genome_id.get('value') != '';
-      var input_fasta_valid = this.fasta.get('value') != '';
+      // Check if fasta selector exists (it's only created when user is logged in)
+      var input_fasta_valid = this.fasta ? this.fasta.get('value') != '' : false;
       var input_valid = (input_genome_valid && !input_fasta_valid) || (!input_genome_valid && input_fasta_valid);
 
       var bac = this.org_bacterial.get('value');
@@ -186,11 +187,6 @@ define([
       query('.reSubmitBtn').style('visibility', 'visible');
 
       def.promise.then(function (q) {
-        // log GA
-        if (window.gtag) {
-          gtag('event', 'SimilarGenomeFinder', { event_category: 'Services', method: q.method });
-        }
-
         _self.result.set('state', { query: q, resultType: resultType });
       });
 

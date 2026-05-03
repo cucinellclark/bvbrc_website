@@ -4,6 +4,7 @@ const router = express.Router();
 const axios = require('axios');
 const qs = require('qs');
 const fs = require('fs');
+const { validateIntegerInRange, validateAllowedValue } = require('../lib/securityUtils');
 
 async function retrieveLinkedInInfo() {
   const configFile = config.get('linkedinConfigFile');
@@ -67,6 +68,9 @@ async function retrieveLinkedInInfo() {
   return configMap;
 }
 
+// Allowed values for LinkedIn API parameters
+const ALLOWED_SORT_VALUES = ['LAST_MODIFIED', 'CREATED'];
+
 router.get('/posts', async function (req, res) {
   try {
     const linkedinConfig = await retrieveLinkedInInfo();
@@ -74,6 +78,11 @@ router.get('/posts', async function (req, res) {
     {
       return;
     }
+
+    // Validate and sanitize query parameters to prevent injection
+    const count = validateIntegerInRange(req.query.count, 1, 100, 20);
+    const sortBy = validateAllowedValue(req.query.sortBy, ALLOWED_SORT_VALUES, 'LAST_MODIFIED');
+
     axios.get('https://api.linkedin.com/rest/posts', {
       'headers': {
         Authorization: `Bearer ${linkedinConfig.accessToken}`,
@@ -83,8 +92,8 @@ router.get('/posts', async function (req, res) {
       params: {
         author: encodeURIComponent(`urn:li:organization:${linkedinConfig.organizationId}`),
         q: 'author',
-        count: req.query.count || 20,
-        sortBy: req.query.sortBy || 'LAST_MODIFIED',
+        count: count,
+        sortBy: sortBy,
         fields: 'id'
       },
       paramsSerializer: (params) => {
@@ -97,8 +106,14 @@ router.get('/posts', async function (req, res) {
     }).then(response => {
       res.send(response.data);
     }).catch(error => {
+      // Log full error server-side for debugging (never expose to client)
+      console.error('LinkedIn API error:', error.message);
+
+      // Return only a generic error message to the client
+      // Never send the raw error object as it may contain sensitive data
+      // such as Authorization headers with Bearer tokens
       res.status(400).send({
-        message: error
+        message: 'Failed to retrieve LinkedIn posts'
       });
     });
   } catch (e) {

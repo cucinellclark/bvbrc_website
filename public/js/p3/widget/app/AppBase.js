@@ -67,12 +67,25 @@ define([
       }
 
       this.activeWorkspace = this.activeWorkspace || window.App.activeWorkspace;
-      this.activeWorkspacePath = this.activeWorkspacePath || window.App.activeWorkspacePath;
+      // Guard: Don't use activeWorkspacePath if it contains 'undefined'
+      var appPath = window.App.activeWorkspacePath;
+      if (appPath && appPath.indexOf && appPath.indexOf('undefined') !== -1) {
+        appPath = '';
+      }
+      this.activeWorkspacePath = this.activeWorkspacePath || appPath;
       this.inherited(arguments);
     },
 
     _setValueAttr: function (val) {
-      this.value = val || window.App.activeWorkspacePath;
+      // Guard: Don't use paths containing 'undefined'
+      var fallback = window.App.activeWorkspacePath;
+      if (fallback && fallback.indexOf && fallback.indexOf('undefined') !== -1) {
+        fallback = '';
+      }
+      if (val && val.indexOf && val.indexOf('undefined') !== -1) {
+        val = '';
+      }
+      this.value = val || fallback;
     },
 
     gethelp: function () {
@@ -206,6 +219,11 @@ define([
         });
       }
 
+      // Explicitly validate after all child widgets have started
+      // This ensures required fields (like output folder) are properly checked
+      // even when they start empty
+      this.validate();
+
       this._started = true;
     },
 
@@ -292,6 +310,9 @@ define([
         return;
       }
       return window.App.api.service('AppService.start_app2', [this.applicationName, values, start_params]).then(lang.hitch(this, function (results) {
+        // Immediately refresh job status and list so the new job appears in the UI
+        JobManager.refreshJobs();
+
         if (this.lookaheadJob) {
           var jobPath = `${this.output_path.value || ''}/${this.output_file.value || ''}`;
           var jobLabel = `${this.output_file.value || this.applicationName}`;
@@ -328,10 +349,6 @@ define([
         }
         _self.doSubmit(values, start_params).then(function (results) {
           console.log('Job Submission Results: ', results);
-
-          if (window.gtag) {
-            gtag('event', this.applicationName, { event_category: 'Services' });
-          }
 
           domClass.remove(_self.domNode, 'Working');
           domClass.add(_self.domNode, 'Submitted');

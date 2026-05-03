@@ -12,6 +12,7 @@ define([
     baseClass: 'ActionBar',
     constructor: function () {
       this._actions = {};
+      this.inSearch = false;
     },
     selection: null,
     currentContainerType: null,
@@ -86,6 +87,10 @@ define([
           }
         }
 
+        if (act.options.searchOnly && !this.inSearch) {
+            return false;
+        }
+
         // only allow genome sharing if all genomes are owned by user
         if (sel[0] && an === 'Share') {
           var notOwnedList = sel.filter(function (obj) {
@@ -117,11 +122,10 @@ define([
           return false;
         }
 
-        // if public or not owner, hide ability for upload, create folder, delete, share, etc
+        // if user has no write/admin/owner permission, hide upload, create folder, delete, share, etc
         else if (sel[0] && (
           'isPublic' in sel[0] ||
-          ['r', 'n'].indexOf(sel[0].user_permission) !== -1 ||
-          (sel[0].global_permission == 'r' && window.App.user.id != sel[0].owner_id)) &&
+          ['r', 'n'].indexOf(sel[0].user_permission) !== -1) &&
           ['Upload', 'CreateFolder', 'Delete', 'ShareFolder', 'Move', 'Rename', 'EditType'].indexOf(an) !== -1) {
           return false;
         }
