@@ -19,6 +19,9 @@ define([
 ){
     var scriptsReady = false;
     var pendingCallbacks = [];
+
+    var originalJQuery;
+    var original$;
     
     var loadGexfDependencies = function(callback) {
         if (scriptsReady) { callback(); return; }
@@ -244,9 +247,12 @@ define([
                 },
                 function(selection){
                     if (window.GexfJS && GexfJS.params) {
-                        GexfJS.params.pinnedElements = {}; // Clear the object
-                        // Force a redraw
-                        if (GexfJS.oldParams) delete GexfJS.oldParams.zoomLevel;
+                        GexfJS.params.userPins = {}; // Clear user pins
+                        this.rebuildPinnedElements(); // Rebuilds the graph to empty
+                        
+                        if (this.itemDetailPanel.customDisplayNode && this.itemDetailPanel.customDisplayNode.innerHTML.indexOf("Graph Summary") !== -1) {
+                            this.showDefaultSummary(); // Clear the Pinned Manifest UI
+                        }
                     }
                 },
                 true
@@ -557,6 +563,25 @@ define([
                 containerWidget: this
             });
             this.addChild(this.itemDetailPanel);
+            // 1. Add a unique class to our specific ItemDetailPanel's DOM node
+            domClass.add(this.itemDetailPanel.domNode, "gexf-custom-idp");
+            
+            // 2. Create a style element
+            var styleNode = document.createElement('style');
+            styleNode.type = 'text/css';
+            
+            // 3. Write a rule that ONLY targets .noItemSelection inside our unique class
+            var cssRule = ".gexf-custom-idp .noItemSelection { display: none !important; }";
+            
+            // 4. Safely append it
+            if (styleNode.styleSheet) {
+                styleNode.styleSheet.cssText = cssRule; // IE support
+            } else {
+                styleNode.appendChild(document.createTextNode(cssRule)); // Modern browsers
+            }
+            
+            // 5. Inject directly into the document <head> so Dojo can't strip it
+            document.getElementsByTagName('head')[0].appendChild(styleNode);
 
             this.setupActions();
             this.watch("state", lang.hitch(this, "onSetState"));
@@ -604,6 +629,53 @@ define([
             }));
         },
 
+        rebuildPinnedElements: function() {
+            if (!window.GexfJS) return;
+            GexfJS.params.pinnedElements = {};
+            if (GexfJS.params.userPins) {
+                Object.keys(GexfJS.params.userPins).forEach(function(pinName) {
+                    var pinObj = GexfJS.params.userPins[pinName];
+                    Object.keys(pinObj.elements).forEach(function(elId) {
+                        GexfJS.params.pinnedElements[elId] = pinObj.color;
+                    });
+                });
+            }
+            if (GexfJS.oldParams) delete GexfJS.oldParams.zoomLevel; 
+        },
+
+        applyColorToGraph: function(color) {
+            if (!window.GexfJS || !GexfJS.params) return;
+            if (!GexfJS.params.userPins) GexfJS.params.userPins = {};
+            
+            var name = GexfJS.params.currentHighlightName || "Custom Selection";
+            var elementsToPin = {};
+            var applied = false;
+
+            if (GexfJS.params.path_active && GexfJS.params.activeEdges) {
+                Object.keys(GexfJS.params.activeEdges).forEach(function(edgeId) {
+                    elementsToPin['e_' + edgeId] = true;
+                    applied = true;
+                });
+            } 
+            if (GexfJS.params.activeNodes && Object.keys(GexfJS.params.activeNodes).length > 0) {
+                Object.keys(GexfJS.params.activeNodes).forEach(function(nodeId) {
+                     elementsToPin['n_' + nodeId] = true;
+                     applied = true;
+                });
+            }
+
+            if (applied) {
+                // Save to persistent user pins, overwriting if the name already exists
+                GexfJS.params.userPins[name] = { color: color, elements: elementsToPin };
+                this.rebuildPinnedElements();
+                
+                // Refresh the summary panel to instantly show the new pin!
+                if (this.itemDetailPanel.customDisplayNode && this.itemDetailPanel.customDisplayNode.innerHTML.indexOf("Graph Summary") !== -1) {
+                    this.showDefaultSummary();
+                }
+            }
+        },
+
         showDefaultSummary: function() {
             if (!this.graphSummary || !this.itemDetailPanel || !this.itemDetailPanel.customDisplayNode) {
                 // If no summary exists, default to clearing the panel
@@ -642,7 +714,48 @@ define([
                 var paramsText = JSON.stringify(s.parameters).replace(/[{""}]/g, '').replace(/:/g, ': ');
                 html += '<div style="font-size:0.9em; margin-bottom:15px; color:#666;"><b>Params:</b> ' + paramsText + '</div>';
             }
+            var pins = (window.GexfJS && GexfJS.params) ? GexfJS.params.userPins : {};
+            
+            html += '<h4 style="margin-bottom:5px;">Pinned Manifest</h4>';
+            html += '<div style="max-height: 200px; overflow-y: auto; border: 1px solid #ccc; padding: 5px; font-size: 0.9em; background-color: #fafafa; margin-bottom: 15px;">';
+            
+            if (pins && Object.keys(pins).length > 0) {
+                html += '<ul style="margin:0; padding-left:5px; list-style-type: none;">';
+                
+                Object.keys(pins).forEach(function(pinName) {
+                    var pinColor = pins[pinName].color;
+                    html += '<li style="margin-bottom: 6px; display: flex; align-items: center;">';
+                    // The color swatch
+                    html += '<span style="display:inline-block; width:14px; height:14px; background-color:' + pinColor + '; border:1px solid #999; margin-right:8px; flex-shrink: 0;"></span>';
+                    // The Name
+                    html += '<span style="flex-grow: 1; word-wrap: break-word;">' + pinName + '</span>';
+                    // The 'X' Button
+                    html += '<a href="javascript:void(0)" onclick="window.removePin(\'' + pinName + '\'); return false;" style="color:#d9534f; text-decoration:none; font-weight:bold; font-size: 1.1em; padding-left: 8px;" title="Remove Pin">&#10006;</a>';
+                    html += '</li>';
+                });
+                
+                html += '</ul>';
+            } else {
+                // Show an empty state if nothing is pinned yet
+                html += '<div style="color:#999; font-style:italic; padding-left:5px;">No pinned items.</div>';
+            }
+            html += '</div>';
 
+            if (s['block_manifest'] && s['block_manifest'].length > 0) {
+                html += '<h4 style="margin-bottom:5px;">Syntenic Block Manifest</h4>';
+                // Using the same max-height and overflow-y: auto to ensure it scrolls!
+                html += '<div style="max-height: 250px; overflow-y: auto; border: 1px solid #ccc; padding: 5px; font-size: 0.9em; background-color: #fafafa; margin-bottom: 15px;">';
+                html += '<ul style="margin:0; padding-left:5px; list-style-type: square;">';
+                
+                s['block_manifest'].forEach(function(blockName) {
+                    // Pass the blockName as a second parameter to highlightSpecial
+                    html += '<li><a href="javascript:void(0)" onclick="window.highlightSpecial(\'block\', \'' + blockName + '\'); return false;" title="Highlight Block: ' + blockName + '">' + blockName + '</a></li>';
+                });
+                
+                html += '</ul>';
+                html += '</div>';
+            }
+            
             // Genome Manifest (Collapsible)
             if (s.contig_map) {
                 html += '<h4 style="margin-bottom:5px;">Genome Manifest</h4>';
@@ -653,13 +766,13 @@ define([
                     // Using native HTML5 details/summary for expand & collapse
                     html += '<details style="margin-bottom: 4px;">';
                     html += '<summary style="cursor:pointer; outline:none; font-weight:bold;">';
-                    html += '<a href="javascript:void(0)" onclick="window.displayPath(undefined, \'' + genomeId + '\', \'' + genomeAttrId + '\'); return false;" title="Highlight Genome">' + genomeId + '</a>';
+                    html += '<a href="javascript:void(0)" onclick="window.doHighlightPath(undefined, \'' + genomeId + '\', \'' + genomeAttrId + '\', \'Genome: ' + genomeId + '\'); return false;" title="Highlight Genome">' + genomeId + '</a>';
                     html += ' <span style="font-weight:normal; color:#666;">(' + contigs.length + ' contigs)</span>';
                     html += '</summary>';
                     
                     html += '<ul style="margin-top:2px; padding-left:25px; list-style-type: square;">';
                     contigs.forEach(function(contigId) {
-                        html += '<li><a href="javascript:void(0)" onclick="window.displayPath(undefined, \'' + contigId + '\', \'' + sequenceAttrId + '\'); return false;" title="Highlight Contig">' + contigId + '</a></li>';
+                        html += '<li><a href="javascript:void(0)" onclick="window.doHighlightPath(undefined, \'' + contigId + '\', \'' + sequenceAttrId + '\', \'Contig: ' + contigId + '\'); return false;" title="Highlight Contig">' + contigId + '</a></li>';
                     });
                     html += '</ul>';
                     html += '</details>';
@@ -692,8 +805,12 @@ define([
             }
 
             // --- 2. CREATE SPECIAL HIGHLIGHT FUNCTION ---
-            window.highlightSpecial = lang.hitch(this, function(type) {
+            window.highlightSpecial = lang.hitch(this, function(type, targetValue) {
                 if (!window.GexfJS || !GexfJS.params) return;
+                
+                var hlName = type.charAt(0).toUpperCase() + type.slice(1);
+                if (targetValue) hlName += ": " + targetValue;
+                GexfJS.params.currentHighlightName = hlName;
                 
                 // Deep clear of ALL highlight states
                 GexfJS.params.activeEdges = {};
@@ -702,7 +819,10 @@ define([
                 GexfJS.params.activeNode = -1; 
                 GexfJS.params.currentNode = -1;
                 GexfJS.params.activeNodes = {}; // Clean slate!
-                
+                var hlColor = GexfJS.params.highlightColorOverride || '#ff00ff';
+                this.rebuildPinnedElements();
+
+
                 if (type === 'inversions') {
                     var attrId = GexfJS._edge_attr_value['is_inversion'];
                     if (typeof attrId !== 'undefined' && GexfJS.path_highlights && GexfJS.path_highlights[attrId]) {
@@ -748,7 +868,22 @@ define([
                     if (typeof attrId !== 'undefined') {
                         GexfJS.graph.nodeList.forEach(function(node) {
                             if (node.attributes && node.attributes[attrId] != null && node.attributes[attrId] !== "" && node.attributes[attrId] !== "0") {
-                                GexfJS.params.pinnedElements['n_' + node.id] = '#ff00ff'; 
+                                GexfJS.params.pinnedElements['n_' + node.id] = hlColor;
+                                GexfJS.params.activeNodes[node.id] = true; 
+                            }
+                        });
+                    }
+                }
+                else if (type === 'block') {
+                    // IMPORTANT: Change 'block_name' to whatever the actual Node attribute is called in your GEXF!
+                    var attrId = GexfJS._node_attr_value['block'] || GexfJS._node_attr_value['block_id']; 
+                    
+                    if (typeof attrId !== 'undefined' && targetValue) {
+                        GexfJS.graph.nodeList.forEach(function(node) {
+                            if (node.attributes && node.attributes[attrId] === targetValue) {
+                                // Pin the matching nodes to a color (e.g., Magenta, or pick a new hex code like '#00aaff' for cyan)
+                                GexfJS.params.pinnedElements['n_' + node.id] = hlColor;
+                                // Add to activeNodes so the rest of the graph fades out
                                 GexfJS.params.activeNodes[node.id] = true; 
                             }
                         });
@@ -775,6 +910,8 @@ define([
 
                 var node = GexfJS.graph.nodeList[nodeIndex];
                 if (!node) return;
+                
+                GexfJS.params.currentHighlightName = "Node: " + (node.label || node.id);
 
                 var featureAttrIndex = null;
                 if (GexfJS._node_attr_value && GexfJS._node_attr_value["features"]) {
@@ -902,7 +1039,61 @@ define([
             window.setInterval = function() { return 999; }; 
 
             var gexf_dom = (new window.DOMParser()).parseFromString(gexfXMLData, "text/xml");
+            
+            // Initialize persistent pin storage
+            if (!GexfJS.params.userPins) GexfJS.params.userPins = {};
+            GexfJS.params.currentHighlightName = "Selection";
+
+            // Global function to Remove a Pin
+            window.removePin = lang.hitch(this, function(pinName) {
+                if (window.GexfJS && GexfJS.params.userPins) {
+                    delete GexfJS.params.userPins[pinName];
+                    this.rebuildPinnedElements();
+                    this.showDefaultSummary(); // Refresh the manifest
+                }
+            });
+
+            // Global wrapper for displayPath that captures the Name
+            window.doHighlightPath = lang.hitch(this, function(eid, pstr, pattr, name) {
+                if (window.GexfJS) GexfJS.params.currentHighlightName = name || pstr;
+                if (window.displayPath) window.displayPath(eid, pstr, pattr);
+            });
             startGraphViewer(gexf_dom);
+
+            // --- START: AUTO-PIN BLOCKS ---
+            if (this.graphSummary && this.graphSummary['block_manifest'] && this.graphSummary['block_manifest'].length > 0) {
+                // Determine the correct attribute ID for your blocks
+                var blockAttrId = GexfJS._node_attr_value['block'] || GexfJS._node_attr_value['block_id'] || GexfJS._node_attr_value['block_name'];
+                
+                if (typeof blockAttrId !== 'undefined') {
+                    // A pleasant, distinct categorical color palette (D3's Category 10)
+                    var palette =['#1f77b4', '#ff7f0e', '#2ca02c', '#d62728', '#9467bd', '#8c564b', '#e377c2', '#7f7f7f', '#bcbd22', '#17becf'];
+                    var colorIndex = 0;
+
+                    this.graphSummary['block_manifest'].forEach(function(blockName) {
+                        var elementsToPin = {};
+                        var applied = false;
+
+                        // Find all nodes belonging to this block
+                        GexfJS.graph.nodeList.forEach(function(node) {
+                            if (node.attributes && node.attributes[blockAttrId] === blockName) {
+                                elementsToPin['n_' + node.id] = true;
+                                applied = true;
+                            }
+                        });
+
+                        // If we found nodes, pin them with the next color in the palette
+                        if (applied) {
+                            var color = palette[colorIndex % palette.length];
+                            GexfJS.params.userPins["Block: " + blockName] = { color: color, elements: elementsToPin };
+                            colorIndex++;
+                        }
+                    });
+
+                    // Push these newly created pins to the renderer's active list
+                    this.rebuildPinnedElements();
+                }
+            }
 
             window.setInterval = originalSetInterval;
 
@@ -914,31 +1105,43 @@ define([
 
         applyColorToGraph: function(color) {
             if (!window.GexfJS || !GexfJS.params) return;
+            if (!GexfJS.params.userPins) GexfJS.params.userPins = {};
             
-            if (!GexfJS.params.pinnedElements) {
-                GexfJS.params.pinnedElements = {};
-            }
-            
-            var pinned = GexfJS.params.pinnedElements;
+            var name = GexfJS.params.currentHighlightName || "Custom Selection";
+            var elementsToPin = {};
             var applied = false;
 
-            // If paths are currently highlighted in the graph, color those Edges
+            // 1. Check for Active Edges (from displayPath links)
             if (GexfJS.params.path_active && GexfJS.params.activeEdges) {
                 Object.keys(GexfJS.params.activeEdges).forEach(function(edgeId) {
-                    pinned['e_' + edgeId] = color;
+                    elementsToPin['e_' + edgeId] = true;
                     applied = true;
                 });
             } 
-            // Otherwise, if a specific Node is selected, color that Node
-            else if (GexfJS.params.currentNode !== -1) {
-                var nodeId = GexfJS.params.currentNode;
-                pinned['n_' + nodeId] = color;
-                applied = true;
+            // 2. Check for Active Nodes (from Special Highlights like CNV)
+            if (GexfJS.params.activeNodes && Object.keys(GexfJS.params.activeNodes).length > 0) {
+                Object.keys(GexfJS.params.activeNodes).forEach(function(nodeId) {
+                     elementsToPin['n_' + nodeId] = true;
+                     applied = true;
+                });
+            }
+            if (!applied && GexfJS.params.currentNode !== -1) {
+                var n = GexfJS.graph.nodeList[GexfJS.params.currentNode];
+                if (n) {
+                    elementsToPin['n_' + n.id] = true;
+                    applied = true;
+                }
             }
 
-            // Force the graph to redraw to show the new colors
             if (applied) {
-                delete GexfJS.oldParams.zoomLevel; 
+                // Save to persistent user pins, overwriting if the name already exists
+                GexfJS.params.userPins[name] = { color: color, elements: elementsToPin };
+                this.rebuildPinnedElements();
+                
+                // Refresh the summary panel to instantly show the new pin!
+                if (this.itemDetailPanel.customDisplayNode && this.itemDetailPanel.customDisplayNode.innerHTML.indexOf("Graph Summary") !== -1) {
+                    this.showDefaultSummary();
+                }
             }
         },
 
@@ -1067,14 +1270,14 @@ define([
                     hierarchyHtml += '<div style="margin-top:5px;">';
                     // COLOR PICKER: Genome (Edge Group)
                     //hierarchyHtml += colorInput(genomeId, 'path');
-                    hierarchyHtml += '<a href="javascript:void(0)" style="font-weight:bold;" onclick="window.displayPath(undefined, \'' + genomeId + '\', \'' + genomeAttrId + '\'); return false;">' + genomeName + '</a>:';
+                    hierarchyHtml += '<a href="javascript:void(0)" style="font-weight:bold;" onclick="window.doHighlightPath(undefined, \'' + genomeId + '\', \'' + genomeAttrId + '\', \'Genome: ' + genomeName + '\'); return false;">' + genomeName + '</a>:';
                     hierarchyHtml += '<div style="padding-left:20px;">';
 
                     Object.keys(contigs).forEach(function(contigId) {
                         hierarchyHtml += '<div>';
                         // COLOR PICKER: Sequence (Edge Group)
                         //hierarchyHtml += colorInput(contigId, 'path');
-                        hierarchyHtml += '<a href="javascript:void(0)" onclick="window.displayPath(undefined, \'' + contigId + '\', \'' + sequenceAttrId + '\'); return false;">' + contigId + '</a>:';
+                        hierarchyHtml += '<a href="javascript:void(0)" onclick="window.doHighlightPath(undefined, \'' + contigId + '\', \'' + sequenceAttrId + '\', \'Contig: ' + contigId + '\'); return false;">' + contigId + '</a>:';
                         hierarchyHtml += '</div>';
                         
                         var feats = contigs[contigId];
@@ -1089,11 +1292,11 @@ define([
                 
                 // COLOR PICKER: All Genomes
                 //summaryHtml += '<div>' + colorInput(allGenomes.join(','), 'path');
-                summaryHtml += '<b><a href="javascript:void(0)" onclick="window.displayPath(undefined, \'' + allGenomes.join(',') + '\', \'' + genomeAttrId + '\'); return false;">Genomes[' + allGenomes.length + ']</a></b></div>';
+                summaryHtml += '<b><a href="javascript:void(0)" onclick="window.doHighlightPath(undefined, \'' + allGenomes.join(',') + '\', \'' + genomeAttrId + '\', \'Genomes: ' + allGenomes.join(', ') + '\'); return false;">Genomes[' + allGenomes.length + ']</a></b></div>';
                 
                 // COLOR PICKER: All Sequences
                 //summaryHtml += '<div>' + colorInput(allSequences.join(','), 'path');
-                summaryHtml += '<b><a href="javascript:void(0)" onclick="window.displayPath(undefined, \'' + allSequences.join(',') + '\', \'' + sequenceAttrId + '\'); return false;">Sequences[' + allSequences.length + ']</a></b></div>';
+                summaryHtml += '<b><a href="javascript:void(0)" onclick="window.doHighlightPath(undefined, \'' + allSequences.join(',') + '\', \'' + sequenceAttrId + '\', \'Sequences: ' + allSequences.join(', ') + '\'); return false;">Sequences[' + allSequences.length + ']</a></b></div>';
                 
                 summaryHtml += '</div>';
 
