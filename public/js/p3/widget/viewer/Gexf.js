@@ -23,12 +23,18 @@ define([
     var originalJQuery;
     var original$;
     
-    var loadGexfDependencies = function(callback) {
+var loadGexfDependencies = function(callback) {
         if (scriptsReady) { callback(); return; }
         pendingCallbacks.push(callback);
         if (pendingCallbacks.length > 1) { return; }
+
+        // --- NEW: Snapshot the original, site-wide jQuery before legacy scripts overwrite it ---
+        if (typeof originalJQuery === 'undefined') {
+            originalJQuery = window.jQuery;
+            original$ = window.$;
+        }
         
-        var stylesToLoad = [
+        var stylesToLoad =[
             '/vendor/gexf-js/styles/jquery-ui-1.10.3.custom.min.css',
             '/vendor/gexf-js/styles/gexfjs.css'
         ];
@@ -39,12 +45,15 @@ define([
                 link.rel = 'stylesheet';
                 link.type = 'text/css';
                 link.href = href;
+                
+                // --- NEW: Tag the CSS element ---
+                link.setAttribute('data-gexf-dep', 'true'); 
+                
                 document.getElementsByTagName('head')[0].appendChild(link);
             }
         });
         
-        // Using strict order loading
-        var scriptsToLoad = [
+        var scriptsToLoad =[
             '/vendor/gexf-js/js/jquery-2.0.2.min.js',
             '/vendor/gexf-js/js/jquery-ui-1.10.4.custom.min.js',
             '/vendor/gexf-js/js/jquery.mousewheel.min.js',
@@ -55,13 +64,18 @@ define([
             if (index >= scriptsToLoad.length) {
                 scriptsReady = true;
                 pendingCallbacks.forEach(function(cb){ cb(); });
+                pendingCallbacks =[];
                 return;
             }
             var script = document.createElement('script');
             script.type = 'text/javascript';
             script.src = scriptsToLoad[index];
+            
+            // --- NEW: Tag the Script element ---
+            script.setAttribute('data-gexf-dep', 'true');
+            
             script.onload = function() { loadScript(index + 1); };
-            script.onerror = function() { console.error("Failed to load script:", scriptsToLoad[index]); };
+            script.onerror = function() { console.error("Failed to load:", scriptsToLoad[index]); };
             document.getElementsByTagName('head')[0].appendChild(script);
         };
         loadScript(0);
@@ -600,9 +614,42 @@ define([
             this.onSetState("state", null, this.state);
         },
         
-        destroy: function(){
+destroy: function(){
+            // Clear resize listeners and rendering timers
             if (this._resizeHandle){ this._resizeHandle.remove(); }
             if (window.GexfJS && GexfJS.timeRefresh) { clearInterval(GexfJS.timeRefresh); }
+            
+            // --- START PRIORITY 1 CLEANUP ---
+            
+            // 1. Physically remove all legacy CSS and JS tags from the browser <head>
+            var deps = document.querySelectorAll('[data-gexf-dep="true"]');
+            for (var i = 0; i < deps.length; i++) {
+                if (deps[i].parentNode) {
+                    deps[i].parentNode.removeChild(deps[i]);
+                }
+            }
+
+            // 2. Restore the original BV-BRC jQuery so the rest of the site works perfectly
+            if (typeof originalJQuery !== 'undefined') window.jQuery = originalJQuery;
+            if (typeof original$ !== 'undefined') window.$ = original$;
+
+            // 3. Nuke the legacy global namespace to free up browser memory
+            window.GexfJS = undefined;
+            window.startGraphViewer = undefined;
+            
+            // 4. Clean up our custom monkey-patched global functions
+            window.displayNode = undefined;
+            window.highlightSpecial = undefined;
+            window.removePin = undefined;
+            window.doHighlightPath = undefined;
+
+            // 5. Reset the module loader flag!
+            // This guarantees that if the user clicks back to the graph later, 
+            // the dependencies will be freshly injected and the legacy jQuery will be re-established.
+            scriptsReady = false; 
+            
+            // --- END PRIORITY 1 CLEANUP ---
+
             this.inherited(arguments);
         },
 
