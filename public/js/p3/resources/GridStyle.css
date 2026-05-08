@@ -340,8 +340,34 @@
     border-bottom: 1px solid #333;
 }
 
-.hider-menu-group {
-    font-weight: 600;
-    text-transform: uppercase;
-    border-bottom: 1px solid #333;
+.phyloVirusLayout {
+    display: flex;
+    align-items: stretch;
+}
+
+.phyloVirusContent {
+    flex: 1;
+    min-width: 0;
+}
+
+.phyloVirusHeader {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    margin: 5px 0;
+}
+
+.phyloVirusActionBarHost {
+    width: 56px;
+    flex-shrink: 0;
+    /* Stretch to full height of the flex row */
+    display: flex;
+    flex-direction: column;
+}
+
+.phyloVirusActionBarHost > .ActionBar {
+    flex: 1;
+    height: 100%;
+    box-sizing: border-box;
+    margin-right: 0;
 }
