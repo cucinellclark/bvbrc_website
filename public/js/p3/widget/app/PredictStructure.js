@@ -24,6 +24,7 @@ define([
     required: true,
     defaultPath: '',
     validLigands: true,
+    validSmiles: true,
 
     startup: function () {
       var _self = this;
@@ -126,8 +127,6 @@ define([
       if (this.input_file && this.input_file.get('value')) { return true; }
       if (this.dna_file && this.dna_file.get('value')) { return true; }
       if (this.rna_file && this.rna_file.get('value')) { return true; }
-      if (this.ligand && this._parseLigands(this.ligand.get('value')).length > 0) { return true; }
-      if (this.smiles && this._parseLines(this.smiles.get('value')).length > 0) { return true; }
       return false;
     },
 
@@ -139,6 +138,78 @@ define([
 
     _hasRequiredMsa: function () {
       return !this._isMsaRequired() || (this.msa_file && this.msa_file.get('value'));
+    },
+
+    _isValidSmiles: function (smiles) {
+      // Must contain only legal SMILES characters
+      if (!/^[A-Za-z0-9@+\-\[\]()\=#:\/\\\.%*]+$/.test(smiles)) {
+        return false;
+      }
+
+      // Must start with a valid atom: bracket atom [..], or organic-subset atom
+      // Organic subset: B, C, N, O, P, S, F, Cl, Br, I (and aromatic b,c,n,o,p,s)
+      if (!/^(\[|B(?!r)|C(?!l)|N|O|P|S(?!i)|F|Cl|Br|I|b|c|n|o|p|s)/.test(smiles)) {
+        return false;
+      }
+
+      // Must contain at least one atom (letter that is a valid element start)
+      // Reject strings that are purely digits/symbols with no atom letter
+      if (!/[A-Za-z]/.test(smiles)) {
+        return false;
+      }
+
+      // Check balanced parentheses and brackets
+      var parenDepth = 0;
+      var bracketDepth = 0;
+      var inBracket = false;
+      for (var i = 0; i < smiles.length; i++) {
+        var c = smiles[i];
+        if (c === '[') {
+          bracketDepth++;
+          inBracket = true;
+        } else if (c === ']') {
+          bracketDepth--;
+          inBracket = false;
+          if (bracketDepth < 0) { return false; }
+        } else if (!inBracket) {
+          if (c === '(') { parenDepth++; }
+          else if (c === ')') {
+            parenDepth--;
+            if (parenDepth < 0) { return false; }
+          }
+        }
+      }
+      if (parenDepth !== 0 || bracketDepth !== 0) { return false; }
+
+      // Reject bare backslashes not used as bond stereo (must be followed by a valid char)
+      // A lone \ or \\ at end is invalid
+      if (/\\$/.test(smiles)) { return false; }
+
+      // Reject strings with no valid organic-subset atom or bracket atom at all.
+      // Valid atom pattern: bracket [...] or one of B,C,N,O,P,S,F,Cl,Br,I (case-sensitive for capitals),
+      // or aromatic b,c,n,o,p,s
+      var atomPattern = /\[|(?:Cl|Br|[BCNOPSFIbcnops])/;
+      if (!atomPattern.test(smiles)) { return false; }
+
+      return true;
+    },
+
+    checkSmiles: function () {
+      var lines = this.smiles ? this._parseLines(this.smiles.get('value')) : [];
+      var _self = this;
+      var firstInvalid = -1;
+      lines.forEach(function (line, idx) {
+        if (firstInvalid === -1 && !_self._isValidSmiles(line)) {
+          firstInvalid = idx + 1;
+        }
+      });
+      this.validSmiles = firstInvalid === -1;
+      if (this.smiles_message) {
+        this.smiles_message.textContent = this.validSmiles
+          ? ''
+          : 'Invalid SMILES string on line ' + firstInvalid + '. Check for unbalanced brackets/parentheses or illegal characters.';
+      }
+      this.checkParameterRequiredFields();
     },
 
     checkLigands: function () {
@@ -157,7 +228,7 @@ define([
 
     validate: function () {
       var valid = this.inherited(arguments);
-      if (!valid || !this._hasAnyBiomoleculeInput() || !this._hasRequiredMsa() || !this.validLigands) {
+      if (!valid || !this._hasAnyBiomoleculeInput() || !this._hasRequiredMsa() || !this.validLigands || !this.validSmiles) {
         if (this.submitButton) { this.submitButton.set('disabled', true); }
         return false;
       }
@@ -169,7 +240,8 @@ define([
         this._hasAnyBiomoleculeInput() &&
         this.output_path.get('value') &&
         this._hasRequiredMsa() &&
-        this.validLigands
+        this.validLigands &&
+        this.validSmiles
       ) {
         this.validate();
       } else {
@@ -201,6 +273,7 @@ define([
       if (job_params.output_file) { this.output_file.set('value', job_params.output_file); }
 
       this.checkLigands();
+      this.checkSmiles();
       this.onToolChange();
     },
 

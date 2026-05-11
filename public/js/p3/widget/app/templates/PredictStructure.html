@@ -106,7 +106,7 @@
               style="resize: none; height:110px; width:96%; margin-left:10px; font-family: monospace; font-size:12px;"
               data-dojo-type="dijit/form/SimpleTextarea"
               data-dojo-attach-event="onChange:checkLigands"
-              data-dojo-props="rows:6, placeholder:'ATP, NAD, NAG', intermediateChanges:true, trim:true"></textarea>
+              data-dojo-props="rows:6, placeholder:'ATP, NAD, NAG', trim:true, intermediateChanges:true"></textarea>
             <div class="warning" data-dojo-attach-point="ligand_message"
               style="color:#b50707; margin-left:10px; min-height:1em;"></div>
           </div>
@@ -115,8 +115,10 @@
             <textarea id="${id}_smiles" data-dojo-attach-point="smiles" name="smiles"
               style="resize: none; height:110px; width:96%; margin-left:10px; font-family: monospace; font-size:12px;"
               data-dojo-type="dijit/form/SimpleTextarea"
-              data-dojo-attach-event="onChange:checkParameterRequiredFields"
-              data-dojo-props="rows:6, placeholder:'Enter one SMILES string per line', intermediateChanges:true, trim:true"></textarea>
+              data-dojo-attach-event="onChange:checkSmiles"
+              data-dojo-props="rows:6, placeholder:'Enter one SMILES string per line', trim:true, intermediateChanges:true"></textarea>
+            <div class="warning" data-dojo-attach-point="smiles_message"
+              style="color:#b50707; margin-left:10px; min-height:1em;"></div>
           </div>
         </div>
       </div>
