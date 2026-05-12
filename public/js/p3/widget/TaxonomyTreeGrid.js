@@ -136,7 +136,8 @@ define([
         label: 'Name',
         field: 'taxon_name',
         shouldExpand: function (row, level, prevExpanded) {
-          // console.log("Should Expand? ", row, level, prevExpanded)
+          // Expand the whole tree at once when search is active
+          if (this.grid && this.grid._searchExpandAll) { return true; }
           return (prevExpanded || (level < 1));
         }
       }),

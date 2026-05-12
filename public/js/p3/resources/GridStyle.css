@@ -218,6 +218,79 @@
 	font-weight: bold;
 }
 
+/* Taxonomy tab search bar */
+.TaxonSearchBar {
+    display: flex;
+    align-items: center;
+    height: 40px;
+    padding: 0 12px;
+    background: #f9f9f9;
+    box-sizing: border-box;
+}
+
+.TaxonSearchIcon {
+    color: #999;
+    font-size: 14px;
+    margin-right: 8px;
+    flex-shrink: 0;
+}
+
+.TaxonSearchInput {
+    flex: 1;
+    max-width: 320px;
+    padding: 4px 8px;
+    border: 1px solid #ccc;
+    border-radius: 3px;
+    font-size: 13px;
+    outline: none;
+    background: #fff;
+}
+
+.TaxonSearchInput:focus {
+    border-color: #2c7a7b;
+    box-shadow: 0 0 0 2px rgba(44, 122, 123, 0.15);
+}
+
+.TaxonSearchClear {
+    display: none;
+    margin-left: 6px;
+    color: #999;
+    font-size: 18px;
+    line-height: 1;
+    cursor: pointer;
+    padding: 0 3px;
+    flex-shrink: 0;
+}
+
+.TaxonSearchClear:hover {
+    color: #333;
+}
+
+.TaxonSearchSpinner {
+    display: none;
+    margin-left: 10px;
+    color: #2c7a7b;
+    font-size: 14px;
+    flex-shrink: 0;
+}
+
+.TaxonNoResults {
+    display: none;
+    margin-left: 12px;
+    padding: 3px 10px;
+    background: #fff3cd;
+    border: 1px solid #ffc107;
+    border-radius: 3px;
+    color: #856404;
+    font-size: 13px;
+    font-weight: 600;
+    flex-shrink: 0;
+}
+
+.TaxonTreeGrid {
+    position: relative;
+}
+
 .TaxonTreeGrid .dgrid-cell {
     border: 0;
 }
