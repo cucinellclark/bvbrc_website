@@ -119,11 +119,13 @@
                     <div class="appRow">
                         <label class="paramlabel">Reference</label><br>
                         <div style="margin-top:5px;">
-                            <input type="radio" data-dojo-type="dijit/form/RadioButton" data-dojo-attach-point="reference_mode_genome" name="reference_mode" value="genome" checked="checked" data-dojo-attach-event="onChange:onReferenceModeChange" />
-                            <label class="paramlabel" style="margin-right:12px;">Select Genome</label>
-                            <input type="radio" data-dojo-type="dijit/form/RadioButton" data-dojo-attach-point="reference_mode_auto" name="reference_mode" value="auto" data-dojo-attach-event="onChange:onReferenceModeChange" />
-                            <label class="paramlabel" style="margin-right:12px;">Auto (Minhash)</label>
-                            <input type="radio" data-dojo-type="dijit/form/RadioButton" data-dojo-attach-point="reference_mode_genbank" name="reference_mode" value="genbank" data-dojo-attach-event="onChange:onReferenceModeChange" />
+                            <span style="display:none;">
+                                <input type="radio" data-dojo-type="dijit/form/RadioButton" data-dojo-attach-point="reference_mode_genome" name="reference_mode" value="genome" data-dojo-attach-event="onChange:onReferenceModeChange" />
+                                <label class="paramlabel" style="margin-right:12px;">Select Genome</label>
+                                <input type="radio" data-dojo-type="dijit/form/RadioButton" data-dojo-attach-point="reference_mode_auto" name="reference_mode" value="auto" data-dojo-attach-event="onChange:onReferenceModeChange" />
+                                <label class="paramlabel" style="margin-right:12px;">Auto (Minhash)</label>
+                            </span>
+                            <input type="radio" data-dojo-type="dijit/form/RadioButton" data-dojo-attach-point="reference_mode_genbank" name="reference_mode" value="genbank" checked="checked" data-dojo-attach-event="onChange:onReferenceModeChange" />
                             <label class="paramlabel" style="margin-right:12px;">GenBank Accession</label>
                             <input type="radio" data-dojo-type="dijit/form/RadioButton" data-dojo-attach-point="reference_mode_fasta" name="reference_mode" value="fasta" data-dojo-attach-event="onChange:onReferenceModeChange" />
                             <label class="paramlabel">Upload FASTA</label>
