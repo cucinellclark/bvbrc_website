@@ -123,6 +123,7 @@ define([
       if (this.getReferenceMode() === 'auto') {
         this.runAutoReferenceSearch();
       }
+      this.checkParameterRequiredFields();
     },
 
     getSimilarReferenceInputPath: function () {
@@ -252,6 +253,7 @@ define([
         singleBox.style.display = 'none';
         sraBox.style.display = 'block';
       }
+      this.checkParameterRequiredFields();
     },
 
     openJobsList: function () {
@@ -316,6 +318,17 @@ define([
       const hasOutputPath = this.output_path.get('value');
       const hasOutputName = this.output_file.get('displayedValue');
       const strategy = this.strategy && this.strategy.get('value');
+
+      // Require at least one valid read source
+      let hasReads = false;
+      if (this.sraAccessionCheck && this.sraAccessionCheck.get('checked')) {
+        hasReads = this.isSRAValid;
+      } else if (this.singleReadCheck && this.singleReadCheck.get('checked')) {
+        hasReads = !!(this.read && this.read.get('value'));
+      } else {
+        hasReads = !!(this.read1 && this.read1.get('value')) && !!(this.read2 && this.read2.get('value'));
+      }
+
       let hasReference = true;
 
       if (strategy === 'reference-guided') {
@@ -349,7 +362,7 @@ define([
         }
       }
 
-      if (hasOutputPath && hasOutputName && hasReference) {
+      if (hasOutputPath && hasOutputName && hasReads && hasReference) {
         this.validate();
       } else {
         if (this.submitButton) {
@@ -388,6 +401,7 @@ define([
 
       if (!accession.match(/^[a-z]{3}[0-9]+$/i)) {
         this.srr_accession_validation_message.innerHTML = 'Please provide a valid SRA number';
+        this.checkParameterRequiredFields();
       } else {
         this.srr_accession.set('disabled', true);
         this.srr_accession_validation_message.innerHTML = 'Validating ' + accession + '.';
@@ -411,11 +425,13 @@ define([
               }
 
               this.srr_accession.set('disabled', false);
+              this.checkParameterRequiredFields();
             })
           );
         } catch (e) {
           console.error(e);
           this.srr_accession_validation_message.innerHTML = 'Something went wrong. Please try again.';
+          this.checkParameterRequiredFields();
         }
       }
     },
