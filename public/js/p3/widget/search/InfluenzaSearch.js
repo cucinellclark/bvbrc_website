@@ -780,8 +780,8 @@ define([
 
       // Node → column name mappings: add the column when the user filled in a value
       var nodeCols = [
-        [this.haSubtypeNode,        'h_subtype'],
-        [this.naSubtypeNode,        'n_subtype'],
+        [this.haSubtypeNode,        'h_type'],
+        [this.naSubtypeNode,        'n_type'],
         [this.fullSubtypeNode,      'subtype'],
         [this.fluBSubtypeNode,      'subtype'],
         [this.h1CladeGlobalNode,    'h1_clade_global'],
@@ -798,7 +798,7 @@ define([
         [this.isolationSourceNode,  'isolation_source'],
         [this.passageNode,          'passage'],
         [this.vaccineStrainNode,    'vaccine_strain'],
-        [this.referenceNode,        'reference'],
+        [this.referenceNode,        'reference_genome'],
         [this.geneNode,             'gene'],
         [this.productNode,          'product']
       ];
