@@ -555,7 +555,8 @@ define([
         if (typeof this.onSelectTree === 'function') {
           this.onSelectTree({
             url: url, name: name, definition: def,
-            groupTitle: groupTitle || '', section: sectionLabel || ''
+            groupTitle: groupTitle || '', section: sectionLabel || '',
+            metadata: metadata || null
           });
         }
       })));
