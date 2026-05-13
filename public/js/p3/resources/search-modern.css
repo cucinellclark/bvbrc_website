@@ -15,6 +15,7 @@
   --bvs-label: #466b7e;
   --bvs-muted: #4f6b77;
   --bvs-text: #09456f;
+  --bvs-text-muted: #777;
   --bvs-border: #d3d3d3;
   --bvs-border-accent: #b5cde0;
   --bvs-bg-accent: #eaf1f7;
@@ -152,6 +153,14 @@
   border-color: var(--bvs-primary-dark);
   color: #fff;
   box-shadow: 0 2px 6px rgba(9, 69, 111, 0.18);
+}
+
+/* Multi-select chip group hint label */
+.bvs-search .bvs-multi-hint {
+  font-weight: normal;
+  font-size: 11px;
+  color: var(--bvs-text-muted);
+  margin-left: 4px;
 }
 
 /* ---------- Accordion ---------- */

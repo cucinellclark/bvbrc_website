@@ -156,7 +156,7 @@ define([
 
     // Current state
     selectedDataType: 'genome',
-    selectedVirusType: 'A',
+    selectedVirusTypes: null,
 
     postCreate: function () {
       this.inherited(arguments);
@@ -282,9 +282,11 @@ define([
       var virusTypeBtns = [this.btnFluA, this.btnFluB, this.btnFluC, this.btnFluD];
       virusTypeBtns.forEach(function (btn) {
         on(btn, 'click', function () {
-          self._selectVirusType(btn.getAttribute('data-value'));
+          self._toggleVirusType(btn.getAttribute('data-value'));
         });
       });
+      // Initialize default selection
+      this._setVirusTypes(['A']);
 
       // ===== Accordion toggles =====
       on(this.subtypeAccordionHeader, 'click', lang.hitch(this, function () {
@@ -373,13 +375,30 @@ define([
     },
 
     // ===== Virus type button selection =====
-    _selectVirusType: function (type) {
-      this.selectedVirusType = type;
+    _toggleVirusType: function (type) {
+      var types = (this.selectedVirusTypes || []).slice();
+      var idx = types.indexOf(type);
+      if (idx === -1) {
+        types.push(type);
+      } else {
+        // Prevent deselecting last selection
+        if (types.length === 1) return;
+        types.splice(idx, 1);
+      }
+      this._setVirusTypes(types);
+    },
 
-      // Update button styles via class
+    _setVirusTypes: function (types) {
+      // Preserve canonical order: A, B, C, D
+      var order = ['A', 'B', 'C', 'D'];
+      types = order.filter(function (t) {
+        return types.indexOf(t) !== -1;
+      });
+      this.selectedVirusTypes = types;
+
       var btns = [this.btnFluA, this.btnFluB, this.btnFluC, this.btnFluD];
       btns.forEach(function (btn) {
-        if (btn.getAttribute('data-value') === type) {
+        if (types.indexOf(btn.getAttribute('data-value')) !== -1) {
           domClass.add(btn, 'is-active');
         } else {
           domClass.remove(btn, 'is-active');
@@ -389,29 +408,33 @@ define([
       this._syncSubtypeAndProteinUI();
     },
 
+    _selectVirusType: function (type) {
+      this._setVirusTypes([type]);
+    },
+
     _syncSubtypeAndProteinUI: function () {
       var isProtein = this.selectedDataType === 'protein';
-      var virusType = this.selectedVirusType;
-
-      var isFluA = virusType === 'A';
-      var isFluB = virusType === 'B';
-      var isFluCD = virusType === 'C' || virusType === 'D';
+      var types = this.selectedVirusTypes || [];
+      var hasA = types.indexOf('A') !== -1;
+      var hasB = types.indexOf('B') !== -1;
+      var hasAorB = hasA || hasB;
 
       // Title
-      if (isFluA) {
+      if (hasA) {
         this.subtypeAccordionTitle.textContent = 'Subtype and Classification';
       } else {
         this.subtypeAccordionTitle.textContent = 'Subtype';
       }
 
-      // Subtype sections
-      this.subtypeSection.style.display = isFluA ? '' : 'none';
-      this.fluBSubtypeSection.style.display = isFluB ? '' : 'none';
-      this.cladeRow.style.display = isFluA ? '' : 'none';
+      // Show each type's subtype section independently based on selection
+      this.subtypeSection.style.display = hasA ? '' : 'none';
+      this.fluBSubtypeSection.style.display = hasB ? '' : 'none';
+      this.cladeRow.style.display = hasA ? '' : 'none';
 
-      // Subtype accordion shown for Flu A or Flu B (any data type)
-      var showSubtypeAccordion = isFluA || isFluB;
-      this.subtypeAccordion.style.display = showSubtypeAccordion ? '' : 'none';
+      this.fluBSubtypeSection.style.marginTop = (hasA && hasB) ? '12px' : '';
+
+      // Subtype accordion visible if A or B is in selection
+      this.subtypeAccordion.style.display = hasAorB ? '' : 'none';
 
       // Protein accordion only for protein data type
       this.proteinAccordion.style.display = isProtein ? '' : 'none';
@@ -435,10 +458,9 @@ define([
         });
       }
 
-      // NA controls only for Flu A/B
-      var hasNA = isFluA || isFluB;
-      this.segNALabel.style.display = hasNA ? '' : 'none';
-      if (!hasNA && this.segNANode.get('value')) {
+      // NA segment only when an A or B virus type is in the selection (C/D have no NA segment)
+      this.segNALabel.style.display = hasAorB ? '' : 'none';
+      if (!hasAorB && this.segNANode.get('value')) {
         this.segNANode.set('value', false);
       }
 
@@ -449,22 +471,17 @@ define([
         if (this.productNode) this.productNode.set('value', '');
       }
 
-      // Optional cleanup:
-      // if Flu C/D, clear subtype/clade filters that are hidden
-      if (isFluCD) {
-        if (this.haSubtypeNode) this.haSubtypeNode.set('value', '');
-        if (this.naSubtypeNode) this.naSubtypeNode.set('value', '');
-        if (this.fullSubtypeNode) this.fullSubtypeNode.set('value', '');
-        if (this.fluBSubtypeNode) this.fluBSubtypeNode.set('value', '');
-        this._clearCladeFields();
-      } else if (isFluB) {
+      // Clear fields whose type is no longer selected
+      if (!hasA) {
         if (this.haSubtypeNode) this.haSubtypeNode.set('value', '');
         if (this.naSubtypeNode) this.naSubtypeNode.set('value', '');
         if (this.fullSubtypeNode) this.fullSubtypeNode.set('value', '');
         this._clearCladeFields();
-      } else if (isFluA) {
-        if (this.fluBSubtypeNode) this.fluBSubtypeNode.set('value', '');
+      } else {
         this._updateCladeVisibility();
+      }
+      if (!hasB) {
+        if (this.fluBSubtypeNode) this.fluBSubtypeNode.set('value', '');
       }
     },
 
@@ -607,7 +624,7 @@ define([
       this._selectDataType('genome');
 
       // Reset virus type to Flu A
-      this._selectVirusType('A');
+      this._setVirusTypes(['A']);
 
       // Expand completeness/segments accordion (default state)
       this.completenessAccordionBody.style.display = '';
@@ -654,15 +671,25 @@ define([
     _buildGenomeFilters: function () {
       var q = [];
 
-      // Virus type — single updated ID
-      q.push('eq(taxon_lineage_ids,' + FLU_TAXON_IDS[this.selectedVirusType] + ')');
+      // Virus type — eq() for single selection, in() for multi-select
+      var types = this.selectedVirusTypes || [];
+      if (types.length === 1) {
+        q.push('eq(taxon_lineage_ids,' + FLU_TAXON_IDS[types[0]] + ')');
+      } else if (types.length > 1) {
+        var taxonIds = types.map(function (t) { return FLU_TAXON_IDS[t]; });
+        q.push('in(taxon_lineage_ids,(' + taxonIds.join(',') + '))');
+      }
 
-      // Subtype handling differs per virus type
-      if (this.selectedVirusType === 'A') {
-        // Flu A: full subtype overrides H/N pair
+      // Apply subtype/clade filters per virus type that is selected.
+      // Note: `subtype` field is shared between Flu A (e.g. H1N1) and Flu B (Victoria/Yamagata).
+      // If both A and B are selected and both write to `subtype`, we combine with or().
+      var hasA = types.indexOf('A') !== -1;
+      var hasB = types.indexOf('B') !== -1;
+      var aSubtypeClause = null;
+      if (hasA) {
         var fullVal = this.fullSubtypeNode.get('value');
         if (fullVal) {
-          pushEq(q, 'subtype', this.fullSubtypeNode);
+          aSubtypeClause = 'eq(subtype,' + encodeURIComponent(fullVal) + ')';
         } else {
           pushEq(q, 'h_type', this.haSubtypeNode);
           pushEq(q, 'n_type', this.naSubtypeNode);
@@ -673,8 +700,20 @@ define([
         pushEq(q, 'h3_clade', this.h3CladeNode);
         pushEq(q, 'h5_clade', this.h5CladeNode);
         pushEq(q, 'subclade', this.subcladeNode);
-      } else if (this.selectedVirusType === 'B') {
-        pushEq(q, 'subtype', this.fluBSubtypeNode);
+      }
+      var bSubtypeClause = null;
+      if (hasB) {
+        var bVal = this.fluBSubtypeNode.get('value');
+        if (bVal) {
+          bSubtypeClause = 'eq(subtype,' + encodeURIComponent(bVal) + ')';
+        }
+      }
+      if (aSubtypeClause && bSubtypeClause) {
+        q.push('or(' + aSubtypeClause + ',' + bSubtypeClause + ')');
+      } else if (aSubtypeClause) {
+        q.push(aSubtypeClause);
+      } else if (bSubtypeClause) {
+        q.push(bSubtypeClause);
       }
 
       // Reference/Representative
