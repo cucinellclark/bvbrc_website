@@ -10,7 +10,7 @@ define([
   PriorityPathogenGrid
 ) {
   return declare([BorderContainer], {
-    title: 'Priority Pathogen',
+    title: 'Priority Pathogens',
     isLoaded: false,
     _loading: false,
     gutters: false,
@@ -423,7 +423,7 @@ define([
         var rows = this._parseCsvText(csvText || '');
         if (!rows.length) {
           this.grid.setGridData([], []);
-          this.grid.set('noDataMessage', 'No data found in Priority Pathogen CSV.');
+          this.grid.set('noDataMessage', 'No data found in Priority Pathogens CSV.');
           return;
         }
 
@@ -442,7 +442,7 @@ define([
         this._allHeaders = [];
         this._allRows = [];
         this.grid.setGridData([], []);
-        this.grid.set('noDataMessage', 'Unable to load Priority Pathogen CSV.');
+        this.grid.set('noDataMessage', 'Unable to load Priority Pathogens CSV.');
         this.countBadgeNode.innerHTML = '0';
       }));
     }
