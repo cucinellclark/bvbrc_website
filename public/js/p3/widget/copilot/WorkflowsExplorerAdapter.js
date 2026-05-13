@@ -22,6 +22,7 @@ define([
     selectionMode: 'none',
     allowSelectAll: false,
 
+    copilotApi: null,
     workflowData: null,
     _pendingSelectedWorkflows: null,
     _isApplyingPendingSelection: false,
@@ -189,30 +190,60 @@ define([
     },
 
     setWorkflowIds: function(workflowIds) {
-      var ids = Array.isArray(workflowIds) ? workflowIds.filter(function(id) { return typeof id === 'string' && id.trim().length > 0; }) : [];
-      var loadToken = ++this._loadToken;
+      var ids = Array.isArray(workflowIds)
+        ? workflowIds.filter(function(id) { return typeof id === 'string' && id.trim().length > 0; })
+        : [];
+
+      if (ids.length === 0) {
+        this.setWorkflowData([]);
+        return Promise.resolve([]);
+      }
+
+      // Show placeholders while loading
+      var placeholders = ids.map(function(id) {
+        return {
+          id: id, workflow_id: id,
+          workflow_name: 'Loading...', status: 'loading',
+          step_count: '', submitted_at: '', completed_at: ''
+        };
+      });
+      this.setWorkflowData(placeholders);
+
+      // Use batch status endpoint via copilotApi if available
+      if (this.copilotApi && typeof this.copilotApi.getBatchWorkflowStatus === 'function') {
+        var self = this;
+        return this.copilotApi.getBatchWorkflowStatus(ids).then(function(response) {
+          var statuses = response.statuses || {};
+          var notFound = response.not_found || [];
+          var rows = ids.map(function(id) {
+            if (statuses[id]) {
+              return statuses[id];
+            }
+            return {
+              workflow_id: id,
+              workflow_name: notFound.indexOf(id) !== -1 ? 'Not Found' : 'Unavailable',
+              status: 'unknown'
+            };
+          });
+          self.setWorkflowData(rows);
+          return rows;
+        }).catch(function(err) {
+          console.warn('[WorkflowsExplorer] Batch status failed', err);
+          var fallbackRows = ids.map(function(id) {
+            return { workflow_id: id, workflow_name: 'Unavailable', status: 'unknown' };
+          });
+          self.setWorkflowData(fallbackRows);
+          return fallbackRows;
+        });
+      }
+
+      // Fallback: per-ID fetch if copilotApi not available
       var workflowUrl = (window && window.App && window.App.workflow_url) ? window.App.workflow_url : 'https://dev-7.bv-brc.org/api/v1';
       var headers = { 'Accept': 'application/json' };
       if (window && window.App && window.App.authorizationToken) {
         headers.Authorization = window.App.authorizationToken;
       }
-
-      var placeholders = ids.map(function(id) {
-        return {
-          id: id,
-          workflow_id: id,
-          workflow_name: 'Loading...',
-          status: 'loading',
-          step_count: '',
-          submitted_at: '',
-          completed_at: ''
-        };
-      });
-      this.setWorkflowData(placeholders);
-
-      if (ids.length === 0) {
-        return Promise.resolve([]);
-      }
+      var loadToken = ++this._loadToken;
 
       return Promise.all(ids.map(function(id) {
         var url = workflowUrl + '/workflows/' + encodeURIComponent(id);

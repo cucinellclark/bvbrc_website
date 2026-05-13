@@ -25,250 +25,75 @@ define([
      * @param {Object} baseData - Base data object to extend
      * @returns {Object|null} Processed data or null if parsing fails
      */
-    _processWorkflowManifest: function(chunk, baseData) {
+    _processWorkflowManifest: function(chunk, parsed) {
+      var baseData = { source_tool: parsed.tool || parsed.source_tool || null };
+
       if (!chunk) {
         return null;
       }
 
       // Finalized workflow responses are often markdown text. If this is clearly
-      // not JSON, keep content as-is and let any persisted workflowData/tool_call
-      // metadata drive UI rendering.
+      // not JSON, keep content as-is and let any persisted msg.workflow drive
+      // UI rendering.
       if (typeof chunk === 'string') {
         var trimmedChunk = chunk.trim();
         if (!(trimmedChunk.startsWith('{') || trimmedChunk.startsWith('['))) {
           return {
-            ...baseData,
+            source_tool: baseData.source_tool,
             chunk: chunk
           };
         }
       }
 
-      // Diagnostic logging
-      console.log('[CopilotToolHandler] _processWorkflowManifest called');
-      console.log('[CopilotToolHandler] chunk type:', typeof chunk);
-
-      try {
-        let content, parsedChunk;
-
-        // If chunk is already a parsed object, normalize wrappers first.
-        if (typeof chunk === 'object' && !chunk.content) {
-          var topLevel = chunk || {};
-          var payloadSource = (topLevel.result && typeof topLevel.result === 'object' && !Array.isArray(topLevel.result))
-            ? topLevel.result
-            : topLevel;
-          var callInfo = (topLevel.call && typeof topLevel.call === 'object') ? topLevel.call : null;
-
-          // Flat format from plan_genome_assembly, plan_genome_annotation, plan_comparative_systems
-          // Has app and parameters at top level, no workflow_json
-          if (payloadSource.app && payloadSource.parameters && !payloadSource.workflow_json) {
-            console.log('[CopilotToolHandler] ✓ Path A0: Chunk is flat service-plan format (app + parameters)');
-            var normalizedWorkflow = this._normalizeServicePlanResponse(payloadSource);
-            if (normalizedWorkflow) {
-              return {
-                ...baseData,
-                chunk: JSON.stringify(chunk),
-                isWorkflow: true,
-                workflowData: normalizedWorkflow,
-                tool_call: callInfo
-              };
-            }
-          }
-
-          // New format from plan_workflow or submit_workflow: {workflow_json: {...}, ...}
-          // Also detect plan_workflow payloads by presence of prompt_payload.
-          if (payloadSource.workflow_json || payloadSource.prompt_payload) {
-            console.log('[CopilotToolHandler] ✓ Path A1: Chunk is new format with workflow_json or prompt_payload');
-
-            // For plan_workflow, the workflow_json contains the actual workflow
-            // For submit_workflow, it has execution metadata too
-            let workflowData;
-            var workflowDescription = payloadSource.workflow_description || null;
-
-            if (payloadSource.workflow_json) {
-              // Extract workflow_json and merge with top-level metadata
-              workflowData = {
-                ...payloadSource.workflow_json,
-                workflow_description: workflowDescription || payloadSource.workflow_json.workflow_description || null,
-                // Add execution metadata to workflow data (some fields may be undefined for plan_workflow)
-                execution_metadata: {
-                  workflow_id: payloadSource.workflow_id,
-                  status: payloadSource.status,
-                  submitted_at: payloadSource.submitted_at,
-                  message: payloadSource.message,
-                  status_url: payloadSource.status_url,
-                  source: payloadSource.source,
-                  workflow_description: workflowDescription,
-                  // Distinguish between planned and submitted workflows
-                  is_planned: !payloadSource.status || payloadSource.status === 'planned',
-                  is_submitted: !!(payloadSource.status && payloadSource.status !== 'planned')
-                }
-              };
-            } else {
-              // If only prompt_payload exists (or lightweight payload), preserve workflow identity fields.
-              workflowData = {
-                workflow_id: payloadSource.workflow_id || null,
-                workflow_name: payloadSource.workflow_name || 'Planned Workflow',
-                status: payloadSource.status || 'planned',
-                step_count: payloadSource.step_count || null,
-                workflow_description: workflowDescription,
-                message: payloadSource.message || 'Workflow planned',
-                execution_metadata: {
-                  workflow_id: payloadSource.workflow_id || null,
-                  status: payloadSource.status || 'planned',
-                  message: payloadSource.message,
-                  workflow_description: workflowDescription,
-                  status_url: payloadSource.status_url || null,
-                  is_planned: true,
-                  is_submitted: false
-                }
-              };
-            }
-            return {
-              ...baseData,
-              chunk: JSON.stringify(chunk), // Store full response for display
-              isWorkflow: true,
-              workflowData: workflowData, // Store workflow_json with metadata
-              tool_call: callInfo
-            };
-          }
-          // Old format: direct workflow object
-          if (payloadSource.workflow_id || payloadSource.steps) {
-            console.log('[CopilotToolHandler] ✓ Path A2: Chunk is old format (direct workflow data)');
-            return {
-              ...baseData,
-              chunk: JSON.stringify(chunk), // Store stringified version for display
-              isWorkflow: true,
-              workflowData: payloadSource, // Use normalized payload
-              tool_call: callInfo
-            };
-          }
-        }
-
-        if (typeof chunk === 'object' && chunk.content) {
-          console.log('[CopilotToolHandler] ✓ Path B: Chunk is object with .content property');
-          // Handle case where chunk is already an object with content property
-          let rawContent = chunk.content;
-          // Trim whitespace before parsing if it's a string
-          let contentToParse = typeof rawContent === 'string' ? rawContent.trim() : rawContent;
-          parsedChunk = typeof contentToParse === 'string' ? JSON.parse(contentToParse) : contentToParse;
-          // Ensure content is always a string for return value
-          content = typeof rawContent === 'string' ? rawContent : JSON.stringify(rawContent);
-        } else if (typeof chunk === 'string') {
-          console.log('[CopilotToolHandler] ✓ Path C: Chunk is a string, will parse as JSON');
-          // Handle case where chunk is a JSON string
-          content = chunk.trim(); // Trim whitespace
-          parsedChunk = JSON.parse(content);
-        } else if (typeof chunk === 'object') {
-          console.log('[CopilotToolHandler] ✓ Path D: Chunk is generic object, will stringify');
-          // Chunk is already a parsed object but without .content property
-          content = JSON.stringify(chunk);
-          parsedChunk = chunk;
-        } else {
-          console.warn('[CopilotToolHandler] ✗ Unexpected chunk format:', chunk);
-          return null;
-        }
-
-        console.log('[CopilotToolHandler] parsedChunk type:', typeof parsedChunk);
-        console.log('[CopilotToolHandler] parsedChunk keys:', parsedChunk ? Object.keys(parsedChunk) : 'null');
-
-        // Handle case where parsedChunk has nested structure: {source_tool: ..., content: {workflow data...}}
-        // This happens when the SSE sends the full structure as a JSON string
-        if (parsedChunk && parsedChunk.source_tool && parsedChunk.content) {
-          console.log('[CopilotToolHandler] ✓ Detected nested structure with source_tool and content');
-          parsedChunk = parsedChunk.content; // Use the content object
-          console.log('[CopilotToolHandler] ✓ Extracted content, keys:', Object.keys(parsedChunk));
-        }
-
-        var parsedTopLevel = (parsedChunk && typeof parsedChunk === 'object') ? parsedChunk : {};
-        var parsedPayload = (parsedTopLevel.result && typeof parsedTopLevel.result === 'object' && !Array.isArray(parsedTopLevel.result))
-          ? parsedTopLevel.result
-          : parsedTopLevel;
-        var parsedCallInfo = (parsedTopLevel.call && typeof parsedTopLevel.call === 'object') ? parsedTopLevel.call : null;
-
-        // Handle flat service-plan format (plan_genome_assembly, plan_genome_annotation, plan_comparative_systems)
-        if (parsedPayload && parsedPayload.app && parsedPayload.parameters && !parsedPayload.workflow_json) {
-          console.log('[CopilotToolHandler] ✓ Detected flat service-plan format (parsed)');
-          var normalizedFromParsed = this._normalizeServicePlanResponse(parsedPayload);
-          if (normalizedFromParsed) {
-            return {
-              ...baseData,
-              chunk: content,
-              isWorkflow: true,
-              workflowData: normalizedFromParsed,
-              tool_call: parsedCallInfo
-            };
-          }
-        }
-
-        // Handle new format: check if parsedChunk has workflow_json or prompt_payload
-        if (parsedPayload && (parsedPayload.workflow_json || parsedPayload.prompt_payload)) {
-          console.log('[CopilotToolHandler] ✓ Detected new format with workflow_json or prompt_payload');
-
-          // For plan_workflow, the workflow_json contains the actual workflow
-          // For submit_workflow, it has execution metadata too
-          let workflowData;
-          var parsedWorkflowDescription = parsedPayload.workflow_description || null;
-
-          if (parsedPayload.workflow_json) {
-            // Extract workflow_json and merge with top-level metadata
-            workflowData = {
-              ...parsedPayload.workflow_json,
-              workflow_description: parsedWorkflowDescription || parsedPayload.workflow_json.workflow_description || null,
-              // Add execution metadata to workflow data (some fields may be undefined for plan_workflow)
-              execution_metadata: {
-                workflow_id: parsedPayload.workflow_id,
-                status: parsedPayload.status,
-                submitted_at: parsedPayload.submitted_at,
-                message: parsedPayload.message,
-                status_url: parsedPayload.status_url,
-                source: parsedPayload.source,
-                workflow_description: parsedWorkflowDescription,
-                // Distinguish between planned and submitted workflows
-                is_planned: !parsedPayload.status || parsedPayload.status === 'planned',
-                is_submitted: !!(parsedPayload.status && parsedPayload.status !== 'planned')
-              }
-            };
-          } else {
-            // If only prompt_payload/light payload exists, preserve workflow identity fields.
-            workflowData = {
-              workflow_id: parsedPayload.workflow_id || null,
-              workflow_name: parsedPayload.workflow_name || 'Planned Workflow',
-              status: parsedPayload.status || 'planned',
-              step_count: parsedPayload.step_count || null,
-              workflow_description: parsedWorkflowDescription,
-              message: parsedPayload.message || 'Workflow planned',
-              execution_metadata: {
-                workflow_id: parsedPayload.workflow_id || null,
-                status: parsedPayload.status || 'planned',
-                message: parsedPayload.message,
-                workflow_description: parsedWorkflowDescription,
-                status_url: parsedPayload.status_url || null,
-                is_planned: true,
-                is_submitted: false
-              }
-            };
-          }
-          return {
-            ...baseData,
-            chunk: content,
-            isWorkflow: true,
-            workflowData: workflowData, // Store workflow_json with metadata
-            tool_call: parsedCallInfo
-          };
-        }
-
-        return {
-          ...baseData,
-          chunk: content,
-          isWorkflow: true,
-          workflowData: parsedPayload, // Store parsed data for easy access
-          tool_call: parsedCallInfo
-        };
-      } catch (e) {
-        console.error('[CopilotToolHandler] ✗ Failed to parse workflow chunk:', e.message);
-        console.error('[CopilotToolHandler] Error stack:', e.stack);
-        return null;
+      // Parse the payload to an object if it's a string
+      var payload = chunk;
+      if (typeof chunk === 'string') {
+        try { payload = JSON.parse(chunk); } catch (e) { return null; }
       }
+      if (typeof payload !== 'object' || payload === null) return null;
+
+      // Unwrap .content if present
+      if (payload.content && typeof payload.content === 'string') {
+        try { payload = JSON.parse(payload.content); } catch (e) { /* keep as-is */ }
+      }
+
+      // The source of truth: look for call.result (from gateway envelope)
+      // or top-level workflow_id (from result_for_ui)
+      var source = payload;
+      if (payload.call && typeof payload.call === 'object') {
+        // Gateway envelope: { call: { tool, arguments_executed, result } }
+        source = payload.call.result || payload.call.arguments_executed || payload;
+        baseData.source_tool = payload.call.tool || payload.tool || baseData.source_tool;
+      }
+
+      // Detect workflow identity
+      var workflowId = source.workflow_id || null;
+      var persisted = source.persisted === true;
+
+      if (!workflowId) return null;
+
+      console.log('[CopilotToolHandler] Workflow detected:', workflowId,
+                  'persisted:', persisted);
+
+      var callInfo = null;
+      if (payload.call && typeof payload.call === 'object') {
+        callInfo = payload.call;
+      }
+
+      return {
+        source_tool: baseData.source_tool,
+        chunk: typeof chunk === 'string' ? chunk : JSON.stringify(chunk),
+        workflow: {
+          workflow_id: workflowId,
+          status: source.status || 'planned',
+          persisted: persisted,
+          workflow_name: (source.manifest && source.manifest.workflow_name)
+            || source.workflow_name || null,
+          step_count: (source.manifest && source.manifest.steps && source.manifest.steps.length)
+            || source.step_count || null
+        },
+        tool_call: callInfo
+      };
     },
 
     _parseToolChunk: function(chunk) {
@@ -739,36 +564,6 @@ define([
              toolId.indexOf('plan_comparative_systems') !== -1;
     },
 
-    _normalizeServicePlanResponse: function(response) {
-      if (!response || typeof response !== 'object' || !response.app || !response.parameters) {
-        return null;
-      }
-      var appToStepName = {
-        GenomeAssembly2: 'assemble_reads',
-        GenomeAnnotation: 'annotate_genome',
-        ComparativeSystems: 'compare_systems'
-      };
-      var stepName = appToStepName[response.app] || response.app;
-      return {
-        workflow_id: response.workflow_id,
-        workflow_name: response.workflow_name || 'Planned Workflow',
-        status: response.status || 'planned',
-        steps: [{
-          step_name: stepName,
-          app: response.app,
-          parameters: response.parameters
-        }],
-        auto_corrections: Array.isArray(response.auto_corrections) ? response.auto_corrections : [],
-        execution_metadata: {
-          workflow_id: response.workflow_id,
-          status: response.status || 'planned',
-          is_planned: (response.status || 'planned') === 'planned',
-          is_submitted: !!(response.status && response.status !== 'planned'),
-          source: response.source
-        }
-      };
-    },
-
     /**
      * Processes a tool-specific event
      * @param {string} currentEvent - The current SSE event type
@@ -1070,13 +865,12 @@ define([
       if (sourceTool === 'bvbrc_server.plan_workflow' ||
           sourceTool === 'bvbrc_server.submit_workflow' ||
           this._isServicePlanTool(sourceTool)) {
-        const baseData = { chunk: content };
+        const baseData = { tool: sourceTool, source_tool: sourceTool };
         const processed = this._processWorkflowManifest(content, baseData);
         if (processed) {
           return {
             content: processed.chunk,
-            isWorkflow: processed.isWorkflow,
-            workflowData: processed.workflowData
+            workflow: processed.workflow
           };
         }
       }

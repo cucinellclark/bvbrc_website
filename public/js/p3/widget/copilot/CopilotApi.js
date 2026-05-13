@@ -357,7 +357,7 @@ define([
                     return false;
                 }
                 return !!(
-                    toolMetadata.isWorkflow ||
+                    toolMetadata.workflow ||
                     toolMetadata.isWorkspaceListing ||
                     toolMetadata.isWorkspaceBrowse ||
                     toolMetadata.isJobsBrowse ||
@@ -379,12 +379,8 @@ define([
                 var toolMetadata = {
                     source_tool: sourceTool
                 };
-                if (processed.isWorkflow) {
-                    toolMetadata.isWorkflow = processed.isWorkflow;
-                    toolMetadata.workflowData = processed.workflowData;
-                    if (processed.workflowData && processed.workflowData.workflow_id) {
-                        toolMetadata.workflow_id = processed.workflowData.workflow_id;
-                    }
+                if (processed.workflow) {
+                    toolMetadata.workflow = processed.workflow;
                 }
                 if (processed.isWorkspaceListing) {
                     toolMetadata.isWorkspaceListing = processed.isWorkspaceListing;
@@ -1483,6 +1479,27 @@ define([
             }).catch(function(error) {
                 console.error('[CopilotApi] Error fetching workflow status:', error);
                 throw error;
+            });
+        },
+
+        /**
+         * Fetches batch workflow statuses from the workflow engine.
+         * @param {Array<string>} workflowIds Array of workflow IDs
+         * @returns {Promise<Object>} Promise resolving to { statuses: {id: statusObj}, not_found: [] }
+         */
+        getBatchWorkflowStatus: function(workflowIds) {
+            if (!this._checkLoggedIn()) return Promise.reject('Not logged in');
+            if (!workflowIds || !workflowIds.length) {
+                return Promise.resolve({ statuses: {}, not_found: [] });
+            }
+            var workflowEngineUrl = window.App.workflow_url || 'https://dev-7.bv-brc.org/api/v1';
+            return request.post(workflowEngineUrl + '/workflows/batch-status', {
+                data: JSON.stringify({ workflow_ids: workflowIds.slice(0, 20) }),
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': (window.App.authorizationToken || '')
+                },
+                handleAs: 'json'
             });
         },
 

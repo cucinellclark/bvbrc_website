@@ -1887,7 +1887,8 @@ define([
       }, this.workflowsContainer);
 
       this.workflowsExplorerWidget = new WorkflowsExplorerAdapter({
-        region: 'center'
+        region: 'center',
+        copilotApi: this.copilotApi
       });
       domConstruct.place(this.workflowsExplorerWidget.domNode, gridContainer);
       this.workflowsExplorerWidget.startup();

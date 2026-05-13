@@ -947,16 +947,34 @@ define([
             this._syncImageContextToWidgets();
         },
         _applySessionWorkflowContext: function(data) {
-            var workflowItems = [];
+            var sessionWorkflowIds = [];
+
+            // From session-level response
             if (data && data.workflow_grid && Array.isArray(data.workflow_grid.items)) {
-                workflowItems = data.workflow_grid.items;
+                data.workflow_grid.items.forEach(function(item) {
+                    var id = typeof item === 'string' ? item : (item && item.workflow_id);
+                    if (id) sessionWorkflowIds.push(id);
+                });
             } else if (data && Array.isArray(data.workflow_ids)) {
-                workflowItems = data.workflow_ids;
+                sessionWorkflowIds = data.workflow_ids.slice();
             }
 
-            SessionWorkflowsSelectionStore.setItems(this._sessionWorkflowsSelectionState, workflowItems);
+            // From messages (msg.workflow.workflow_id)
+            var messages = this.chatStore ? this.chatStore.query() : [];
+            messages.forEach(function(msg) {
+                if (msg.workflow && msg.workflow.workflow_id) {
+                    var wfId = msg.workflow.workflow_id;
+                    if (sessionWorkflowIds.indexOf(wfId) === -1) {
+                        sessionWorkflowIds.push(wfId);
+                    }
+                }
+            });
+
+            SessionWorkflowsSelectionStore.setItems(
+                this._sessionWorkflowsSelectionState, sessionWorkflowIds
+            );
             if (this.displayWidget && this.displayWidget.setSessionWorkflows) {
-                this.displayWidget.setSessionWorkflows(workflowItems);
+                this.displayWidget.setSessionWorkflows(sessionWorkflowIds);
             }
             this._syncWorkflowsSelectionsToWidgets();
         },
@@ -1114,9 +1132,7 @@ define([
                 return;
             }
 
-            var workflowId = updatedWorkflow.workflow_id ||
-                (updatedWorkflow.execution_metadata && updatedWorkflow.execution_metadata.workflow_id) ||
-                null;
+            var workflowId = updatedWorkflow.workflow_id || null;
             if (!workflowId) {
                 return;
             }
@@ -1127,7 +1143,12 @@ define([
             if (messageId) {
                 var message = this.chatStore.getMessageById(messageId);
                 if (message) {
-                    message.workflowData = updatedWorkflow;
+                    if (!message.workflow) {
+                        message.workflow = {};
+                    }
+                    message.workflow.status = updatedWorkflow.status || message.workflow.status;
+                    message.workflow.workflow_name = updatedWorkflow.workflow_name
+                        || message.workflow.workflow_name;
                     this.chatStore.updateMessage(message);
                     if (this.displayWidget && this.displayWidget.showMessages) {
                         this.displayWidget.showMessages(this.chatStore.query(), false);
@@ -1150,7 +1171,7 @@ define([
                         workflow_id: workflowId,
                         id: workflowId,
                         workflow_name: updatedWorkflow.workflow_name || item.workflow_name || 'Workflow',
-                        status: (updatedWorkflow.execution_metadata && updatedWorkflow.execution_metadata.status) || updatedWorkflow.status || item.status || null,
+                        status: updatedWorkflow.status || item.status || null,
                         submitted_at: updatedWorkflow.submitted_at || item.submitted_at || null,
                         completed_at: updatedWorkflow.completed_at || item.completed_at || null
                     }));
@@ -1165,7 +1186,7 @@ define([
                     id: workflowId,
                     workflow_id: workflowId,
                     workflow_name: updatedWorkflow.workflow_name || 'Workflow',
-                    status: (updatedWorkflow.execution_metadata && updatedWorkflow.execution_metadata.status) || updatedWorkflow.status || null,
+                    status: updatedWorkflow.status || null,
                     submitted_at: updatedWorkflow.submitted_at || null,
                     completed_at: updatedWorkflow.completed_at || null,
                     selected: true

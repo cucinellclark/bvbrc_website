@@ -154,22 +154,33 @@ define([
         if (!assistantMessage || !toolMetadata) {
           return;
         }
+
         assistantMessage.source_tool = toolMetadata.source_tool || assistantMessage.source_tool;
-        assistantMessage.isWorkflow = toolMetadata.isWorkflow;
-        assistantMessage.workflowData = toolMetadata.workflowData;
-        assistantMessage.workflow_id = toolMetadata.workflow_id || assistantMessage.workflow_id;
+        assistantMessage.tool_call = toolMetadata.tool_call || assistantMessage.tool_call;
+
+        // Workflow — single nested object
+        if (toolMetadata.workflow) {
+          assistantMessage.workflow = toolMetadata.workflow;
+        }
+
+        // Workspace browse
         assistantMessage.isWorkspaceListing = toolMetadata.isWorkspaceListing;
         assistantMessage.workspaceData = toolMetadata.workspaceData;
         assistantMessage.isWorkspaceBrowse = toolMetadata.isWorkspaceBrowse;
         assistantMessage.workspaceBrowseResult = toolMetadata.workspaceBrowseResult;
+
+        // Jobs browse
         assistantMessage.isJobsBrowse = toolMetadata.isJobsBrowse;
         assistantMessage.jobsBrowseResult = toolMetadata.jobsBrowseResult;
+
+        // Query collection
         assistantMessage.isQueryCollection = toolMetadata.isQueryCollection;
         assistantMessage.queryCollectionData = toolMetadata.queryCollectionData;
+
+        // UI action/payload
         assistantMessage.chatSummary = toolMetadata.chatSummary;
         assistantMessage.uiPayload = toolMetadata.uiPayload;
         assistantMessage.uiAction = toolMetadata.uiAction;
-        assistantMessage.tool_call = toolMetadata.tool_call || assistantMessage.tool_call;
       },
 
       setSelectedWorkspaceItems: function(items) {

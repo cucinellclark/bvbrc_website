@@ -439,27 +439,6 @@ define([
           this.message.uiAction = 'open_jobs_tab';
         }
       }
-      if (sourceTool && (sourceTool.indexOf('plan_workflow') !== -1 ||
-          sourceTool.indexOf('submit_workflow') !== -1 ||
-          sourceTool.indexOf('plan_genome_assembly') !== -1 ||
-          sourceTool.indexOf('plan_genome_annotation') !== -1 ||
-          sourceTool.indexOf('plan_comparative_systems') !== -1)) {
-        var inferredWorkflowId = this.message.workflow_id ||
-          toolCallArgs.workflow_id ||
-          (messageToolCall && messageToolCall.workflow_id) ||
-          (this.message.workflowData && this.message.workflowData.workflow_id) ||
-          (this.message.workflowData && this.message.workflowData.execution_metadata && this.message.workflowData.execution_metadata.workflow_id) ||
-          null;
-        if (inferredWorkflowId) {
-          this.message.isWorkflow = true;
-          this.message.workflow_id = inferredWorkflowId;
-          if (!this.message.workflowData || typeof this.message.workflowData !== 'object') {
-            this.message.workflowData = { workflow_id: inferredWorkflowId };
-          } else if (!this.message.workflowData.workflow_id) {
-            this.message.workflowData.workflow_id = inferredWorkflowId;
-          }
-        }
-      }
       if (
         sourceTool &&
         (
@@ -523,16 +502,7 @@ define([
         console.log('[ChatMessage] Jobs browse already processed by SSE handler, skipping re-processing');
         alreadyProcessed = true;
       }
-      if (
-        sourceTool &&
-        (sourceTool.indexOf('plan_workflow') !== -1 ||
-          sourceTool.indexOf('submit_workflow') !== -1 ||
-          sourceTool.indexOf('plan_genome_assembly') !== -1 ||
-          sourceTool.indexOf('plan_genome_annotation') !== -1 ||
-          sourceTool.indexOf('plan_comparative_systems') !== -1) &&
-        (this.message.workflowData || this.message.workflow_id || this.message.isWorkflow)
-      ) {
-        console.log('[ChatMessage] Workflow message already has persisted workflow metadata, skipping re-processing');
+      if (this.message.workflow && this.message.workflow.workflow_id) {
         alreadyProcessed = true;
       }
       if (
@@ -578,8 +548,9 @@ define([
         var processedData = this.toolHandler.processMessageContent(contentToProcess, sourceTool);
 
         this.message.content = processedData.content;
-        this.message.isWorkflow = typeof processedData.isWorkflow !== 'undefined' ? processedData.isWorkflow : this.message.isWorkflow;
-        this.message.workflowData = typeof processedData.workflowData !== 'undefined' ? processedData.workflowData : this.message.workflowData;
+        if (processedData.workflow) {
+          this.message.workflow = processedData.workflow;
+        }
         this.message.isWorkspaceBrowse = typeof processedData.isWorkspaceBrowse !== 'undefined'
           ? (processedData.isWorkspaceBrowse || this.message.isWorkspaceBrowse)
           : this.message.isWorkspaceBrowse;
@@ -740,20 +711,14 @@ define([
         this.message.source_tool ||
         (this.message.tool_call && this.message.tool_call.tool) ||
         '';
-      var hasWorkflowIdentity = !!(
-        this.message.workflow_id ||
-        (this.message.workflowData && this.message.workflowData.workflow_id) ||
-        (this.message.workflowData && this.message.workflowData.execution_metadata && this.message.workflowData.execution_metadata.workflow_id)
-      );
 
-      if ((this.message.isWorkflow && this.message.workflowData) ||
-          (renderSourceTool.indexOf('plan_workflow') !== -1 && hasWorkflowIdentity) ||
-          (renderSourceTool.indexOf('submit_workflow') !== -1 && hasWorkflowIdentity) ||
-          (renderSourceTool.indexOf('plan_genome_assembly') !== -1 && hasWorkflowIdentity) ||
-          (renderSourceTool.indexOf('plan_genome_annotation') !== -1 && hasWorkflowIdentity) ||
-          (renderSourceTool.indexOf('plan_comparative_systems') !== -1 && hasWorkflowIdentity)) {
-        // debugger; // Debug assistant message when loading planned workflow UI
-        this.renderWorkflowManifestCard(messageDiv);
+      if (this.message.workflow && this.message.workflow.workflow_id) {
+        if (this.message.workflow.persisted === false) {
+          // Engine persistence failed — render an inline warning instead of a card
+          this._renderWorkflowPersistWarning(messageDiv);
+        } else {
+          this.renderWorkflowCard(messageDiv);
+        }
       } else if (
         this.message.uiAction === 'show_file_metadata' &&
         this.message.uiPayload
@@ -2295,434 +2260,191 @@ define([
     },
 
     /**
-     * Renders a simplified service card for single-step workflows
-     * @param {HTMLElement} messageDiv - Container to render into
-     * @param {Object} workflow - Workflow data with steps[0]
+     * Returns inline CSS for workflow status badges
+     * @param {string} statusValue - The workflow status
+     * @returns {string} CSS style string
      */
-    renderSimplifiedServiceCard: function(messageDiv, workflow) {
-      var step = workflow.steps && workflow.steps[0];
-      var serviceName = step ? this._getServiceDisplayName(step.app) : (workflow.workflow_name || 'Workflow');
-      if (!serviceName && step && step.step_name) {
-        serviceName = step.step_name;
-      }
-      var isSubmitted = workflow.execution_metadata && workflow.execution_metadata.is_submitted;
-      var statusValue = (workflow.execution_metadata && workflow.execution_metadata.status) ||
-        workflow.status || (isSubmitted ? 'submitted' : '') || 'planned';
-      var normalizeStatus = function(s) {
-        return (!s && s !== 0) ? '' : String(s).toLowerCase();
-      };
-      var getStatusStyle = function(s) {
-        var st = normalizeStatus(s);
-        if (st === 'succeeded' || st === 'completed') return 'background: #10b981; color: #fff;';
-        if (st === 'failed' || st === 'error') return 'background: #ef4444; color: #fff;';
-        if (st === 'cancelled') return 'background: #6b7280; color: #fff;';
-        if (st === 'running') return 'background: #2563eb; color: #fff;';
-        if (st === 'queued' || st === 'pending') return 'background: #f59e0b; color: #111827;';
-        if (st === 'submitted') return 'background: #14b8a6; color: #fff;';
-        if (st === 'planned') return 'background: #6366f1; color: #fff;';
-        return 'background: #9ca3af; color: #fff;';
-      };
-      var statusBadgeLabel = statusValue ? this.escapeHtml(String(statusValue).toUpperCase()) : '';
+    _getWorkflowStatusStyle: function(statusValue) {
+      var s = (statusValue || '').toLowerCase();
+      if (s === 'succeeded' || s === 'completed') return 'background: #10b981; color: #fff;';
+      if (s === 'failed' || s === 'error')        return 'background: #ef4444; color: #fff;';
+      if (s === 'cancelled')                       return 'background: #6b7280; color: #fff;';
+      if (s === 'running')                         return 'background: #2563eb; color: #fff;';
+      if (s === 'queued' || s === 'pending')       return 'background: #f59e0b; color: #111827;';
+      if (s === 'submitted')                       return 'background: #14b8a6; color: #fff;';
+      if (s === 'planned')                         return 'background: #6366f1; color: #fff;';
+      return 'background: #9ca3af; color: #fff;';
+    },
 
+    /**
+     * Renders an inline warning when workflow engine persistence failed
+     * @param {HTMLElement} messageDiv - Container to render into
+     */
+    _renderWorkflowPersistWarning: function(messageDiv) {
+      domConstruct.create('div', {
+        innerHTML: 'Workflow planning completed but failed to register with the '
+                 + 'engine. Please try again.',
+        style: 'padding: 10px; color: #b45309; background: #fffbeb; '
+             + 'border: 1px solid #fbbf24; border-radius: 4px; font-size: 13px;'
+      }, messageDiv);
+    },
+
+    /**
+     * Renders a unified workflow card for both single-step and multi-step workflows.
+     * Reads from msg.workflow for identity; fetches full manifest from engine on demand.
+     * @param {HTMLElement} messageDiv - Container to render into
+     */
+    renderWorkflowCard: function(messageDiv) {
+      var wf = this.message.workflow;
+      var workflowId = wf.workflow_id;
+      var workflowName = wf.workflow_name || 'Workflow';
+      var stepCount = wf.step_count || null;
+      var currentStatus = wf.status || 'planned';
+      var self = this;
+
+      // -- Card container --
       var card = domConstruct.create('div', {
         class: 'copilot-service-card workflow-manifest-card'
       }, messageDiv);
 
-      var titleRow = domConstruct.create('div', {
+      // -- Header row: name + status badge --
+      var headerRow = domConstruct.create('div', {
         class: 'copilot-service-card-actions',
-        style: 'display: flex; align-items: center; justify-content: space-between; margin-bottom: 0; padding-top: 0; border-top: none;'
+        style: 'display: flex; align-items: center; justify-content: space-between;'
       }, card);
 
       domConstruct.create('div', {
         class: 'copilot-service-card-title',
-        innerHTML: this.escapeHtml(serviceName)
-      }, titleRow);
+        innerHTML: this.escapeHtml(workflowName)
+      }, headerRow);
 
-      if (statusBadgeLabel) {
-        domConstruct.create('span', {
-          innerHTML: statusBadgeLabel,
-          style: 'padding: 2px 6px; font-size: 11px; border-radius: 3px; font-weight: 500; ' + getStatusStyle(statusValue)
-        }, titleRow);
+      var statusBadge = domConstruct.create('span', {
+        innerHTML: this.escapeHtml(currentStatus.toUpperCase()),
+        style: 'padding: 2px 6px; font-size: 11px; border-radius: 3px; font-weight: 500; '
+             + this._getWorkflowStatusStyle(currentStatus)
+      }, headerRow);
+
+      // -- Details row --
+      if (stepCount) {
+        domConstruct.create('div', {
+          innerHTML: stepCount + ' step' + (stepCount > 1 ? 's' : ''),
+          style: 'font-size: 12px; color: #6b7280; margin-bottom: 6px;'
+        }, card);
       }
 
+      // -- Actions row --
       var actionsRow = domConstruct.create('div', {
         class: 'copilot-service-card-actions'
       }, card);
 
+      // Review button
       var reviewButton = domConstruct.create('button', {
-        innerHTML: (isSubmitted ? 'View Results' : 'Review'),
+        innerHTML: (currentStatus !== 'planned' ? 'View Workflow' : 'Review'),
         class: 'workflow-review-btn',
-        title: 'Review and edit service parameters'
+        title: 'Review workflow parameters'
       }, actionsRow);
 
-      on(reviewButton, 'click', lang.hitch(this, function() {
-        this.showWorkflowDialog();
-      }));
+      on(reviewButton, 'click', function() {
+        reviewButton.innerHTML = 'Loading...';
+        reviewButton.disabled = true;
+        self.copilotApi.getWorkflowById(workflowId).then(function(fullWorkflow) {
+          // Inject workflow_id + execution_metadata for WorkflowEngine compat
+          fullWorkflow.workflow_id = workflowId;
+          fullWorkflow.execution_metadata = {
+            workflow_id: workflowId,
+            status: currentStatus,
+            is_planned: currentStatus === 'planned',
+            is_submitted: currentStatus !== 'planned'
+          };
+          self._openWorkflowDialog(fullWorkflow);
+        }).catch(function(err) {
+          console.error('[ChatMessage] Failed to fetch workflow:', err);
+          topic.publish('/Notification', {
+            message: 'Failed to load workflow details', type: 'error'
+          });
+        }).then(function() {
+          reviewButton.innerHTML = (currentStatus !== 'planned' ? 'View Workflow' : 'Review');
+          reviewButton.disabled = false;
+        });
+      });
 
-      if (!isSubmitted) {
-        var self = this;
-        var submitButton = domConstruct.create('button', {
+      // Submit button (only for planned workflows)
+      var submitButton = null;
+      if (currentStatus === 'planned') {
+        submitButton = domConstruct.create('button', {
           innerHTML: 'Submit',
           type: 'button',
           style: 'padding: 8px 16px; background: #2563eb; color: #fff; border: none; border-radius: 4px; cursor: pointer; font-weight: 500;'
         }, actionsRow);
 
-        on(submitButton, 'click', lang.hitch(this, function() {
-          if (!self.copilotApi || submitButton.disabled) return;
-          var workflowToSubmit = {};
-          try {
-            workflowToSubmit = JSON.parse(JSON.stringify(workflow));
-          } catch (e) {
-            workflowToSubmit = workflow;
-          }
-          delete workflowToSubmit.execution_metadata;
-
+        on(submitButton, 'click', function() {
+          if (submitButton.disabled) return;
           submitButton.disabled = true;
           submitButton.innerHTML = 'Submitting...';
 
-          self.copilotApi.submitWorkflowForExecution(workflowToSubmit).then(function(response) {
-            if (response && response.error) {
-              submitButton.disabled = false;
-              submitButton.innerHTML = 'Submit';
-              topic.publish('/Notification', { message: 'Submission failed: ' + response.error, type: 'error' });
-              return;
-            }
-            var wfId = response && response.workflow_id;
-            var status = (response && response.status) || 'submitted';
-            var statusUrl = wfId && (window.App.workflow_url || 'https://dev-7.bv-brc.org/api/v1') + '/workflows/' + wfId + '/status';
+          self.copilotApi.submitWorkflowForExecution({
+            workflow_id: workflowId,
+            status: 'planned'
+          }).then(function(response) {
+            var newStatus = (response && response.status) || 'submitted';
+            currentStatus = newStatus;
+            wf.status = newStatus;
 
-            if (!workflow.execution_metadata) workflow.execution_metadata = {};
-            workflow.execution_metadata.workflow_id = wfId;
-            workflow.execution_metadata.status = status;
-            workflow.execution_metadata.is_submitted = true;
-            workflow.execution_metadata.is_planned = false;
-            workflow.execution_metadata.status_url = statusUrl;
-            workflow.execution_metadata.submitted_at = new Date().toISOString();
+            // Update badge
+            statusBadge.innerHTML = self.escapeHtml(newStatus.toUpperCase());
+            statusBadge.style.cssText += self._getWorkflowStatusStyle(newStatus);
+            submitButton.innerHTML = 'Submitted';
 
+            topic.publish('/Notification', {
+              message: 'Workflow submitted successfully.', type: 'message'
+            });
             topic.publish('CopilotWorkflowCardStatusUpdated', {
               session_id: self.sessionId || null,
-              message_id: self.message && self.message.message_id ? self.message.message_id : null,
-              workflow: workflow
+              message_id: self.message && self.message.message_id || null,
+              workflow: wf
             });
 
-            submitButton.innerHTML = 'Submitted';
-            topic.publish('/Notification', { message: 'Workflow submitted successfully.', type: 'message' });
-
-            if (self.sessionId && self.copilotApi && typeof self.copilotApi.addWorkflowToSession === 'function') {
-              self.copilotApi.addWorkflowToSession(self.sessionId, wfId).catch(function() {});
+            // Track on session
+            if (self.sessionId && self.copilotApi.addWorkflowToSession) {
+              self.copilotApi.addWorkflowToSession(self.sessionId, workflowId).catch(function() {});
             }
-          }, function(err) {
+          }).catch(function(err) {
             submitButton.disabled = false;
             submitButton.innerHTML = 'Submit';
-            topic.publish('/Notification', { message: 'Submission failed: ' + (err && err.message ? err.message : err), type: 'error' });
+            topic.publish('/Notification', {
+              message: 'Submission failed: ' + (err.message || err), type: 'error'
+            });
           });
-        }));
+        });
       }
 
-      // Selection indicator for workflows
-      this._renderSelectionIndicator(card, {
-        category: 'workflows',
-        getSelectedItems: lang.hitch(this, function() {
-          var items = this._getSelectionItemsForCategory('workflows');
-          return items.map(function(item) {
-            return { label: item.workflow_name || item.workflow_id || item.id || 'Workflow', id: item.workflow_id || item.id };
-          });
-        })
-      });
-    },
-
-    /**
-     * Renders a workflow manifest card with workflow details
-     * Displays workflow name, step count, output folder, and a Review button
-     * For single-step workflows, renders a simplified service card instead.
-     * @param {HTMLElement} messageDiv - Container to render widget into
-     */
-    renderWorkflowManifestCard: function(messageDiv) {
-      var workflow = this.message.workflowData || {};
-      var messageToolCall = this.message && this.message.tool_call && typeof this.message.tool_call === 'object'
-        ? this.message.tool_call
-        : null;
-      var toolCallArgs = messageToolCall && messageToolCall.arguments_executed && typeof messageToolCall.arguments_executed === 'object'
-        ? messageToolCall.arguments_executed
-        : {};
-
-      // Extract workflow information
-      var workflowName = workflow.workflow_name || this.message.workflow_name || 'Workflow';
-      var workflowDescription = workflow.workflow_description ||
-        (workflow.execution_metadata && workflow.execution_metadata.workflow_description) ||
-        '';
-      var stepCount = 0;
-      var outputFolder = '';
-
-      // Count steps
-      if (workflow.steps && Array.isArray(workflow.steps)) {
-        stepCount = workflow.steps.length;
-      }
-
-      var isSingleStep = workflow && workflow.steps && workflow.steps.length === 1;
-      if (isSingleStep) {
-        this.renderSimplifiedServiceCard(messageDiv, workflow);
-        return;
-      }
-
-      // Get output folder
-      if (workflow.base_context && workflow.base_context.workspace_output_folder) {
-        outputFolder = workflow.base_context.workspace_output_folder;
-      }
-
-      // Get status from execution metadata
-      var isSubmitted = workflow.execution_metadata && workflow.execution_metadata.is_submitted;
-      var isPlanned = workflow.execution_metadata && workflow.execution_metadata.is_planned;
-      var statusUrl = (workflow.execution_metadata && workflow.execution_metadata.status_url) || workflow.status_url || null;
-
-      var extractWorkflowIdFromStatusUrl = function(urlValue) {
-        if (!urlValue || typeof urlValue !== 'string') {
-          return null;
-        }
-        var match = urlValue.match(/\/workflows\/([^\/\?]+)(?:\/status)?(?:\?.*)?$/i);
-        return match && match[1] ? decodeURIComponent(match[1]) : null;
-      };
-
-      var workflowId = workflow.workflow_id ||
-        workflow.id ||
-        (workflow.execution_metadata && (workflow.execution_metadata.workflow_id || workflow.execution_metadata.id)) ||
-        toolCallArgs.workflow_id ||
-        (messageToolCall && messageToolCall.workflow_id) ||
-        this.message.workflow_id ||
-        extractWorkflowIdFromStatusUrl(statusUrl) ||
-        null;
-
-      var normalizeStatus = function(rawStatus) {
-        if (!rawStatus && rawStatus !== 0) return '';
-        return String(rawStatus).toLowerCase();
-      };
-
-      var getStatusStyle = function(statusValue) {
-        var status = normalizeStatus(statusValue);
-        if (status === 'succeeded' || status === 'completed') {
-          return 'background: #10b981; color: #fff;';
-        }
-        if (status === 'failed' || status === 'error') {
-          return 'background: #ef4444; color: #fff;';
-        }
-        if (status === 'cancelled') {
-          return 'background: #6b7280; color: #fff;';
-        }
-        if (status === 'running') {
-          return 'background: #2563eb; color: #fff;';
-        }
-        if (status === 'queued' || status === 'pending') {
-          return 'background: #f59e0b; color: #111827;';
-        }
-        if (status === 'submitted') {
-          return 'background: #14b8a6; color: #fff;';
-        }
-        if (status === 'planned') {
-          return 'background: #6366f1; color: #fff;';
-        }
-        return 'background: #9ca3af; color: #fff;';
-      };
-
-      var deriveStatus = function() {
-        return (workflow.execution_metadata && workflow.execution_metadata.status) ||
-          workflow.status ||
-          (isSubmitted ? 'submitted' : '') ||
-          (isPlanned ? 'planned' : '') ||
-          '';
-      };
-
-      if (workflowDescription) {
-        domConstruct.create('div', {
-          innerHTML: this.escapeHtml(workflowDescription),
-          style: 'margin: 0 0 8px 0; color: #4b5563; font-size: 13px; line-height: 1.35;'
-        }, messageDiv);
-      }
-
-      // Create card container
-      var card = domConstruct.create('div', {
-        class: 'workflow-manifest-card',
-        style: 'border: 1px solid #d1d5db; border-radius: 4px; padding: 10px; margin: 8px 0; background: #f9fafb;'
-      }, messageDiv);
-
-      // Workflow name header
-      domConstruct.create('div', {
-        innerHTML: '<strong style="color: #1f2937; font-size: 15px;">' + this.escapeHtml(workflowName) + '</strong>',
-        style: 'margin-bottom: 8px;'
-      }, card);
-
-      // Details section
-      var detailsContainer = domConstruct.create('div', {
-        style: 'display: flex; flex-direction: column; gap: 4px; margin-bottom: 8px;'
-      }, card);
-
-      // Service name (from service-specific tools: plan_genome_assembly, plan_genome_annotation, plan_comparative_systems)
-      var serviceApp = null;
-      if (workflow.steps && workflow.steps.length === 1 && workflow.steps[0].app) {
-        serviceApp = workflow.steps[0].app;
-      }
-      if (serviceApp) {
-        domConstruct.create('div', {
-          innerHTML: '<span style="color: #6b7280; font-size: 13px;">Service:</span> <span style="color: #374151; font-size: 13px; font-weight: 500;">' + this.escapeHtml(serviceApp) + '</span>',
-          style: 'display: flex; gap: 4px;'
-        }, detailsContainer);
-      }
-
-      // Step count
-      if (stepCount > 0) {
-        domConstruct.create('div', {
-          innerHTML: '<span style="color: #6b7280; font-size: 13px;">Steps:</span> <span style="color: #374151; font-size: 13px; font-weight: 500;">' + stepCount + '</span>',
-          style: 'display: flex; gap: 4px;'
-        }, detailsContainer);
-      }
-
-      // Output folder
-      if (outputFolder) {
-        domConstruct.create('div', {
-          innerHTML: '<span style="color: #6b7280; font-size: 13px;">Output:</span> <span style="color: #374151; font-size: 13px; font-family: monospace;">' + this.escapeHtml(outputFolder) + '</span>',
-          style: 'display: flex; gap: 4px;'
-        }, detailsContainer);
-      }
-
-      // Auto corrections (from service plan tools)
-      var autoCorrections = workflow.auto_corrections;
-      if (Array.isArray(autoCorrections) && autoCorrections.length > 0) {
-        var correctionsText = autoCorrections.map(function(c) {
-          return typeof c === 'string' ? c : (c && typeof c === 'object' && c.message ? c.message : String(c));
-        }).join(', ');
-        domConstruct.create('div', {
-          innerHTML: '<span style="color: #6b7280; font-size: 12px;">Auto-corrected:</span> <span style="color: #4b5563; font-size: 12px;">' + this.escapeHtml(correctionsText) + '</span>',
-          style: 'display: flex; gap: 4px; margin-top: 2px;'
-        }, detailsContainer);
-      }
-
-      // Status indicator
-      var statusValue = deriveStatus();
-      var statusBadgeLabel = statusValue ? this.escapeHtml(String(statusValue).toUpperCase()) : '';
-      var statusContainer = null;
-      if (statusBadgeLabel) {
-        statusContainer = domConstruct.create('div', {
-          style: 'margin-top: 2px;'
-        }, detailsContainer);
-        domConstruct.create('span', {
-          innerHTML: statusBadgeLabel,
-          style: 'padding: 2px 6px; font-size: 11px; border-radius: 3px; font-weight: 500; ' + getStatusStyle(statusValue)
-        }, statusContainer);
-      }
-
-      // Button container
-      var buttonContainer = domConstruct.create('div', {
-        style: 'display: flex; justify-content: space-between; align-items: center; margin-top: 6px; padding-top: 8px; border-top: 1px solid #e5e7eb;'
-      }, card);
-
-      var leftActions = domConstruct.create('div', {
-        style: 'display: flex; align-items: center; gap: 8px;'
-      }, buttonContainer);
-
-      var rightActions = domConstruct.create('div', {
-        style: 'display: flex; align-items: center; gap: 8px;'
-      }, buttonContainer);
-
-      var checkStatusButton = null;
-      if ((workflowId || statusUrl) && this.copilotApi && typeof this.copilotApi.getWorkflowStatus === 'function') {
-        checkStatusButton = domConstruct.create('button', {
+      // Check Status button (for submitted/running/etc.)
+      if (currentStatus !== 'planned' && self.copilotApi && self.copilotApi.getWorkflowStatus) {
+        var checkBtn = domConstruct.create('button', {
           innerHTML: 'Check Status',
           class: 'workflow-check-status-button',
-          style: 'padding: 4px 10px; background: #ffffff; color: #374151; border: 1px solid #d1d5db; border-radius: 3px; cursor: pointer; font-size: 13px; font-weight: 500; transition: background 0.2s, border-color 0.2s;'
-        }, leftActions);
+          style: 'padding: 4px 10px; background: #fff; color: #374151; border: 1px solid #d1d5db; border-radius: 3px; cursor: pointer; font-size: 13px;'
+        }, actionsRow);
 
-        on(checkStatusButton, 'mouseenter', function() {
-          if (!checkStatusButton.disabled) {
-            checkStatusButton.style.background = '#f3f4f6';
-            checkStatusButton.style.borderColor = '#9ca3af';
-          }
-        });
-        on(checkStatusButton, 'mouseleave', function() {
-          checkStatusButton.style.background = '#ffffff';
-          checkStatusButton.style.borderColor = '#d1d5db';
-        });
-
-        on(checkStatusButton, 'click', lang.hitch(this, function() {
-          // Non-blocking status refresh: update button state while request runs.
-          checkStatusButton.disabled = true;
-          checkStatusButton.style.cursor = 'default';
-          checkStatusButton.innerHTML = 'Checking...';
-
-          var resolvedWorkflowId = workflowId || extractWorkflowIdFromStatusUrl(statusUrl);
-          if (!resolvedWorkflowId) {
-            console.warn('[ChatMessage] Unable to determine workflow ID for status check');
-            checkStatusButton.disabled = false;
-            checkStatusButton.style.cursor = 'pointer';
-            checkStatusButton.innerHTML = 'Check Status';
-            return;
-          }
-
-          this.copilotApi.getWorkflowStatus(resolvedWorkflowId).then(lang.hitch(this, function(statusResponse) {
-            var nextStatus = statusResponse && statusResponse.status ? statusResponse.status : null;
-            var nextUpdatedAt = statusResponse && statusResponse.updated_at ? statusResponse.updated_at : null;
-            var nextWorkflowName = statusResponse && statusResponse.workflow_name ? statusResponse.workflow_name : null;
-
-            if (!workflow.execution_metadata) {
-              workflow.execution_metadata = {};
+        on(checkBtn, 'click', function() {
+          checkBtn.disabled = true;
+          checkBtn.innerHTML = 'Checking...';
+          self.copilotApi.getWorkflowStatus(workflowId).then(function(statusResp) {
+            var liveStatus = statusResp && statusResp.status;
+            if (liveStatus) {
+              currentStatus = liveStatus;
+              wf.status = liveStatus;
+              statusBadge.innerHTML = self.escapeHtml(liveStatus.toUpperCase());
+              statusBadge.style.cssText += self._getWorkflowStatusStyle(liveStatus);
             }
-            if (nextStatus) {
-              workflow.execution_metadata.status = nextStatus;
-              workflow.status = nextStatus;
-              workflow.execution_metadata.is_submitted = true;
-              workflow.execution_metadata.is_planned = false;
-            }
-            if (!workflow.execution_metadata.workflow_id) {
-              workflow.execution_metadata.workflow_id = resolvedWorkflowId;
-            }
-            if (!workflow.workflow_id) {
-              workflow.workflow_id = resolvedWorkflowId;
-            }
-            if (nextUpdatedAt) {
-              workflow.updated_at = nextUpdatedAt;
-            }
-            if (nextWorkflowName && !workflow.workflow_name) {
-              workflow.workflow_name = nextWorkflowName;
-            }
-
-            var updatedStatus = nextStatus || deriveStatus();
-            if (updatedStatus) {
-              if (!statusContainer) {
-                statusContainer = domConstruct.create('div', {
-                  style: 'margin-top: 2px;'
-                }, detailsContainer);
-              } else {
-                domConstruct.empty(statusContainer);
-              }
-              domConstruct.create('span', {
-                innerHTML: this.escapeHtml(String(updatedStatus).toUpperCase()),
-                style: 'padding: 2px 6px; font-size: 11px; border-radius: 3px; font-weight: 500; ' + getStatusStyle(updatedStatus)
-              }, statusContainer);
-            }
-
-            topic.publish('CopilotWorkflowCardStatusUpdated', {
-              session_id: this.sessionId || null,
-              message_id: this.message && this.message.message_id ? this.message.message_id : null,
-              workflow: workflow
-            });
-          })).catch(function(error) {
-            console.error('[ChatMessage] Failed to fetch workflow status:', error);
+          }).catch(function(err) {
+            console.error('[ChatMessage] Status check failed:', err);
           }).then(function() {
-            checkStatusButton.disabled = false;
-            checkStatusButton.style.cursor = 'pointer';
-            checkStatusButton.innerHTML = 'Check Status';
+            checkBtn.disabled = false;
+            checkBtn.innerHTML = 'Check Status';
           });
-        }));
+        });
       }
-
-      // Review button — opens the workflow dialog for review/editing
-      var reviewButton = domConstruct.create('button', {
-        innerHTML: (isSubmitted ? 'View Workflow' : 'Review'),
-        class: 'workflow-review-btn',
-        title: 'Review and edit service parameters'
-      }, rightActions);
-
-      on(reviewButton, 'click', lang.hitch(this, function() {
-        this.showWorkflowDialog();
-      }));
 
       // Selection indicator for workflows
       this._renderSelectionIndicator(card, {
@@ -2735,6 +2457,8 @@ define([
         })
       });
     },
+
+
 
     /**
      * Shows a direct form modal for single-step workflows with Dojo form wrappers.
@@ -2876,73 +2600,39 @@ define([
         }, contentNode);
         topic.publish('/Notification', { message: 'Service form unavailable. Opening full workflow view.', type: 'message' });
         closeModal();
-        self.showWorkflowDialog();
+        // Re-open as full WorkflowEngine dialog
+        self._openWorkflowDialog(workflow);
       });
     },
 
     /**
-     * Shows a dialog displaying the workflow using WorkflowEngine widget
+     * Opens a dialog displaying the workflow using WorkflowEngine widget.
+     * Accepts fully-fetched workflow data as a parameter (hydration is handled by the caller).
+     * @param {Object} workflowData - Full workflow data (with steps array)
      */
-    showWorkflowDialog: function() {
-      var localWorkflowData = this.message.workflowData || {};
-      var messageToolCall = this.message && this.message.tool_call && typeof this.message.tool_call === 'object'
-        ? this.message.tool_call
-        : null;
-      var toolCallArgs = messageToolCall && messageToolCall.arguments_executed && typeof messageToolCall.arguments_executed === 'object'
-        ? messageToolCall.arguments_executed
-        : {};
-      var workflowId = localWorkflowData.workflow_id ||
-        (localWorkflowData.execution_metadata && localWorkflowData.execution_metadata.workflow_id) ||
-        toolCallArgs.workflow_id ||
-        (messageToolCall && messageToolCall.workflow_id) ||
-        this.message.workflow_id ||
-        null;
-
-      if ((!localWorkflowData || Object.keys(localWorkflowData).length === 0) && workflowId) {
-        localWorkflowData = { workflow_id: workflowId };
-      }
-      if (!workflowId && (!localWorkflowData || Object.keys(localWorkflowData).length === 0)) {
-        console.error('[ChatMessage] ✗ No workflow identity available');
+    _openWorkflowDialog: function(workflowData) {
+      if (!workflowData || !workflowData.steps || !workflowData.steps.length) {
+        console.error('[ChatMessage] No workflow data available for dialog');
         return;
       }
-      var hasWorkflowSteps = Array.isArray(localWorkflowData.steps) && localWorkflowData.steps.length > 0;
-      var canHydrateById = !!(
-        workflowId &&
-        !hasWorkflowSteps &&
-        this.copilotApi &&
-        typeof this.copilotApi.getWorkflowById === 'function'
-      );
-
-      if (canHydrateById) {
-        this.copilotApi.getWorkflowById(workflowId).then(lang.hitch(this, function(fullWorkflow) {
-          if (fullWorkflow && typeof fullWorkflow === 'object') {
-            this.message.workflowData = fullWorkflow;
-          }
-          this.showWorkflowDialog();
-        })).catch(function(error) {
-          console.error('[ChatMessage] Failed to hydrate workflow by id:', error);
-        });
-        return;
-      }
-
-      var workflow = this.message.workflowData;
-      var isSingleStep = workflow && workflow.steps && workflow.steps.length === 1;
-      var step = isSingleStep && workflow.steps ? workflow.steps[0] : null;
+      var isSingleStep = workflowData.steps.length === 1;
+      var step = isSingleStep ? workflowData.steps[0] : null;
       var appName = step ? step.app : '';
       var hasDojoForm = isSingleStep && CopilotServiceFormAdapter.hasDojoForm(appName);
 
       if (hasDojoForm) {
-        this._showDirectFormModal(workflow, step, appName);
+        this._showDirectFormModal(workflowData, step, appName);
         return;
       }
 
+      // Open WorkflowEngine dialog
       var workflowEngine = null;
       var overlayNode = null;
       var keyHandler = null;
 
       try {
         workflowEngine = new WorkflowEngine({
-          workflowData: this.message.workflowData,
+          workflowData: workflowData,   // WorkflowEngine's own widget property
           copilotApi: this.copilotApi,
           sessionId: this.sessionId
         });
@@ -3017,7 +2707,7 @@ define([
         if (overlayNode && overlayNode.parentNode) {
           overlayNode.parentNode.removeChild(overlayNode);
         }
-        console.error('[ChatMessage] ✗ Error showing workflow dialog:', e);
+        console.error('[ChatMessage] Error showing workflow dialog:', e);
       }
     }
   });
