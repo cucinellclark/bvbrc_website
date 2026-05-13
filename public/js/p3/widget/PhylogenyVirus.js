@@ -170,15 +170,15 @@ define([
       }
 
       domStyle.set(this._nextstrainContainer, {
+        position: 'relative',
         width: '100%',
-        height: 'calc(100vh - 200px)',
-        minHeight: '400px',
-        overflow: 'hidden'
+        height: '100%',
+        minHeight: '600px'
       });
 
       this._nextstrainIframe = domConstruct.create('iframe', {
         src: '/nextstrain-viewer/' + url,
-        style: 'width:100%; height:100%; border:none; display:block;'
+        style: 'width:100%; height:100%; min-height:600px; border:none; display:block;'
       }, this._nextstrainContainer);
 
       domStyle.set(this._nextstrainContainer, 'display', '');

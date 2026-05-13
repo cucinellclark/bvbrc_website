@@ -7,6 +7,36 @@
         min-height: calc(100vh - 170px);
       }
 
+      /* ── Collapse toggle button (always visible) ────────────────── */
+      .ptc-toggle-btn {
+        position: absolute;
+        top: 14px;
+        right: -12px;
+        width: 24px;
+        height: 24px;
+        border-radius: 50%;
+        background: #fff;
+        border: 1px solid #e5e7eb;
+        box-shadow: 0 1px 4px rgba(0, 0, 0, 0.10);
+        cursor: pointer;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        z-index: 10;
+        transition: background 0.12s, border-color 0.12s;
+        flex-shrink: 0;
+        user-select: none;
+        font-size: 10px;
+        color: #6b7280;
+        line-height: 1;
+      }
+
+      .ptc-toggle-btn:hover {
+        background: #eef2f7;
+        border-color: #2c7a7b;
+        color: #2c7a7b;
+      }
+
       /* ── Left filter panel ──────────────────────────────────────── */
       .ptc-filter-panel {
         position: relative; /* anchor for the toggle button */
@@ -24,48 +54,6 @@
       .ptc-filter-panel.ptc-collapsed {
         width: 0;
         border-right: none;
-      }
-
-      .ptc-panel-titlebar {
-        display: flex;
-        align-items: center;
-        justify-content: space-between;
-        padding: 8px 12px 6px 16px;
-        border-bottom: 1px solid #e5e7eb;
-        margin-bottom: 4px;
-      }
-
-      .ptc-panel-title {
-        font-size: 11px;
-        font-weight: 700;
-        text-transform: uppercase;
-        letter-spacing: .08em;
-        color: #9ca3af;
-      }
-
-      .ptc-toggle-btn {
-        height: 24px;
-        padding: 0 10px;
-        border-radius: 4px;
-        background: #fff;
-        border: 1px solid #d1d5db;
-        cursor: pointer;
-        display: inline-flex;
-        align-items: center;
-        justify-content: center;
-        flex-shrink: 0;
-        user-select: none;
-        font-size: 11px;
-        font-weight: 600;
-        color: #6b7280;
-        line-height: 1;
-        white-space: nowrap;
-      }
-
-      .ptc-toggle-btn:hover {
-        background: #eef2f7;
-        border-color: #2c7a7b;
-        color: #2c7a7b;
       }
 
       .ptc-filter-inner {
@@ -340,44 +328,6 @@
 
       .treeCard:hover .treeCardHeader {
         background: #dfeceb;
-        color: rgb(52, 105, 142);
-        text-decoration: underline;
-      }
-
-      .treeCard {
-        cursor: pointer;
-      }
-
-      /* ── Card header: title with absolutely-positioned download icon ── */
-      .treeCardHeader {
-        position: relative;
-        padding-right: 28px; /* always reserve space so title width is consistent */
-      }
-
-      .treeCardDownloadBtn {
-        position: absolute;
-        right: 6px;
-        top: 50%;
-        transform: translateY(-50%);
-        display: inline-flex;
-        align-items: center;
-        justify-content: center;
-        width: 22px;
-        height: 22px;
-        border-radius: 3px;
-        border: 1px solid transparent;
-        background: transparent;
-        color: #2c7a7b;
-        text-decoration: none;
-        font-size: 14px !important; /* override fa-2x and any other FA size modifiers */
-        line-height: 1;
-        cursor: pointer;
-        transition: background 0.12s, border-color 0.12s;
-      }
-
-      .treeCardDownloadBtn:hover {
-        background: #d4eaea;
-        border-color: #2c7a7b;
       }
     </style>
 
@@ -385,20 +335,14 @@
 
         <!-- Slim re-open strip (visible only when panel is collapsed) -->
         <div data-dojo-attach-point="expandStripNode" class="ptc-expand-strip">
-            <span class="ptc-expand-strip-icon">Show Filters</span>
+            <span class="ptc-expand-strip-icon">&#9660; Filters</span>
         </div>
 
         <!-- Left: filter panel -->
         <div data-dojo-attach-point="filterPanelNode" class="ptc-filter-panel">
 
-            <div class="ptc-panel-titlebar">
-                <span class="ptc-panel-title">Filter Panel</span>
-                <button data-dojo-attach-point="toggleBtnNode"
-                        type="button"
-                        class="ptc-toggle-btn"
-                        title="Hide filter panel">Hide
-                </button>
-            </div>
+            <!-- Toggle button (chevron pill on the right edge) -->
+            <div data-dojo-attach-point="toggleBtnNode" class="ptc-toggle-btn" title="Collapse filters">&#9664;</div>
 
             <div class="ptc-filter-inner">
 

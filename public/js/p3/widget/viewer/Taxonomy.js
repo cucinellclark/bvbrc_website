@@ -72,7 +72,6 @@ define([
 
       this.viewer.addChild(this.phylogeny, 1);
       this.viewer.addChild(this.amr, 4);
-      this.viewer.addChild(this.sequences, 5)
       this.viewer.addChild(this.specialtyGenes, 8);
       // this.viewer.addChild(this.proteinFamilies, 10);
       this.viewer.addChild(this.pathways, 11);
@@ -84,7 +83,6 @@ define([
     changeToVirusContext: function () {
       this.viewer.removeChild(this.phylogeny);
       this.viewer.removeChild(this.amr);
-      this.viewer.removeChild(this.sequences);
       this.viewer.removeChild(this.specialtyGenes);
       // this.viewer.removeChild(this.proteinFamilies);
       this.viewer.removeChild(this.pathways);
@@ -108,11 +106,6 @@ define([
       this._toggleTab(this.surveillance, isSpecialVirus);
       this._toggleTab(this.serology, isSpecialVirus);
 
-      const isVirus = taxonomy.lineage_names.includes('Viruses');
-      if (this.taxontree) {
-        this.taxontree.setVirusContext(isVirus);
-      }
-
       const seq = ++this._phyloGateSeq;
       this._getPhyloIndex().then(lang.hitch(this, function (manifest) {
         if (seq !== this._phyloGateSeq) return;
@@ -120,17 +113,6 @@ define([
         const taxonId = taxonomy.taxon_id;
         const shouldShow = this._taxonHasPhyloData(manifest, taxonId);
         this._toggleTab(this.phylogenyVirus, shouldShow, 1);
-
-        // Feed phylo data into the Taxonomy tree grid (icon/count column)
-        if (manifest && this.taxontree) {
-          this.taxontree.setPhyloManifest(manifest);
-          this._getPhyloFamilies(manifest).then(lang.hitch(this, function (familyData) {
-            if (seq !== this._phyloGateSeq) {
-              return;
-            }
-            this.taxontree.setPhyloManifestData(familyData);
-          }));
-        }
 
         if (shouldShow && this.phylogenyVirus) {
           xhr.get(`${this._phyloDataBaseUrl}${taxonId}/${taxonId}.json`, {
@@ -166,7 +148,7 @@ define([
       if (taxonomy.lineage_names.includes('Bacteria') && this.context === 'virus') {
         this.set('context', 'bacteria');
         this.changeToBacteriaContext();
-      } else if (isVirus && this.context === 'bacteria') {
+      } else if (taxonomy.lineage_names.includes('Viruses') && this.context === 'bacteria') {
         this.set('context', 'virus');
         this.changeToVirusContext();
       }
@@ -272,7 +254,11 @@ define([
           if (this[state.hashParams.view_tab]) {
             var vt = this[state.hashParams.view_tab];
             vt.set('visible', true);
-            this.viewer.selectChild(vt);
+            // Only select if the tab is already a child of the viewer.
+            // they will be selected in onSetTaxonomy after being added.
+            if (!vt.getParent || vt.getParent() === this.viewer) {
+              this.viewer.selectChild(vt);
+            }
           }
         }
 
@@ -309,6 +295,9 @@ define([
           }));
           break;
         case 'phylogeny':
+          activeTab.set('state', lang.mixin({}, this.state));
+          break;
+        case 'priorityPathogen':
           activeTab.set('state', lang.mixin({}, this.state));
           break;
         case 'sfvt':
@@ -474,46 +463,6 @@ define([
       );
 
       return this._phyloIndexPromise;
-    },
-
-    _getPhyloFamilies: function (manifest) {
-      if (!manifest) {
-        return Promise.resolve([]);
-      }
-      var taxonIds = Object.keys(manifest);
-      if (taxonIds.length === 0) {
-        return Promise.resolve([]);
-      }
-
-      // Cached — this is static data (all manifest families with their lineage_ids)
-      if (this._phyloFamilyData) {
-        return Promise.resolve(this._phyloFamilyData);
-      }
-      if (this._phyloFamilyDataPromise) {
-        return this._phyloFamilyDataPromise;
-      }
-
-      this._phyloFamilyDataPromise = xhr.post(PathJoin(this.apiServiceUrl, 'taxonomy'), {
-        headers: {
-          accept: 'application/json',
-          'content-type': 'application/rqlquery+x-www-form-urlencoded',
-          'X-Requested-With': null,
-          Authorization: (window.App.authorizationToken || '')
-        },
-        data: 'in(taxon_id,(' + taxonIds.join(',') + '))&select(taxon_id,lineage_ids)&limit(2000)',
-        handleAs: 'json'
-      }).then(
-        lang.hitch(this, function (data) {
-          this._phyloFamilyData = data || [];
-          return this._phyloFamilyData;
-        }),
-        function (err) {
-          console.error('Failed to load phylo family lineages:', err);
-          return [];
-        }
-      );
-
-      return this._phyloFamilyDataPromise;
     },
 
     _taxonHasPhyloData: function (manifest, taxon_id) {

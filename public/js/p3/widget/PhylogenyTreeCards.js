@@ -119,10 +119,14 @@ define([
         // Expand
         domClass.remove(this.filterPanelNode, 'ptc-collapsed');
         this.expandStripNode.style.display = 'none';
+        this.toggleBtnNode.innerHTML = '&#9664;';  // ◀
+        this.toggleBtnNode.title = 'Collapse filters';
       } else {
         // Collapse
         domClass.add(this.filterPanelNode, 'ptc-collapsed');
         this.expandStripNode.style.display = 'flex';
+        this.toggleBtnNode.innerHTML = '&#9654;';  // ▶
+        this.toggleBtnNode.title = 'Expand filters';
       }
     },
 
@@ -522,45 +526,31 @@ define([
       var name = it && it.name ? String(it.name) : '(unnamed)';
       var def = it && it.definition ? String(it.definition) : '';
       var url = this._resolvePath(it && it.path ? String(it.path) : '');
-      var metadata = it && it.metadata ? this._resolvePath(String(it.metadata)) : null;
       var regionRaw = it && it.region ? String(it.region) : '';
       var region = regionRaw.toLowerCase();
       var imgUrl = region === 'usa'
         ? (this._baseUrl + '/api/content/images/trees/usa.png')
         : (this._baseUrl + '/api/content/images/trees/global.png');
 
-      // Use a div so we can legally nest an <a> download link inside
-      var card = domConstruct.create('div', {
+      var a = domConstruct.create('a', {
         className: 'treeCard',
-        tabIndex: 0,
+        href: url || '#',
         title: name
       }, parent);
 
-      var header = domConstruct.create('div', { className: 'treeCardHeader', textContent: name }, card);
-
-      if (metadata) {
-        var dlBtn = domConstruct.create('a', {
-          className: 'treeCardDownloadBtn fa icon-download fa-2x',
-          href: metadata,
-          target: '_blank',
-          rel: 'noopener noreferrer',
-          title: 'Download metadata for ' + name
-        }, header);
-        this.own(on(dlBtn, 'click', function (e) {
-          e.stopPropagation();
-        }));
-      }
-
+      domConstruct.create('div', { className: 'treeCardHeader', textContent: name }, a);
       domConstruct.create('img', {
         className: 'treeCardImg',
         src: imgUrl,
         alt: region.includes('usa') ? 'USA tree preview' : 'Global tree preview',
         loading: 'lazy'
-      }, card);
+      }, a);
 
-      var activate = lang.hitch(this, function (e) {
-        if (!url) return;
-        if (e.type === 'keydown' && e.keyCode !== 13 && e.keyCode !== 32) return;
+      this.own(on(a, 'click', lang.hitch(this, function (e) {
+        if (!url) {
+          e.preventDefault();
+          return;
+        }
         e.preventDefault();
         if (typeof this.onSelectTree === 'function') {
           this.onSelectTree({
@@ -569,10 +559,7 @@ define([
             metadata: metadata || null
           });
         }
-      });
-
-      this.own(on(card, 'click', activate));
-      this.own(on(card, 'keydown', activate));
+      })));
     },
 
     // ── Utilities ──────────────────────────────────────────────────────────
