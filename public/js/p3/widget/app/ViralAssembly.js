@@ -253,7 +253,6 @@ define([
         singleBox.style.display = 'none';
         sraBox.style.display = 'block';
       }
-      this.checkParameterRequiredFields();
     },
 
     openJobsList: function () {
@@ -401,7 +400,6 @@ define([
 
       if (!accession.match(/^[a-z]{3}[0-9]+$/i)) {
         this.srr_accession_validation_message.innerHTML = 'Please provide a valid SRA number';
-        this.checkParameterRequiredFields();
       } else {
         this.srr_accession.set('disabled', true);
         this.srr_accession_validation_message.innerHTML = 'Validating ' + accession + '.';
@@ -425,13 +423,11 @@ define([
               }
 
               this.srr_accession.set('disabled', false);
-              this.checkParameterRequiredFields();
             })
           );
         } catch (e) {
           console.error(e);
           this.srr_accession_validation_message.innerHTML = 'Something went wrong. Please try again.';
-          this.checkParameterRequiredFields();
         }
       }
     },
