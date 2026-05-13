@@ -18,7 +18,8 @@ define([
     perspectiveLabel: 'Taxon View',
     perspectiveIconClass: 'icon-selection-Taxonomy',
 
-    _phyloIndexUrl: 'https://www.bv-brc.org/api/content/phyloxml_trees/phylogeny-tree-groups.json',
+    _phyloIndexUrl: 'https://www.bv-brc.org/api/content/phyloxml_trees/manifest.json',
+    _phyloDataBaseUrl: 'https://www.bv-brc.org/api/content/phyloxml_trees/families/',
     _phyloGateSeq: 0,
 
     postCreate: function () {
@@ -71,7 +72,6 @@ define([
 
       this.viewer.addChild(this.phylogeny, 1);
       this.viewer.addChild(this.amr, 4);
-      this.viewer.addChild(this.sequences, 5)
       this.viewer.addChild(this.specialtyGenes, 8);
       // this.viewer.addChild(this.proteinFamilies, 10);
       this.viewer.addChild(this.pathways, 11);
@@ -83,7 +83,6 @@ define([
     changeToVirusContext: function () {
       this.viewer.removeChild(this.phylogeny);
       this.viewer.removeChild(this.amr);
-      this.viewer.removeChild(this.sequences);
       this.viewer.removeChild(this.specialtyGenes);
       // this.viewer.removeChild(this.proteinFamilies);
       this.viewer.removeChild(this.pathways);
@@ -108,16 +107,21 @@ define([
       this._toggleTab(this.serology, isSpecialVirus);
 
       const seq = ++this._phyloGateSeq;
-      this._getPhyloIndex().then(lang.hitch(this, function (idx) {
+      this._getPhyloIndex().then(lang.hitch(this, function (manifest) {
         if (seq !== this._phyloGateSeq) return;
 
-        const taxonBlock = idx && idx[taxonomy.taxon_id];
-        const shouldShow = this._taxonHasPhyloData(taxonBlock);
-
+        const taxonId = taxonomy.taxon_id;
+        const shouldShow = this._taxonHasPhyloData(manifest, taxonId);
         this._toggleTab(this.phylogenyVirus, shouldShow, 1);
 
         if (shouldShow && this.phylogenyVirus) {
-          this.phylogenyVirus.setTreeData(taxonBlock);
+          xhr.get(`${this._phyloDataBaseUrl}${taxonId}/${taxonId}.json`, {
+            handleAs: 'json'
+          }).then(lang.hitch(this, function (taxonData) {
+            if (this._phyloGateSeq === seq) {
+              this.phylogenyVirus.setTreeData(taxonData);
+            }
+          }));
         }
       }));
 
@@ -454,17 +458,8 @@ define([
       return this._phyloIndexPromise;
     },
 
-    _taxonHasPhyloData: function (taxonBlock) {
-      if (!taxonBlock) {
-        return false;
-      }
-
-      const groups = Array.isArray(taxonBlock.groups) ? taxonBlock.groups : [];
-      return groups.some(function (g) {
-        const phy = Array.isArray(g.archaeopteryx) ? g.archaeopteryx.length : 0;
-        const nxt = Array.isArray(g.nextstrain) ? g.nextstrain.length : 0;
-        return (phy + nxt) > 0;
-      });
+    _taxonHasPhyloData: function (manifest, taxon_id) {
+      return manifest !== null && manifest.hasOwnProperty(taxon_id);
     },
 
     _toggleTab: function (widget, shouldShow, position) {
