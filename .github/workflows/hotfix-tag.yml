@@ -27,10 +27,14 @@ jobs:
         run: |
           # Extract version from branch name (hotfix/vX.X.X -> vX.X.X)
           VERSION=$(echo "${{ github.event.pull_request.head.ref }}" | sed 's/hotfix\///')
-          # Use PR title as tag message
-          git tag -a "$VERSION" -m "${{ github.event.pull_request.title }}"
-          git push origin "$VERSION"
-          echo "Created and pushed tag: $VERSION"
+          # Check if tag already exists
+          if git rev-parse "$VERSION" >/dev/null 2>&1; then
+            echo "Tag $VERSION already exists, skipping tag creation"
+          else
+            git tag -a "$VERSION" -m "${{ github.event.pull_request.title }}"
+            git push origin "$VERSION"
+            echo "Created and pushed tag: $VERSION"
+          fi
 
       - name: Cherry-pick to alpha
         env:
