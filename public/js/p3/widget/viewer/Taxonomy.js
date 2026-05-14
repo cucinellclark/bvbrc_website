@@ -154,7 +154,7 @@ define([
 
       if (taxonomy.lineage_names.includes('Orthomyxoviridae')) {
         this.viewer.addChild(this.strains_orthomyxoviridae, 3);
-      } else if (taxonomy.lineage_names.includes('Bunyavirales')) {
+      } else if (taxonomy.lineage_names.includes('Bunyaviricetes')) {
         this.viewer.addChild(this.strains_bunyavirales, 3);
       } else {
         this.viewer.removeChild(this.strains || this.strains_orthomyxoviridae || this.strains_bunyavirales);
