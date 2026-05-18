@@ -21,6 +21,8 @@
   --bvs-bg-accent: #eaf1f7;
   --bvs-divider: #e5edf1;
 
+  --bvs-label-col: 85px;
+
   max-width: 1120px;
   margin: 0 auto;
   color: var(--bvs-text);
@@ -55,9 +57,10 @@
    be overridden via --bvs-label-col CSS variable on the row. */
 .bvs-search .bvs-field {
   --bvs-input-w: 170px;
-  display: inline-flex;
+  display: inline-grid;
+  grid-template-columns: minmax(var(--bvs-label-col), max-content) var(--bvs-input-w);
   align-items: center;
-  gap: 6px;
+  column-gap: 6px;
   margin: 0 16px 8px 0;
   vertical-align: middle;
 }
@@ -65,10 +68,50 @@
 .bvs-search .bvs-field-sm   { --bvs-input-w: 95px;  } /* subtypes, reference */
 .bvs-search .bvs-field-date { --bvs-input-w: 140px; } /* date + calendar icon */
 .bvs-search .bvs-field-lg   { --bvs-input-w: 220px; } /* host, country, state */
-.bvs-search .bvs-field.bvs-field-wide { --bvs-input-w: 100%; }
+.bvs-search .bvs-field.bvs-field-narrow {
+  grid-template-columns: minmax(65px, max-content) var(--bvs-input-w);
+}
+.bvs-search .bvs-field.bvs-field-wide {
+  /* Full row; input cell flexes to fill remaining space */
+  display: grid;
+  grid-template-columns: minmax(var(--bvs-label-col), max-content) 1fr;
+  width: 100%;
+}
+/* Range field: label + (input1 "to" input2). Reserves a wider input cell. */
+.bvs-search .bvs-field.bvs-field-range { --bvs-input-w: 180px; }
+
+/* Checkbox-only field: single auto-sized cell (no label column / input column).
+   Used inline next to other fields, e.g. "Complete genome only" beside Length. */
+.bvs-search .bvs-field.bvs-field-check {
+  display: inline-flex;
+  align-items: center;
+  grid-template-columns: none;
+}
+.bvs-search .bvs-field.bvs-field-check > label {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin: 0 0 0 4px;
+  font-size: 12px;
+  font-weight: 400;
+  color: #304f5b;
+  text-transform: none !important;
+  white-space: nowrap;
+}
+.bvs-search .bvs-range {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  width: 100%;
+}
+.bvs-search .bvs-range > div { flex: 1 1 0; min-width: 0; }
+.bvs-search .bvs-range-sep {
+  font-size: 12px;
+  color: var(--bvs-label);
+  flex: 0 0 auto;
+}
 
 .bvs-search .bvs-field > label {
-  flex: 0 0 var(--bvs-label-col, 85px);
   font-size: 12px;
   font-weight: 600;
   color: var(--bvs-label);
@@ -77,15 +120,11 @@
   white-space: nowrap;
   margin: 0;
   text-align: left;
-}
-.bvs-search .bvs-field.bvs-field-narrow > label {
-  flex: 0 0 65px;
+  min-width: 0;
 }
 .bvs-search .bvs-field > div {
-  flex: 0 0 var(--bvs-input-w);
-  width: var(--bvs-input-w);
-  max-width: var(--bvs-input-w);
   min-width: 0;
+  width: 100%;
   box-sizing: border-box;
 }
 .bvs-search .bvs-field .dijitTextBox,
@@ -266,16 +305,28 @@
 }
 
 /* ---------- Responsive ---------- */
+@media (min-width: 901px) and (max-width: 1100px) {
+  .bvs-search .bvs-field-lg { --bvs-input-w: 180px; }
+}
 @media (max-width: 900px) {
   .bvs-search .bvs-grid-2 { grid-template-columns: 1fr; }
-  .bvs-search .bvs-field {
-    display: flex;
+  .bvs-search .bvs-field,
+  .bvs-search .bvs-field.bvs-field-narrow {
+    display: grid;
+    grid-template-columns: 130px 1fr;
     width: 100%;
     margin-right: 0;
   }
   .bvs-search .bvs-field > div {
-    flex: 1 1 auto;
-    width: auto;
+    width: 100%;
+    max-width: 360px;
+  }
+  .bvs-search .bvs-field.bvs-field-wide > div {
     max-width: none;
+  }
+  .bvs-search .bvs-field.bvs-field-check {
+    display: inline-flex;
+    width: auto;
+    grid-template-columns: none;
   }
 }

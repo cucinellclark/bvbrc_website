@@ -114,14 +114,16 @@
           <label>Strain Name</label>
           <div data-dojo-type="dijit/form/TextBox" data-dojo-props="placeHolder:'e.g. A/cattle/Maryland/546/2024'" data-dojo-attach-point="strainNameNode" name="strain_name" style="width:100%"></div>
         </div>
-        <div class="bvs-field bvs-field-xs">
-          <label style="flex:0 0 auto;">Length</label>
-          <div data-dojo-type="dijit/form/TextBox" data-dojo-props="placeHolder:'1600'" data-dojo-attach-point="seqLengthFromNode" name="seq_length_from"></div>
-          <span style="font-size:12px;color:#466b7e;">to</span>
-          <div data-dojo-type="dijit/form/TextBox" data-dojo-props="placeHolder:'2400'" data-dojo-attach-point="seqLengthToNode" name="seq_length_to"></div>
+        <div class="bvs-field bvs-field-range">
+          <label>Length</label>
+          <div class="bvs-range">
+            <div data-dojo-type="dijit/form/TextBox" data-dojo-props="placeHolder:'1600'" data-dojo-attach-point="seqLengthFromNode" name="seq_length_from"></div>
+            <span class="bvs-range-sep">to</span>
+            <div data-dojo-type="dijit/form/TextBox" data-dojo-props="placeHolder:'2400'" data-dojo-attach-point="seqLengthToNode" name="seq_length_to"></div>
+          </div>
         </div>
-        <div class="bvs-field" style="display: grid;">
-          <label class="bvs-inline-checks" style="display:inline-flex;align-items:center;gap:4px;margin:0 0 0 12px;font-size:12px;font-weight:400;color:#304f5b;text-transform:none !important;">
+        <div class="bvs-field bvs-field-check">
+          <label class="bvs-inline-checks">
             <input type="checkbox" data-dojo-type="dijit/form/CheckBox" data-dojo-attach-point="completeGenomeNode" id="${id}_chkCompleteGenome" /> Complete genome only
           </label>
         </div>
