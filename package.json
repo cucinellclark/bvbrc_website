@@ -1,6 +1,6 @@
 {
   "name": "p3-web",
-  "version": "3.57.31",
+  "version": "3.57.40",
   "private": true,
   "scripts": {
     "start": "NEXTSTRAIN_DATASET_DIR=./lib/auspice-datasets node ./bin/p3-web",
@@ -36,6 +36,7 @@
     "flag-icons": "^7.2.1",
     "flatted": "^3.4.2",
     "formidable": "^2.1.2",
+    "gexf-js": "github:aswarren/gexf-js#patric_links",
     "helmet": "^7.2.0",
     "html2canvas": "^1.4.1",
     "http-proxy": "^1.18.1",
