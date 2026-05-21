@@ -1207,6 +1207,17 @@ define([
         Topic.publish('/navigate', { href: '/view/PhylogeneticTree2/?&labelSearch=' + labelSearch + '&idType=' + idType + '&labelType=' + labelType + '&wsTreeFile=' + encodePath(path[0]) + '&fileType=' + fileType });
       }, false);
 
+      this.actionPanel.addAction('ViewGEXF', 'fa icon-alignment fa-2x', { // Using 'sitemap' as a graph-like icon
+        label: 'VIEW GRAPH',
+        multiple: false, // This action works on a single file
+       // validTypes: ['gexf'], // This action only appears when a 'gexf' file is selected
+        validTypes: ['gexf'],
+
+        tooltip: 'View Synteny Graph'
+      }, function (selection) {
+          Topic.publish('/navigate', { href: '/view/GEXF/?' + '&path=' + encodePath(selection[0].path) });
+      }, true);
+
       this.browserHeader.addAction('ViewNwkXml', 'fa icon-eye fa-2x', {
         label: 'VIEW',
         multiple: false,
@@ -2673,7 +2684,12 @@ define([
         // console.log('in WorkspaceBrowser obj.autoMeta', obj.autoMeta);
         // console.log('in WorkspaceBrowser browserHeader', this.browserHeader);
 
-        switch (obj.type) {
+        var tempType=obj.type;
+        if (obj.name && obj.name.endsWith('.gexf')) {
+          tempType = 'gexf';
+        }
+
+        switch (tempType) {
           case 'folder':
             panelCtor = WorkspaceExplorerView;
             // Track folder access for recent folders
@@ -2686,6 +2702,9 @@ define([
               }
             }
             break;
+          case 'gexf':
+            Topic.publish('/navigate', { href: '/view/Gexf' + '&path=' + this.file, target: 'blank' });
+            return;
           case 'genome_group':
             panelCtor = window.App.getConstructor('p3/widget/viewer/WSGenomeGroup');
             params.query = '?&in(genome_id,GenomeGroup(' + encodeURIComponent(this.path).replace('(', '%28').replace(')', '%29') + '))';
@@ -2733,6 +2752,9 @@ define([
                 case 'Homology':
                   d = 'p3/widget/viewer/BlastJobResult';
                   break;
+                //case 'SyntenyGraph':
+                //  d = 'p3/widget/viewer/GEXF';
+                //  break;
                 default:
                   console.log('Using the default JobResult viewer. A viewer could not be found for id: ' + id);
               }
@@ -2807,7 +2829,12 @@ define([
                 var sel = Object.keys(evt.selected).map(lang.hitch(this, function (rownum) {
                   return evt.grid.row(rownum).data;
                 }));
-
+                sel.forEach(function(item){
+                    if (item && (item.type === 'unspecified' || item.type === 'txt') && item.name && item.name.endsWith('.gexf')) {
+                        // Temporarily override the type for the ActionBar's logic
+                        item.type = 'gexf';
+                    }
+                });
                 if (hideTimer) {
                   clearTimeout(hideTimer);
                 }

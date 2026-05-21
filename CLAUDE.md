@@ -218,3 +218,72 @@ Configured in `p3-web.conf`:
 - App Service: Job submission
 - Homology Service: BLAST searches
 - Compare Regions: Genome comparison
+
+## Dijit Form Validation Patterns
+
+When working with dijit form validation, be aware of these key behaviors:
+
+### Form Validation and Focus
+When `dijit/form/Form.validate()` is called (which happens on every keystroke if `intermediateChanges: true`):
+1. It iterates through all form widgets calling `isValid()`
+2. If a widget returns `false`, the Form **scrolls to it and calls `focus()`**
+3. This can steal focus from the field the user is currently typing in
+
+**Solution:** Override `focus()` in widgets that shouldn't receive automatic focus:
+```javascript
+focus: function () {
+  // Only focus if user explicitly initiated it
+  if (this._userInitiatedFocus) {
+    this._userInitiatedFocus = false;
+    this.searchBox.focus();
+  }
+  // Otherwise, block automatic focus from form validation
+}
+```
+
+### Making Custom Widgets Participate in Form Validation
+To make a custom widget participate in dijit form validation:
+1. Add `dijit/form/_FormValueMixin` to the widget's declare chain
+2. Implement `isValid(isFocused)` method that returns boolean
+3. Implement `validate(isFocused)` method for visual feedback
+4. Ensure the widget has a `name` attribute in the template
+
+**Warning:** Adding `_FormValueMixin` makes the widget subject to Form's focus-stealing behavior.
+
+### Validation Order Matters
+When validating optional fields, check if the field is required/empty **before** calling inner widget's `isValid()`:
+```javascript
+validate: function (isFocused) {
+  // Check optional empty FIRST - return early to avoid inner validation
+  if (!this.required) {
+    var value = this.get('value') || '';
+    if (!value || value === '') {
+      return true;  // Optional empty = valid
+    }
+  }
+  // Only now check inner widget (which might return false for empty)
+  return this.innerWidget.isValid(isFocused);
+}
+```
+
+### Dijit Error Styling
+To show validation errors visually without triggering dijit side effects:
+```javascript
+// DO: Just add CSS classes
+domClass.add(widget.domNode, 'dijitError');
+domClass.add(widget.domNode, 'dijitTextBoxError');
+
+// DON'T: Manipulate dijit internal state (can cause focus issues)
+widget._set('state', 'Error');
+widget._hasBeenBlurred = true;  // Can trigger refresh/focus behavior
+```
+
+### Widget Lifecycle and Null Checks
+Widgets created conditionally (e.g., only when user is logged in) may not exist during early validation:
+```javascript
+// In startup() - widget may not exist yet
+this.inherited(arguments);  // Calls validate()
+
+// In validate() - always check existence
+var value = this.optionalWidget ? this.optionalWidget.get('value') : '';
+```
