@@ -429,8 +429,7 @@ define([
     onFirstView: function () {
       this.inherited(arguments);
 
-      // TODO: re-enable once taxonomy search API issues are resolved.
-      /*var _self = this;
+      var _self = this;
 
       // ── Search bar
       var searchPane = new ContentPane({
@@ -487,7 +486,7 @@ define([
         input.value = '';
         clearBtn.style.display = 'none';
         _self._applySearch('');
-      });*/
+      });
       if (this._pendingPhyloManifest) {
         this.grid.set('phyloManifest', this._pendingPhyloManifest);
       }
