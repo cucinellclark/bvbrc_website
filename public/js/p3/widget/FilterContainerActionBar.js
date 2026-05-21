@@ -806,8 +806,20 @@ define([
       }));
     },
     buildAddFilters: function () {
+      // Helper to get field name from facetFields entry (handles both string and object formats)
+      const getFieldName = (ff) => typeof ff === 'object' ? ff.field : ff;
+      // Helper to check if a facetField entry is hidden
+      const isHidden = (ff) => typeof ff === 'object' && ff.facet_hidden;
+      // Helper to find array index by field name
+      const findFieldIndex = (fieldName) => {
+        for (let i = 0; i < this.facetFields.length; i++) {
+          if (getFieldName(this.facetFields[i]) === fieldName) return i;
+        }
+        return -1;
+      };
+
       const fields = this.facetFields.map((ff) => {
-        const field = ff.field || ff;
+        const field = getFieldName(ff);
         return { id: field, label: constructMetadataName(field), value: field }
       })
       const m_store = new Memory({
@@ -820,31 +832,40 @@ define([
         sortByLabel: false,
         store: os
       })
-      // pre-populate existing facets
-      const pre_selected = this.facetFields.filter((ff) => !ff.facet_hidden).map((ff) => ff.field)
+      // pre-populate existing facets (non-hidden ones)
+      const pre_selected = this.facetFields.filter((ff) => !isHidden(ff)).map((ff) => getFieldName(ff))
       selectBox.set('value', pre_selected)
 
       on(selectBox, 'click', lang.hitch(this, function () {
         const all_selected = selectBox.get('value')
         const set_selected = new Set(all_selected)
-        const all_exists = this.facetFields.filter(ff => !ff.facet_hidden).map(ff => ff.field)
+        const all_exists = this.facetFields.filter(ff => !isHidden(ff)).map(ff => getFieldName(ff))
         const set_exists = new Set(all_exists)
         const set_added = setDifference(set_selected, set_exists)
         const set_removed = setDifference(set_exists, set_selected)
 
-        set_added.forEach((ff) => {
-          const idx = os.objectStore.index[ff]
-          this.facetFields[idx].facet_hidden = false
-          if (this._ffWidgets[ff]) {
-            this._ffWidgets[ff].toggleHidden()
+        set_added.forEach((fieldName) => {
+          const idx = findFieldIndex(fieldName);
+          if (idx === -1) return;
+          const ff = this.facetFields[idx];
+          if (typeof ff === 'object') {
+            ff.facet_hidden = false;
+          }
+          if (this._ffWidgets[fieldName]) {
+            this._ffWidgets[fieldName].toggleHidden()
           } else {
-            this.addNewCategory(ff, this.facetFields[idx].type)
+            const fieldType = (typeof ff === 'object' && ff.type) || 'str';
+            this.addNewCategory(fieldName, fieldType)
           }
         })
-        set_removed.forEach((ff) => {
-          const idx = os.objectStore.index[ff]
-          this.facetFields[idx].facet_hidden = true
-          this.removeCategory(ff)
+        set_removed.forEach((fieldName) => {
+          const idx = findFieldIndex(fieldName);
+          if (idx === -1) return;
+          const ff = this.facetFields[idx];
+          if (typeof ff === 'object') {
+            ff.facet_hidden = true;
+          }
+          this.removeCategory(fieldName)
         })
       }))
 
@@ -853,6 +874,9 @@ define([
         class: 'facetColumnSelector',
         style: 'display: none'
       })
+      // Note: Adding CheckedMultiSelect to DropDownMenu causes _setSelected errors
+      // because CheckedMultiSelect doesn't implement _setSelected. This is a known
+      // limitation - the gear dropdown may show errors when hovering over items.
       menu.addChild(selectBox)
       const button = new DropDownButton({
         iconClass: 'fa icon-gear fa-lg',
