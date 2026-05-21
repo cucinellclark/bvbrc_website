@@ -155,22 +155,15 @@ define([
 
     /**
      * Formats 'progress' event
+     * Displays the agent's human-readable progress message.
      */
     format_progress: function(data) {
       if (!this.config.showProgressUpdates) return null;
 
-      this.agentState.currentIteration = data.iteration || 0;
-      this.agentState.maxIterations = data.max_iterations || 10;
-      this.agentState.percentage = data.percentage || 0;
-      this.agentState.currentTool = data.tool || null;
+      var content = data.message || 'Processing...';
 
-      var content = 'Processing: Iteration ' +
-                    this.agentState.currentIteration + '/' +
-                    this.agentState.maxIterations +
-                    ' (' + Math.round(this.agentState.percentage) + '%)';
-
-      if (this.agentState.currentTool) {
-        content += '\nStatus: ' + data.status;
+      if (data.agent) {
+        content = '**' + data.agent + '**: ' + content;
       }
 
       return this.updateStatusMessage(content, 'progress');
@@ -182,20 +175,17 @@ define([
     format_tool_selected: function(data) {
       if (!this.config.showToolSelection) return null;
 
-      this.agentState.currentIteration = data.iteration || this.agentState.currentIteration;
       this.agentState.currentTool = data.tool;
       this.agentState.currentToolReasoning = data.reasoning;
 
-      var content = 'Tool Selected: **' + data.tool + '**\n';
-      content += 'Iteration: ' + data.iteration + '\n';
+      var content = '';
+      if (data.agent) {
+        content += '**' + data.agent + '**: ';
+      }
+      content += 'Using **' + data.tool + '**';
 
       if (data.reasoning) {
-        content += 'Reasoning: ' + data.reasoning + '\n';
-      }
-
-      if (data.parameters && Object.keys(data.parameters).length > 0) {
-        content += 'Parameters:\n';
-        content += '```json\n' + JSON.stringify(data.parameters, null, 2) + '\n```';
+        content += '\n' + data.reasoning;
       }
 
       return this.updateStatusMessage(content, 'tool_selected');
@@ -212,35 +202,23 @@ define([
       // Track tool usage
       this.agentState.toolsUsed.push({
         tool: tool,
-        iteration: data.iteration,
         status: data.status
       });
 
       var content = '';
+      if (data.agent) {
+        content += '**' + data.agent + '**: ';
+      }
 
       if (data.status === 'success') {
-        content = 'Tool Executed: **' + tool + '** (Success)\n';
-        content += 'Iteration: ' + data.iteration + '\n';
-
-        // Show result preview if available
-        if (data.result) {
-          var resultStr = typeof data.result === 'string'
-            ? data.result
-            : JSON.stringify(data.result);
-
-          // Truncate long results
-          if (resultStr.length > 200) {
-            resultStr = resultStr.substring(0, 200) + '...';
-          }
-
-          content += 'Result: ' + resultStr;
+        content += '**' + tool + '** completed';
+        if (data.result_summary) {
+          content += ' - ' + data.result_summary;
         }
       } else {
-        content = 'Tool Executed: **' + tool + '** (Failed)\n';
-        content += 'Iteration: ' + data.iteration + '\n';
-
+        content += '**' + tool + '** failed';
         if (data.error) {
-          content += 'Error: ' + data.error;
+          content += ' - ' + data.error;
         }
       }
 
@@ -292,10 +270,11 @@ define([
       // Update agent state
       this.agentState.status = 'complete';
 
-      // Create a final summary (optional, can be displayed briefly before removal)
-      var content = 'Complete\n';
-      content += (data.iterations || this.agentState.currentIteration) + ' iterations\n';
-      content += (data.tools_used || this.agentState.toolsUsed.length) + ' tools used';
+      // Create a final summary (displayed briefly before removal)
+      var content = 'Complete';
+      if (this.agentState.toolsUsed.length > 0) {
+        content += ' (' + this.agentState.toolsUsed.length + ' tools used)';
+      }
 
       // Return updated message, but mark for removal
       var message = this.updateStatusMessage(content, 'done');
