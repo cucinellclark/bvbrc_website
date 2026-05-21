@@ -268,6 +268,8 @@ app.use('/status', systemStatus);  // system status page
 app.use('/help', help);
 app.use('/uploads', uploads);
 app.use('/users', users);
+app.use('/vendor/gexf-js', express.static(path.join(__dirname, 'node_modules', 'gexf-js')));
+
 
 // Embedded Nextstrain/Auspice viewer
 app.use('/charon', auspice);
