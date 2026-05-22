@@ -16,7 +16,7 @@ define([
     applicationName: 'PredictStructure',
     requireAuth: true,
     applicationLabel: 'Protein Structure Prediction',
-    applicationDescription: 'Predict biomolecular structures (proteins, complexes, protein-DNA/RNA, protein-ligand) using Boltz-2, OpenFold 3, Chai-1, AlphaFold 2, or ESMFold. Provides a unified interface with automatic parameter mapping, format conversion, output normalization, and confidence scoring. Advanced knobs (num_samples, num_recycles, seed, output_format, all tool-specific parameters) use sensible defaults from the predict-structure CLI; expose them via the PredictStructureFull spec or direct CLI / CWL invocation.',
+    applicationDescription: 'Predict biomolecular structures (proteins, complexes, protein-DNA/RNA, protein-ligand) using Boltz, OpenFold 3, Chai, AlphaFold 2, or ESMFold. Provides a unified interface with automatic parameter mapping, format conversion, output normalization, and confidence scoring. For further explanation, please see the Protein Structure Prediction Service Quick Reference Guide and Tutorial.',
     applicationHelp: 'quick_references/services/predict_structure_service.html',
     tutorialLink: 'tutorial/predict_structure/predict_structure.html',
     videoLink: '',
