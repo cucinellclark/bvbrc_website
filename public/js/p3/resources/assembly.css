@@ -31,6 +31,15 @@
     margin-bottom: 20px;
 }
 
+/* Tables inside info-dialog content. Sphinx-rendered tables wrap
+ * column headers in <th>, but the dijit Dialog CSS doesn't always
+ * inherit the body's bold font-weight cleanly. Force a consistent
+ * bold, same-family as the dialog body. */
+.helpModal th {
+    font-family: inherit;
+    font-weight: bold;
+}
+
 .helpTooltip h2 {
     display: none
 }

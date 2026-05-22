@@ -115,7 +115,7 @@ define([
                 content: help_text,
                 'class': 'helpModal',
                 draggable: true,
-                style: 'max-width: 350px;'
+                style: 'max-width: 500px;'
               });
               item.open = false;
               on(item, 'click', function () {
