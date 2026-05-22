@@ -168,13 +168,19 @@
         </div>
         <div class="appRow">
           <div class="appFieldLong" style="width:380px">
-            <label>Output File Prefix</label><span class="charError"
+            <label>Job Name</label><span class="charError"
               style="color:red; font-size:8pt; padding-left:10px; font-weight:bold">&nbsp;</span><br>
             <div data-dojo-attach-point="output_file" data-dojo-attach-event="onChange:checkOutputName"
               style="width:100%;"
               data-dojo-type="p3/widget/WorkspaceFilenameValidationTextBox" name="output_file"
-              data-dojo-props="intermediateChanges:true, promptMessage:'Optional prefix for the result subfolder name. The job creates a subfolder named &lt;prefix&gt;_&lt;timestamp&gt;_&lt;task_id&gt; inside the Output Folder; defaults to predict_structure_result if blank.',trim:true,placeHolder:'Optional output prefix'">
+              data-dojo-props="intermediateChanges:true, promptMessage:'Name for this job. A workspace object with this name is created inside the Output Folder and holds all job-related info including the prediction results.',trim:true,placeHolder:'Job name'">
             </div>
+          </div>
+        </div>
+        <div class="appRow">
+          <div class="appFieldLong" style="margin-top:8px; padding:8px 12px; background:#f5f5f5; border-left:3px solid #6e8baf; font-family:monospace; font-size:12px; color:#333;">
+            <span style="color:#6e8baf; font-weight:bold;">Result location:</span>
+            <span data-dojo-attach-point="output_path_preview">(set Output Folder and Job Name)</span>
           </div>
         </div>
       </div>

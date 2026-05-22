@@ -41,6 +41,7 @@ define([
       } catch (error) {
         console.error(error);
       }
+      this.updateOutputPathPreview();
       this.checkParameterRequiredFields();
     },
 
@@ -253,12 +254,30 @@ define([
 
     onOutputPathChange: function (val) {
       this.inherited(arguments);
+      this.updateOutputPathPreview();
       this.checkParameterRequiredFields();
     },
 
     checkOutputName: function (val) {
       this.inherited(arguments);
+      this.updateOutputPathPreview();
       this.checkParameterRequiredFields();
+    },
+
+    updateOutputPathPreview: function () {
+      if (!this.output_path_preview) { return; }
+      var folder = this.output_path && this.output_path.get('value');
+      var name = this.output_file && this.output_file.get('value');
+      if (folder && name) {
+        // Trim trailing slash on folder, leading slash on name, then join with a single /.
+        var f = String(folder).replace(/\/+$/, '');
+        var n = String(name).replace(/^\/+/, '');
+        this.output_path_preview.textContent = f + '/' + n;
+      } else if (folder) {
+        this.output_path_preview.textContent = String(folder).replace(/\/+$/, '') + '/(enter Job Name)';
+      } else {
+        this.output_path_preview.textContent = '(set Output Folder and Job Name)';
+      }
     },
 
     addRerunFields: function (job_params) {
