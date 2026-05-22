@@ -83,7 +83,7 @@ define([
       } else if (tool === 'alphafold') {
         msg = 'AlphaFold 2 builds its own MSA from BV-BRC databases; this section is ignored.';
       } else if (tool === 'boltz' || tool === 'openfold' || tool === 'chai') {
-        msg = 'Required for the selected prediction tool. Choose <i>Precomputed MSA from Workspace</i>.';
+        msg = 'Required for the selected prediction tool. Choose <i>Precomputed MSA from Workspace</i> to upload one, or <i>Use MSA Server or Service</i> to have BV-BRC compute one with ColabFold.';
       } else {
         // tool === 'auto' (or unknown)
         msg = 'Optional in Auto mode. With no MSA the service falls back to ESMFold for a single protein chain.';
@@ -95,9 +95,6 @@ define([
       var source = this.msa_source ? this.msa_source.get('value') : 'none';
       if (this.msa_workspace_row) {
         this.msa_workspace_row.style.display = source === 'workspace' ? '' : 'none';
-      }
-      if (this.msa_server_row) {
-        this.msa_server_row.style.display = source === 'server' ? '' : 'none';
       }
       // Clear the workspace selection when switching away from workspace mode so
       // the form doesn't carry a stale value into submission.
@@ -205,11 +202,14 @@ define([
 
     _hasRequiredMsa: function () {
       if (!this._isMsaRequired()) { return true; }
-      // Tool needs an MSA: only "workspace" with a selected file satisfies that
-      // today. "server" mode is forward-looking and not yet wired through.
+      // Tool needs an MSA. "workspace" requires a selected file; "server" is
+      // satisfied by itself (ColabFold MSA is computed at submission time).
       var source = this.msa_source ? this.msa_source.get('value') : 'none';
-      if (source !== 'workspace') { return false; }
-      return !!(this.msa_file && this.msa_file.get('value'));
+      if (source === 'server') { return true; }
+      if (source === 'workspace') {
+        return !!(this.msa_file && this.msa_file.get('value'));
+      }
+      return false;
     },
 
     _isValidSmiles: function (smiles) {
