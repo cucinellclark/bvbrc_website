@@ -316,6 +316,7 @@ define([
       if (
         this._hasAnyBiomoleculeInput() &&
         this.output_path.get('value') &&
+        this.output_file && this.output_file.get('value') &&
         this._hasRequiredMsa() &&
         this.validLigands &&
         this.validSmiles
