@@ -41,12 +41,27 @@ define([
       } catch (error) {
         console.error(error);
       }
+      // Default Job Name = <applicationName>-yymmdd-hhmmss, unless rerun-form intake
+      // (or a stored value) already filled it.
+      if (this.output_file && !this.output_file.get('value')) {
+        this.output_file.set('value', this._defaultJobName());
+      }
       this.updateOutputPathPreview();
       this.checkParameterRequiredFields();
     },
 
+    _defaultJobName: function () {
+      var d = new Date();
+      var pad = function (n) { return n < 10 ? '0' + n : String(n); };
+      var stamp = pad(d.getFullYear() % 100) + pad(d.getMonth() + 1) + pad(d.getDate())
+        + '-' + pad(d.getHours()) + pad(d.getMinutes()) + pad(d.getSeconds());
+      return (this.applicationName || 'job') + '-' + stamp;
+    },
+
     postCreate: function () {
       this.inherited(arguments);
+      this._updateLigandLabel();
+      this.onMsaSourceChange();
       this.onToolChange();
     },
 
@@ -55,13 +70,58 @@ define([
     },
 
     onToolChange: function () {
-      if (this.msa_policy_message) {
-        var required = this._isMsaRequired();
-        this.msa_policy_message.innerHTML = required
-          ? 'Required for the selected prediction tool.'
-          : 'Optional for Auto, AlphaFold 2, and ESMFold.';
+      this._refreshMsaPolicyMessage();
+      this.checkParameterRequiredFields();
+    },
+
+    _refreshMsaPolicyMessage: function () {
+      if (!this.msa_policy_message) { return; }
+      var tool = this.tool ? this.tool.get('value') : 'auto';
+      var msg;
+      if (tool === 'esmfold') {
+        msg = 'ESMFold does not use an MSA; this section is ignored.';
+      } else if (tool === 'alphafold') {
+        msg = 'AlphaFold 2 builds its own MSA from BV-BRC databases; this section is ignored.';
+      } else if (tool === 'boltz' || tool === 'openfold' || tool === 'chai') {
+        msg = 'Required for the selected prediction tool. Choose <i>Precomputed MSA from Workspace</i>.';
+      } else {
+        // tool === 'auto' (or unknown)
+        msg = 'Optional in Auto mode. With no MSA the service falls back to ESMFold for a single protein chain.';
+      }
+      this.msa_policy_message.innerHTML = msg;
+    },
+
+    onMsaSourceChange: function () {
+      var source = this.msa_source ? this.msa_source.get('value') : 'none';
+      if (this.msa_workspace_row) {
+        this.msa_workspace_row.style.display = source === 'workspace' ? '' : 'none';
+      }
+      if (this.msa_server_row) {
+        this.msa_server_row.style.display = source === 'server' ? '' : 'none';
+      }
+      // Clear the workspace selection when switching away from workspace mode so
+      // the form doesn't carry a stale value into submission.
+      if (source !== 'workspace' && this.msa_file && this.msa_file.get('value')) {
+        this.msa_file.set('value', '');
       }
       this.checkParameterRequiredFields();
+    },
+
+    onLigandTypeChange: function () {
+      // Switching CCD <-> SMILES re-runs the same validator against the new
+      // type. Preserve typed content; the user can clear if it makes no sense
+      // under the new notation.
+      this._updateLigandLabel();
+      this.checkLigandInput();
+    },
+
+    _updateLigandLabel: function () {
+      if (!this.ligand_input_label || !this.ligand_type || !this.ligand_input) { return; }
+      var isCcd = this.ligand_type.get('value') === 'ccd';
+      this.ligand_input_label.textContent = isCcd ? 'CCD codes' : 'SMILES strings';
+      this.ligand_input.set('placeholder', isCcd
+        ? 'ATP, NAD, NAG (one per line)'
+        : 'CCO, C1=CC=CC=C1 (one SMILES per line)');
     },
 
     getValues: function () {
@@ -74,17 +134,23 @@ define([
       this._copyIfPresent(submit, 'input_file', values.input_file);
       this._copyIfPresent(submit, 'dna_file', values.dna_file);
       this._copyIfPresent(submit, 'rna_file', values.rna_file);
-      this._copyIfPresent(submit, 'msa_file', values.msa_file);
       this._copyIfPresent(submit, 'output_file', values.output_file);
 
-      var ligands = this._parseLigands(values.ligand);
-      if (ligands.length > 0) {
-        submit.ligand = ligands;
+      // MSA: only send msa_file when the user picked the "workspace" source.
+      // "none" or "server" mean no msa_file in the submission.
+      if (values.msa_source === 'workspace') {
+        this._copyIfPresent(submit, 'msa_file', values.msa_file);
       }
 
-      var smiles = this._parseLines(values.smiles);
-      if (smiles.length > 0) {
-        submit.smiles = smiles;
+      // Combined ligand input → submit.ligand (CCD) or submit.smiles
+      // depending on which notation was selected.
+      var entries = this._parseLines(values.ligand_input);
+      if (entries.length > 0) {
+        if (values.ligand_type === 'smiles') {
+          submit.smiles = entries;
+        } else {
+          submit.ligand = entries.map(function (e) { return e.toUpperCase(); });
+        }
       }
 
       return submit;
@@ -138,7 +204,12 @@ define([
     },
 
     _hasRequiredMsa: function () {
-      return !this._isMsaRequired() || (this.msa_file && this.msa_file.get('value'));
+      if (!this._isMsaRequired()) { return true; }
+      // Tool needs an MSA: only "workspace" with a selected file satisfies that
+      // today. "server" mode is forward-looking and not yet wired through.
+      var source = this.msa_source ? this.msa_source.get('value') : 'none';
+      if (source !== 'workspace') { return false; }
+      return !!(this.msa_file && this.msa_file.get('value'));
     },
 
     _isValidSmiles: function (smiles) {
@@ -195,34 +266,39 @@ define([
       return true;
     },
 
-    checkSmiles: function () {
-      var lines = this.smiles ? this._parseLines(this.smiles.get('value')) : [];
-      var _self = this;
-      var firstInvalid = -1;
-      lines.forEach(function (line, idx) {
-        if (firstInvalid === -1 && !_self._isValidSmiles(line)) {
-          firstInvalid = idx + 1;
+    checkLigandInput: function () {
+      // Consolidated validator for the combined Ligands textarea. Validates
+      // against whichever notation the type selector currently points at and
+      // sets validLigands / validSmiles to keep the rest of the form logic
+      // unchanged.
+      var lines = this.ligand_input ? this._parseLines(this.ligand_input.get('value')) : [];
+      var type = this.ligand_type ? this.ligand_type.get('value') : 'ccd';
+      var message = '';
+      var ok = true;
+      if (type === 'smiles') {
+        var firstInvalid = -1;
+        for (var i = 0; i < lines.length; i++) {
+          if (!this._isValidSmiles(lines[i])) { firstInvalid = i + 1; break; }
         }
-      });
-      this.validSmiles = firstInvalid === -1;
-      if (this.smiles_message) {
-        this.smiles_message.textContent = this.validSmiles
-          ? ''
-          : 'Invalid SMILES string on line ' + firstInvalid + '. Check for unbalanced brackets/parentheses or illegal characters.';
+        ok = firstInvalid === -1;
+        if (!ok) {
+          message = 'Invalid SMILES string on line ' + firstInvalid + '. Check for unbalanced brackets/parentheses or illegal characters.';
+        }
+      } else {
+        // CCD codes: 1-3 alphanumeric characters
+        for (var j = 0; j < lines.length; j++) {
+          if (!/^[A-Za-z0-9]{1,3}$/.test(lines[j])) { ok = false; break; }
+        }
+        if (!ok) {
+          message = 'CCD codes must be 1-3 alphanumeric characters.';
+        }
       }
-      this.checkParameterRequiredFields();
-    },
-
-    checkLigands: function () {
-      var ligands = this.ligand ? this._parseLines(this.ligand.get('value')) : [];
-      var invalid = ligands.filter(function (line) {
-        return !/^[A-Za-z0-9]{1,3}$/.test(line);
-      });
-      this.validLigands = invalid.length === 0;
+      // Keep the two booleans in sync with the active notation so legacy
+      // callers (validate / checkParameterRequiredFields) continue to work.
+      this.validLigands = type === 'ccd' ? ok : true;
+      this.validSmiles = type === 'smiles' ? ok : true;
       if (this.ligand_message) {
-        this.ligand_message.innerHTML = this.validLigands
-          ? ''
-          : 'CCD codes must be 1-3 alphanumeric characters.';
+        this.ligand_message.textContent = message;
       }
       this.checkParameterRequiredFields();
     },
@@ -285,14 +361,26 @@ define([
       if (job_params.input_file) { this.input_file.set('value', job_params.input_file); }
       if (job_params.dna_file) { this.dna_file.set('value', job_params.dna_file); }
       if (job_params.rna_file) { this.rna_file.set('value', job_params.rna_file); }
-      if (job_params.msa_file) { this.msa_file.set('value', job_params.msa_file); }
-      if (job_params.ligand) { this.ligand.set('value', this._listToText(job_params.ligand, 'ccd_code')); }
-      if (job_params.smiles) { this.smiles.set('value', this._listToText(job_params.smiles, 'smiles_str')); }
+      if (job_params.msa_file) {
+        this.msa_source.set('value', 'workspace');
+        this.msa_file.set('value', job_params.msa_file);
+      }
+      // Ligand rerun: if the prior submission had a ligand list, populate as CCD.
+      // If it had SMILES, populate as SMILES. If somehow both (legacy form
+      // allowed it), prefer ligand and drop smiles — the consolidated input
+      // can only carry one notation at a time.
+      if (job_params.ligand) {
+        this.ligand_type.set('value', 'ccd');
+        this.ligand_input.set('value', this._listToText(job_params.ligand, 'ccd_code'));
+      } else if (job_params.smiles) {
+        this.ligand_type.set('value', 'smiles');
+        this.ligand_input.set('value', this._listToText(job_params.smiles, 'smiles_str'));
+      }
       if (job_params.output_path) { this.output_path.set('value', job_params.output_path); }
       if (job_params.output_file) { this.output_file.set('value', job_params.output_file); }
 
-      this.checkLigands();
-      this.checkSmiles();
+      this.checkLigandInput();
+      this.onMsaSourceChange();
       this.onToolChange();
     },
 
