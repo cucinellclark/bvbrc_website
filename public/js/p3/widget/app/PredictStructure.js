@@ -116,9 +116,11 @@ define([
       if (!this.ligand_input_label || !this.ligand_type || !this.ligand_input) { return; }
       var isCcd = this.ligand_type.get('value') === 'ccd';
       this.ligand_input_label.textContent = isCcd ? 'CCD codes' : 'SMILES strings';
+      // Use literal newlines so the textarea placeholder shows the
+      // actual expected format. Comma-separated input fails validation.
       this.ligand_input.set('placeholder', isCcd
-        ? 'ATP, NAD, NAG (one per line)'
-        : 'CCO, C1=CC=CC=C1 (one SMILES per line)');
+        ? 'ATP\nNAD\nNAG'
+        : 'CCO\nC1=CC=CC=C1');
     },
 
     getValues: function () {
