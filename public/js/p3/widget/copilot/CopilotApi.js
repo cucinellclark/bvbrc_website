@@ -331,6 +331,13 @@ define([
             if (params.enhancedPrompt) {
                 data.enhanced_prompt = params.enhancedPrompt;
             }
+            // Include auto-submit preference if set
+            var autoSubmitPref = window.App.copilotAutoSubmitPreference
+                             || localStorage.getItem('copilot-auto-submit')
+                             || 'always_review';
+            if (autoSubmitPref && autoSubmitPref !== 'always_review') {
+                data.auto_submit_preference = autoSubmitPref;
+            }
             var hasRagSelection = !!(params.ragDb && params.ragDb !== 'null' && params.ragDb !== 'none');
             if (hasRagSelection) {
                 data.rag_db = params.ragDb;

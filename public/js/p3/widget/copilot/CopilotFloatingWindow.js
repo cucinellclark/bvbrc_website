@@ -765,6 +765,46 @@ define([
                 topic.publish('copilotPanelTabsVisibilityChanged', isVisible);
             });
 
+            // Add Auto-Submit preference selector
+            var autoSubmitContainer = domConstruct.create('div', {
+                style: 'display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 10px; border-top: 1px solid #e5e7eb;'
+            }, advancedOptionsDialog.containerNode);
+
+            domConstruct.create('span', {
+                innerHTML: 'Auto-Submit:',
+                style: 'white-space: nowrap; font-size: 14px;'
+            }, autoSubmitContainer);
+
+            var savedAutoSubmit = localStorage.getItem('copilot-auto-submit') || 'always_review';
+            var autoSubmitSelect = domConstruct.create('select', {
+                style: 'font-size: 12px; padding: 2px;'
+            }, autoSubmitContainer);
+
+            var autoSubmitOptions = [
+                { value: 'always_review', label: 'Always review' },
+                { value: 'auto_simple', label: 'Auto-submit simple' },
+                { value: 'auto_all', label: 'Auto-submit all' }
+            ];
+            autoSubmitOptions.forEach(function(opt) {
+                var optEl = domConstruct.create('option', {
+                    value: opt.value,
+                    innerHTML: opt.label
+                }, autoSubmitSelect);
+                if (opt.value === savedAutoSubmit) {
+                    optEl.selected = true;
+                }
+            });
+
+            on(autoSubmitSelect, 'change', function(evt) {
+                var val = evt.target.value;
+                localStorage.setItem('copilot-auto-submit', val);
+                window.App.copilotAutoSubmitPreference = val;
+                topic.publish('copilotAutoSubmitChanged', val);
+            });
+
+            // Initialize the global value
+            window.App.copilotAutoSubmitPreference = savedAutoSubmit;
+
             return advancedOptionsDialog;
         },
 
