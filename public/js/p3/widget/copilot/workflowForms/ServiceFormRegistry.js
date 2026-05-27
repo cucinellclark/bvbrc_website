@@ -49,6 +49,8 @@ define([
   var serviceAliases = {
     assembly2: 'genome_assembly',
     assembly: 'genome_assembly',
+    genomeassembly2: 'genome_assembly',
+    genomeassembly: 'genome_assembly',
     annotation: 'genome_annotation',
     comprehensivegenomeanalysis: 'comprehensive_genome_analysis',
     homology: 'blast',

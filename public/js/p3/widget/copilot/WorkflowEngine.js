@@ -116,8 +116,19 @@ define([
       this.detailContentNode = null;
       this.detailPrevBtn = null;
       this.detailNextBtn = null;
+      this._pollingIntervalId = null;
+      this._pollingAttempts = 0;
+      this._statusIndicatorNode = null;
       this.inherited(arguments);
       this.render();
+    },
+
+    /**
+     * Cleanup: stop polling and destroy forms on widget destruction
+     */
+    destroy: function() {
+      this._stopStatusPolling();
+      this.inherited(arguments);
     },
 
     /**
@@ -174,7 +185,32 @@ define([
 
       // Create visual workflow display
       this.renderWorkflowView(data);
-      this.validateAllSteps({ updateUI: true });
+
+      // Skip validation for auto-submitted or already-running workflows
+      if (!this._isSubmittedOrRunning(data)) {
+        this.validateAllSteps({ updateUI: true });
+      }
+    },
+
+    /**
+     * Checks whether the workflow is in a submitted/running/terminal state
+     * (either auto_submitted or manually submitted).
+     * @param {Object} workflow - Parsed workflow data
+     * @returns {boolean}
+     */
+    _isSubmittedOrRunning: function(workflow) {
+      if (!workflow) return false;
+      if (workflow.auto_submitted) return true;
+      var status = (workflow.status || '').toLowerCase();
+      if (status === 'pending' || status === 'submitted' || status === 'running' ||
+          status === 'queued' || status === 'succeeded' || status === 'failed' ||
+          status === 'cancelled') {
+        return true;
+      }
+      if (workflow.execution_metadata && workflow.execution_metadata.is_submitted) {
+        return true;
+      }
+      return false;
     },
 
     /**
@@ -195,12 +231,17 @@ define([
       // Render workflow header
       this.renderWorkflowHeader(workflow, container);
 
-      // For single-step with Dojo wrapper, bypass pipeline grid and show form directly
-      var isSingleStep = workflow.steps && workflow.steps.length === 1;
-      if (isSingleStep && CopilotServiceFormAdapter.hasDojoForm(workflow.steps[0].app)) {
-        this.renderSingleStepDirectForm(workflow, container);
+      // If workflow is auto-submitted or already running, render in read-only mode
+      if (this._isSubmittedOrRunning(workflow)) {
+        this.renderWorkflowStepsReadOnly(workflow, container);
       } else {
-        this.renderWorkflowSteps(workflow, container);
+        // For single-step with Dojo wrapper, bypass pipeline grid and show form directly
+        var isSingleStep = workflow.steps && workflow.steps.length === 1;
+        if (isSingleStep && CopilotServiceFormAdapter.hasDojoForm(workflow.steps[0].app)) {
+          this.renderSingleStepDirectForm(workflow, container);
+        } else {
+          this.renderWorkflowSteps(workflow, container);
+        }
       }
 
       // Render workflow outputs
@@ -373,13 +414,45 @@ define([
         }, metaContainer);
       }
 
-      // Add Review and Submit buttons if workflow is not yet submitted
-      var isSubmitted = workflow.execution_metadata &&
-                       workflow.execution_metadata.is_submitted;
-      var isPlanned = workflow.execution_metadata &&
-                     workflow.execution_metadata.is_planned;
+      // Show status indicator for submitted/running workflows, or Review/Submit buttons for planned ones
+      if (this._isSubmittedOrRunning(workflow)) {
+        var statusContainer = domConstruct.create('div', {
+          style: 'margin-top: 15px; display: flex; align-items: center; gap: 10px;'
+        }, header);
 
-      if (!isSubmitted || isPlanned) {
+        var displayStatus = (workflow.status || 'submitted').toLowerCase();
+        var statusLabel = 'Workflow submitted';
+        var statusIcon = '';
+        if (displayStatus === 'running' || displayStatus === 'pending' || displayStatus === 'queued') {
+          statusLabel = 'Workflow ' + displayStatus;
+          statusIcon = '<span class="workflow-status-spinner"></span> ';
+        } else if (displayStatus === 'succeeded') {
+          statusLabel = 'Workflow completed successfully';
+          statusIcon = '<span style="color: #16a34a;">&#10003;</span> ';
+        } else if (displayStatus === 'failed') {
+          statusLabel = 'Workflow failed';
+          statusIcon = '<span style="color: #dc2626;">&#10007;</span> ';
+        } else if (displayStatus === 'cancelled') {
+          statusLabel = 'Workflow cancelled';
+          statusIcon = '<span style="color: #6b7280;">&#8211;</span> ';
+        } else {
+          statusIcon = '<span class="workflow-status-spinner"></span> ';
+          statusLabel = 'Workflow submitted - running...';
+        }
+
+        this._statusIndicatorNode = domConstruct.create('div', {
+          class: 'workflow-submitted-status-indicator workflow-status-' + displayStatus,
+          innerHTML: statusIcon + this.escapeHtml(statusLabel),
+          style: 'padding: 8px 16px; border-radius: 6px; font-weight: 500; font-size: 14px; ' +
+                 'display: flex; align-items: center; gap: 6px;'
+        }, statusContainer);
+
+        // Start polling for status updates if workflow is in a non-terminal state
+        if (workflow.workflow_id && (displayStatus === 'pending' || displayStatus === 'queued' ||
+            displayStatus === 'running' || displayStatus === 'submitted')) {
+          this._startStatusPolling(workflow);
+        }
+      } else {
         var buttonContainer = domConstruct.create('div', {
           style: 'margin-top: 15px; text-align: left; display: flex; gap: 10px; align-items: center;'
         }, header);
@@ -1947,6 +2020,365 @@ define([
     },
 
     /**
+     * Renders workflow steps in read-only mode (for submitted/running/completed workflows).
+     * No edit forms, no Apply/Reset buttons — just a visual summary of each step.
+     * @param {Object} workflow - Workflow data
+     * @param {DOMNode} container - Parent container
+     */
+    renderWorkflowStepsReadOnly: function(workflow, container) {
+      if (!workflow.steps || workflow.steps.length === 0) {
+        return;
+      }
+
+      var stepsContainer = domConstruct.create('div', {
+        class: 'workflow-steps-container'
+      }, container);
+
+      domConstruct.create('h3', {
+        class: 'workflow-section-title',
+        innerHTML: 'Pipeline Steps'
+      }, stepsContainer);
+
+      var pipelineContainer = domConstruct.create('div', {
+        class: 'workflow-pipeline-grid'
+      }, stepsContainer);
+
+      workflow.steps.forEach(lang.hitch(this, function(step, index) {
+        this._renderReadOnlyStep(step, index, pipelineContainer);
+      }));
+    },
+
+    /**
+     * Renders a single step in read-only mode.
+     * @param {Object} step - Step data
+     * @param {number} index - Step index
+     * @param {DOMNode} container - Parent container
+     */
+    _renderReadOnlyStep: function(step, index, container) {
+      var stepStatus = (step.status || 'pending').toLowerCase();
+      var stepCard = domConstruct.create('div', {
+        class: 'workflow-step-card workflow-step-readonly workflow-step-status-' + stepStatus
+      }, container);
+
+      // Step number badge
+      domConstruct.create('div', {
+        class: 'workflow-step-number',
+        innerHTML: (index + 1)
+      }, stepCard);
+
+      // Step name
+      domConstruct.create('div', {
+        class: 'workflow-step-name',
+        innerHTML: this.escapeHtml(step.step_name || 'Step ' + (index + 1))
+      }, stepCard);
+
+      // App name
+      domConstruct.create('div', {
+        class: 'workflow-step-app',
+        innerHTML: this.escapeHtml(step.app)
+      }, stepCard);
+
+      // Status indicator
+      var statusClass = 'workflow-step-status workflow-step-status-' + stepStatus;
+      domConstruct.create('div', {
+        class: statusClass,
+        innerHTML: '<strong>Status:</strong> ' + this.escapeHtml(step.status || 'pending')
+      }, stepCard);
+
+      // Show key params as read-only summary
+      if (step.params && Object.keys(step.params).length > 0) {
+        var paramsPreview = domConstruct.create('div', {
+          class: 'workflow-step-params-preview',
+          style: 'margin-top: 6px; font-size: 12px; color: #6b7280;'
+        }, stepCard);
+
+        var paramKeys = Object.keys(step.params);
+        var previewKeys = paramKeys.slice(0, 4);
+        previewKeys.forEach(lang.hitch(this, function(key) {
+          var val = step.params[key];
+          var displayVal = this.formatValue(val);
+          if (displayVal.length > 60) {
+            displayVal = displayVal.substring(0, 57) + '...';
+          }
+          domConstruct.create('div', {
+            innerHTML: '<strong>' + this.escapeHtml(key) + ':</strong> ' + this.escapeHtml(displayVal),
+            style: 'margin-bottom: 2px;'
+          }, paramsPreview);
+        }));
+        if (paramKeys.length > 4) {
+          domConstruct.create('div', {
+            innerHTML: '... and ' + (paramKeys.length - 4) + ' more parameters',
+            style: 'font-style: italic; color: #9ca3af;'
+          }, paramsPreview);
+        }
+      }
+
+      // Error message for failed steps
+      if (stepStatus === 'failed' && step.error_message) {
+        domConstruct.create('div', {
+          class: 'workflow-step-error-message',
+          innerHTML: '<strong>Error:</strong> ' + this.escapeHtml(step.error_message),
+          style: 'margin-top: 6px; color: #dc2626; font-size: 12px;'
+        }, stepCard);
+      }
+
+      // Store reference for polling updates
+      this.stepCardNodesByIndex[index] = {
+        card: stepCard,
+        statusNode: stepCard.querySelector('.workflow-step-status')
+      };
+    },
+
+    // ===== Workflow Status Polling (TASK 3) =====
+
+    /** @property {number|null} _pollingIntervalId - Active polling interval handle */
+    _pollingIntervalId: null,
+
+    /** @property {number} _pollingIntervalMs - Polling interval in milliseconds */
+    _pollingIntervalMs: 20000, // 20 seconds
+
+    /** @property {number} _pollingMaxAttempts - Max polling attempts before giving up */
+    _pollingMaxAttempts: 180, // ~1 hour at 20s intervals
+
+    /** @property {number} _pollingAttempts - Current polling attempt count */
+    _pollingAttempts: 0,
+
+    /**
+     * Starts polling for workflow status updates.
+     * @param {Object} workflow - The workflow being tracked
+     */
+    _startStatusPolling: function(workflow) {
+      if (!workflow || !workflow.workflow_id) return;
+      if (!this.copilotApi || typeof this.copilotApi.getWorkflowStatus !== 'function') {
+        console.warn('[WorkflowEngine] Cannot start polling: copilotApi.getWorkflowStatus not available');
+        return;
+      }
+
+      // Clear any existing polling
+      this._stopStatusPolling();
+      this._pollingAttempts = 0;
+
+      console.log('[WorkflowEngine] Starting status polling for workflow:', workflow.workflow_id);
+
+      this._pollingIntervalId = setInterval(lang.hitch(this, function() {
+        this._pollingAttempts++;
+
+        if (this._pollingAttempts > this._pollingMaxAttempts) {
+          console.warn('[WorkflowEngine] Polling max attempts reached, stopping');
+          this._stopStatusPolling();
+          return;
+        }
+
+        this.copilotApi.getWorkflowStatus(workflow.workflow_id).then(
+          lang.hitch(this, function(statusResp) {
+            if (!statusResp) return;
+
+            console.log('[WorkflowEngine] Polling status response:', statusResp);
+
+            // Update workflow status
+            var newStatus = statusResp.status || workflow.status;
+            workflow.status = newStatus;
+
+            // Update step statuses if available
+            if (statusResp.steps && Array.isArray(statusResp.steps)) {
+              var workflowData = this.getParsedWorkflowData();
+              if (workflowData && workflowData.steps) {
+                statusResp.steps.forEach(lang.hitch(this, function(stepUpdate) {
+                  // Match by step_name
+                  for (var i = 0; i < workflowData.steps.length; i++) {
+                    if (workflowData.steps[i].step_name === stepUpdate.step_name) {
+                      workflowData.steps[i].status = stepUpdate.status;
+                      if (stepUpdate.error_message) {
+                        workflowData.steps[i].error_message = stepUpdate.error_message;
+                      }
+                      if (stepUpdate.task_id) {
+                        workflowData.steps[i].task_id = stepUpdate.task_id;
+                      }
+                      this._updateStepCardStatus(i, stepUpdate.status, stepUpdate.error_message);
+                      break;
+                    }
+                  }
+                }));
+              }
+            }
+
+            // Update the header status indicator
+            this._updateStatusIndicator(newStatus, statusResp);
+
+            // Check for terminal state
+            var terminalStates = ['succeeded', 'failed', 'cancelled'];
+            if (terminalStates.indexOf(newStatus.toLowerCase()) !== -1) {
+              console.log('[WorkflowEngine] Workflow reached terminal state:', newStatus);
+              this._stopStatusPolling();
+              this._showCompletionSummary(workflow, statusResp);
+            }
+          })
+        ).catch(lang.hitch(this, function(err) {
+          console.error('[WorkflowEngine] Polling error:', err);
+          // Don't stop polling on transient errors, but log them
+        }));
+      }), this._pollingIntervalMs);
+    },
+
+    /**
+     * Stops the status polling interval.
+     */
+    _stopStatusPolling: function() {
+      if (this._pollingIntervalId) {
+        clearInterval(this._pollingIntervalId);
+        this._pollingIntervalId = null;
+        console.log('[WorkflowEngine] Status polling stopped');
+      }
+    },
+
+    /**
+     * Updates the status indicator in the header.
+     * @param {string} newStatus - New workflow status
+     * @param {Object} statusResp - Full status response from API
+     */
+    _updateStatusIndicator: function(newStatus, statusResp) {
+      if (!this._statusIndicatorNode) return;
+
+      var status = (newStatus || 'unknown').toLowerCase();
+      var statusLabel = 'Workflow ' + newStatus;
+      var statusIcon = '';
+
+      if (status === 'running') {
+        statusIcon = '<span class="workflow-status-spinner"></span> ';
+        statusLabel = 'Workflow running...';
+      } else if (status === 'pending' || status === 'queued') {
+        statusIcon = '<span class="workflow-status-spinner"></span> ';
+        statusLabel = 'Workflow ' + newStatus + '...';
+      } else if (status === 'succeeded') {
+        statusIcon = '<span style="color: #16a34a;">&#10003;</span> ';
+        statusLabel = 'Workflow completed successfully';
+      } else if (status === 'failed') {
+        statusIcon = '<span style="color: #dc2626;">&#10007;</span> ';
+        statusLabel = 'Workflow failed';
+      } else if (status === 'cancelled') {
+        statusIcon = '<span style="color: #6b7280;">&#8211;</span> ';
+        statusLabel = 'Workflow cancelled';
+      }
+
+      this._statusIndicatorNode.innerHTML = statusIcon + this.escapeHtml(statusLabel);
+      this._statusIndicatorNode.className = 'workflow-submitted-status-indicator workflow-status-' + status;
+
+      // Update execution metadata step counts if available
+      if (statusResp && statusResp.execution_metadata) {
+        var meta = statusResp.execution_metadata;
+        var metaText = [];
+        if (typeof meta.completed_steps === 'number') {
+          metaText.push(meta.completed_steps + '/' + (meta.total_steps || '?') + ' steps completed');
+        }
+        if (typeof meta.running_steps === 'number' && meta.running_steps > 0) {
+          metaText.push(meta.running_steps + ' running');
+        }
+        if (typeof meta.failed_steps === 'number' && meta.failed_steps > 0) {
+          metaText.push(meta.failed_steps + ' failed');
+        }
+        if (metaText.length > 0) {
+          this._statusIndicatorNode.innerHTML += '<span style="margin-left: 8px; font-size: 12px; color: #6b7280;">(' + metaText.join(', ') + ')</span>';
+        }
+      }
+    },
+
+    /**
+     * Updates a step card's displayed status during polling.
+     * @param {number} index - Step index
+     * @param {string} newStatus - New step status
+     * @param {string} errorMessage - Optional error message
+     */
+    _updateStepCardStatus: function(index, newStatus, errorMessage) {
+      var cardData = this.stepCardNodesByIndex[index];
+      if (!cardData || !cardData.card) return;
+
+      var card = cardData.card;
+      var status = (newStatus || 'pending').toLowerCase();
+
+      // Update CSS classes
+      var statusClasses = ['pending', 'queued', 'running', 'succeeded', 'failed', 'cancelled'];
+      statusClasses.forEach(function(s) {
+        domClass.remove(card, 'workflow-step-status-' + s);
+      });
+      domClass.add(card, 'workflow-step-status-' + status);
+
+      // Update status text
+      var statusNode = card.querySelector('.workflow-step-status');
+      if (statusNode) {
+        statusNode.innerHTML = '<strong>Status:</strong> ' + this.escapeHtml(newStatus || 'pending');
+        statusNode.className = 'workflow-step-status workflow-step-status-' + status;
+      }
+
+      // Show error for failed steps
+      if (status === 'failed' && errorMessage) {
+        var existingError = card.querySelector('.workflow-step-error-message');
+        if (existingError) {
+          existingError.innerHTML = '<strong>Error:</strong> ' + this.escapeHtml(errorMessage);
+        } else {
+          domConstruct.create('div', {
+            class: 'workflow-step-error-message',
+            innerHTML: '<strong>Error:</strong> ' + this.escapeHtml(errorMessage),
+            style: 'margin-top: 6px; color: #dc2626; font-size: 12px;'
+          }, card);
+        }
+      }
+    },
+
+    /**
+     * Shows a completion summary when the workflow reaches a terminal state.
+     * @param {Object} workflow - The workflow data
+     * @param {Object} statusResp - Final status response
+     */
+    _showCompletionSummary: function(workflow, statusResp) {
+      var status = (statusResp.status || '').toLowerCase();
+      var outputPaths = statusResp.output_paths || [];
+
+      if (status === 'succeeded') {
+        var successMsg = 'Workflow completed successfully.';
+        if (outputPaths.length > 0) {
+          successMsg += ' Results at: ' + outputPaths.join(', ');
+        } else if (workflow.base_context && workflow.base_context.workspace_output_folder) {
+          successMsg += ' Results at: ' + workflow.base_context.workspace_output_folder;
+        }
+        this._showSubmissionSuccess(successMsg);
+        topic.publish('/Notification', {
+          message: successMsg,
+          type: 'message'
+        });
+      } else if (status === 'failed') {
+        var failedStep = null;
+        var failMsg = 'Workflow failed.';
+        if (statusResp.steps && Array.isArray(statusResp.steps)) {
+          for (var i = 0; i < statusResp.steps.length; i++) {
+            if ((statusResp.steps[i].status || '').toLowerCase() === 'failed') {
+              failedStep = statusResp.steps[i];
+              break;
+            }
+          }
+        }
+        if (failedStep) {
+          failMsg = 'Workflow failed at step "' + (failedStep.step_name || failedStep.app_name || 'unknown') + '"';
+          if (failedStep.error) {
+            failMsg += ': ' + failedStep.error;
+          } else if (failedStep.error_message) {
+            failMsg += ': ' + failedStep.error_message;
+          }
+        }
+        this._showSubmissionError(failMsg);
+        topic.publish('/Notification', {
+          message: failMsg,
+          type: 'error'
+        });
+      } else if (status === 'cancelled') {
+        this._showSubmissionError('Workflow was cancelled.');
+        topic.publish('/Notification', {
+          message: 'Workflow was cancelled.',
+          type: 'message'
+        });
+      }
+    },
+
+    /**
      * Formats a value for display
      * @param {*} value - Value to format
      * @returns {string} Formatted string
@@ -1995,6 +2427,7 @@ define([
       console.log('[WorkflowEngine] setWorkflowData() called');
       console.log('[WorkflowEngine] newData type:', typeof newData);
       console.log('[WorkflowEngine] newData:', newData);
+      this._stopStatusPolling();
       this.workflowData = newData;
       this.stepFormStateByIndex = {};
       this.stepValidationByIndex = {};

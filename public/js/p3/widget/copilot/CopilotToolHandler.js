@@ -72,8 +72,12 @@ define([
 
       if (!workflowId) return null;
 
+      var workflowStatus = source.status || 'planned';
+      var autoSubmitted = source.auto_submitted === true;
+
       console.log('[CopilotToolHandler] Workflow detected:', workflowId,
-                  'persisted:', persisted);
+                  'persisted:', persisted, 'status:', workflowStatus,
+                  'auto_submitted:', autoSubmitted);
 
       var callInfo = null;
       if (payload.call && typeof payload.call === 'object') {
@@ -85,8 +89,9 @@ define([
         chunk: typeof chunk === 'string' ? chunk : JSON.stringify(chunk),
         workflow: {
           workflow_id: workflowId,
-          status: source.status || 'planned',
+          status: workflowStatus,
           persisted: persisted,
+          auto_submitted: autoSubmitted,
           workflow_name: (source.manifest && source.manifest.workflow_name)
             || source.workflow_name || null,
           step_count: (source.manifest && source.manifest.steps && source.manifest.steps.length)

@@ -2350,6 +2350,8 @@ define([
         self.copilotApi.getWorkflowById(workflowId).then(function(fullWorkflow) {
           // Inject workflow_id + execution_metadata for WorkflowEngine compat
           fullWorkflow.workflow_id = workflowId;
+          fullWorkflow.status = currentStatus;
+          fullWorkflow.auto_submitted = !!(wf.auto_submitted);
           fullWorkflow.execution_metadata = {
             workflow_id: workflowId,
             status: currentStatus,
@@ -2619,8 +2621,11 @@ define([
       var step = isSingleStep ? workflowData.steps[0] : null;
       var appName = step ? step.app : '';
       var hasDojoForm = isSingleStep && CopilotServiceFormAdapter.hasDojoForm(appName);
+      var isSubmittedOrRunning = workflowData.auto_submitted ||
+        (workflowData.execution_metadata && workflowData.execution_metadata.is_submitted);
 
-      if (hasDojoForm) {
+      // For submitted/running workflows, skip direct form modal and use WorkflowEngine read-only view
+      if (hasDojoForm && !isSubmittedOrRunning) {
         this._showDirectFormModal(workflowData, step, appName);
         return;
       }
