@@ -578,6 +578,13 @@ define([
         changeSessionId: function(sessionId) {
             this.sessionId = sessionId;
             // Do not add the session to the sessions store here; it will be added after the first successful message.
+
+            // Abort any in-flight SSE stream from the previous session so its
+            // callbacks cannot inject stale data into the newly-active session.
+            if (this.copilotApi && typeof this.copilotApi.abortActiveStream === 'function') {
+                this.copilotApi.abortActiveStream();
+            }
+
             // Persist the current session ID so it can be restored the next time the chat opens
             try {
                 if (window && window.localStorage) {

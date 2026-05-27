@@ -778,6 +778,15 @@ define([
         this.session_registered = false;
         this.textArea.set('value', '');
 
+        // If an SSE stream was in progress, reset the submit state so the
+        // input is re-enabled for the new session.
+        if (this.isSubmitting) {
+            this.isSubmitting = false;
+            this.isQueryProgressActive = false;
+            this.submitButton.set('disabled', false);
+            this._updateAbortButtonState();
+        }
+
         // Reset screenshot toggle state
         this.pageContentEnabled = false;
         this._updateToggleButtonStyle();
@@ -801,6 +810,15 @@ define([
       setSessionId: function(sessionId) {
         this.sessionId = sessionId;
         this.session_registered = false;
+
+        // If an SSE stream was in progress for a different session, reset the
+        // submit state so the input is re-enabled for the new session.
+        if (this.isSubmitting) {
+            this.isSubmitting = false;
+            this.isQueryProgressActive = false;
+            this.submitButton.set('disabled', false);
+            this._updateAbortButtonState();
+        }
 
         // Reset screenshot toggle state
         this.pageContentEnabled = false;

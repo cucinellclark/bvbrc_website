@@ -299,10 +299,20 @@ define([
                 return;
             }
 
+            // Abort any previously-active stream before starting a new one
+            this.abortActiveStream();
+
             console.log('Session ID:', params.sessionId);
             var _self = this;
             this.currentJobId = null;
             this.currentActiveToolId = null;
+
+            // Capture the session ID for this stream.  The activeStreamSessionId
+            // property is updated every time a new stream starts.  Callbacks
+            // compare their captured value against the live property and
+            // silently bail out if a session switch occurred mid-stream.
+            var streamSessionId = params.sessionId;
+            this.activeStreamSessionId = streamSessionId;
             var data = {
                 query: params.inputText,
                 model: params.model,
@@ -506,6 +516,13 @@ define([
                         const content = line.substring(5).trim();
 
                         if (!content) return;
+
+                        // Session guard: if the user switched sessions since this
+                        // stream was started, discard all remaining events silently.
+                        if (_self.activeStreamSessionId !== streamSessionId) {
+                            console.log('[CopilotApi] Discarding SSE event for stale session', streamSessionId);
+                            return;
+                        }
 
                         try {
                             const parsed = JSON.parse(content);
@@ -728,6 +745,14 @@ define([
                 };
 
                 function pump() {
+                    // If the session changed since this stream was started,
+                    // stop reading and let the stream die silently.
+                    if (_self.activeStreamSessionId !== streamSessionId) {
+                        console.log('[CopilotApi] Stopping pump for stale session', streamSessionId);
+                        reader.cancel();
+                        return;
+                    }
+
                     return reader.read().then(({ done, value }) => {
                         if (done) {
                             if (buffer.length > 0) {
@@ -815,6 +840,25 @@ define([
                 tool_id: this.currentActiveToolId || null,
                 has_active_stream: !!this.currentAbortController
             };
+        },
+
+        /**
+         * Aborts the active SSE stream if one is in progress.
+         * Called when switching sessions to prevent stale data from
+         * an old stream leaking into the newly-active session.
+         */
+        abortActiveStream: function() {
+            if (this.currentAbortController) {
+                console.log('[CopilotApi] Aborting active SSE stream');
+                this.currentAbortController.abort();
+                this.currentAbortController = null;
+                this.currentActiveToolId = null;
+                this.currentJobId = null;
+            }
+            // Clear the active stream session so that any in-flight pump()
+            // iterations that survive the abort also see the mismatch and
+            // stop processing events.
+            this.activeStreamSessionId = null;
         },
 
         abortActiveQueryJob: function(opts) {
