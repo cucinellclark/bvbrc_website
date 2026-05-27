@@ -64,6 +64,7 @@ define([
       selectedJobs: [],
       selectedWorkflows: [],
       attachedImages: [],
+      attachedFiles: [],    // text file attachments [{id, name, content, size, mimeType}]
       imageUploadInput: null,
       imageActionNode: null,
       imageActionMenuNode: null,
@@ -334,7 +335,6 @@ define([
 
         this.imageUploadInput = domConstruct.create('input', {
             type: 'file',
-            accept: 'image/png,image/jpeg,image/jpg',
             multiple: true,
             style: 'display: none;'
         }, wrapperDiv);
@@ -344,7 +344,7 @@ define([
         };
 
         screenshotHalf.title = 'Include a screenshot of the current page with your next message.';
-        uploadHalf.title = 'Attach one or more images from your computer.';
+        uploadHalf.title = 'Attach images or text files from your computer.';
 
         on(screenshotHalf, 'click', lang.hitch(this, function(evt) {
             evt.preventDefault();
@@ -358,7 +358,7 @@ define([
         on(uploadHalf, 'click', lang.hitch(this, function(evt) {
             evt.preventDefault();
             evt.stopPropagation();
-            if (!this._modelSupportsImage(this.model) || !this.imageUploadInput) {
+            if (!this.imageUploadInput) {
                 return;
             }
             this.imageUploadInput.click();
@@ -933,17 +933,18 @@ define([
         if (this.screenshotToggleNode) {
           this.screenshotToggleNode.style.display = enabled ? 'block' : 'none';
         }
+        // Upload button is always visible — it handles both images and text files
         if (this.uploadImageNode) {
-          this.uploadImageNode.style.display = enabled ? 'block' : 'none';
+          this.uploadImageNode.style.display = 'block';
         }
 
         if (!enabled) {
           this.pageContentEnabled = false;
+          // Only clear image attachments, not file attachments
           this._clearAttachedImage();
           topic.publish('pageContentToggleChanged', false);
-        } else {
-          this._renderAttachedImageIndicator();
         }
+        this._renderAttachedImageIndicator();
       },
 
       _handleImageUploadChange: function(evt) {
@@ -951,36 +952,60 @@ define([
         if (!files || files.length === 0) {
           return;
         }
-        var maxImages = 3;
-        var maxBytes = 6 * 1024 * 1024;
-        var remainingSlots = Math.max(0, maxImages - this.attachedImages.length);
+
+        var maxAttachments = 3;
+        var maxImageBytes = 6 * 1024 * 1024;    // 6 MB for images
+        var maxFileBytes = 100 * 1024;           // 100 KB for text files
+        var currentCount = this.attachedImages.length + this.attachedFiles.length;
+        var remainingSlots = Math.max(0, maxAttachments - currentCount);
+
         if (remainingSlots <= 0) {
-          topic.publish('CopilotApiError', { error: new Error('You can attach up to 3 images per message.') });
+          topic.publish('CopilotApiError', { error: new Error('You can attach up to 3 files per message.') });
           this.imageUploadInput.value = '';
           return;
         }
 
         var acceptedFiles = files.slice(0, remainingSlots);
         if (files.length > remainingSlots) {
-          topic.publish('CopilotApiError', { error: new Error('Only the first ' + remainingSlots + ' image(s) were attached. Maximum is 3 images.') });
+          topic.publish('CopilotApiError', {
+            error: new Error('Only the first ' + remainingSlots + ' file(s) were attached. Maximum is 3 total.')
+          });
         }
 
-        var readPromises = acceptedFiles.map(lang.hitch(this, function(file) {
-          return new Promise(lang.hitch(this, function(resolve, reject) {
-            if (!/^image\/(png|jpeg|jpg)$/i.test(file.type || '')) {
-              reject(new Error('Unsupported image format for "' + (file.name || 'image') + '". Only PNG and JPEG/JPG images are supported.'));
-              return;
-            }
-            if (file.size > maxBytes) {
+        var imageFiles = [];
+        var textFiles = [];
+        var modelSupportsImage = this._modelSupportsImage(this.model);
+
+        acceptedFiles.forEach(function(file) {
+          if (/^image\/(png|jpeg|jpg)$/i.test(file.type || '')) {
+            imageFiles.push(file);
+          } else {
+            textFiles.push(file);
+          }
+        });
+
+        // Reject image files if model doesn't support images
+        if (imageFiles.length > 0 && !modelSupportsImage) {
+          topic.publish('CopilotApiError', {
+            error: new Error('The current model does not support image attachments. Only text files can be uploaded.')
+          });
+          imageFiles = [];
+        }
+
+        var readPromises = [];
+
+        // Process image files (existing logic)
+        imageFiles.forEach(lang.hitch(this, function(file) {
+          readPromises.push(new Promise(lang.hitch(this, function(resolve, reject) {
+            if (file.size > maxImageBytes) {
               reject(new Error('Image "' + (file.name || 'image') + '" is larger than 6 MB.'));
               return;
             }
-
             var reader = new FileReader();
             reader.onload = function(loadEvt) {
-              var nextId = 'img-' + Date.now() + '-' + Math.floor(Math.random() * 1000000);
               resolve({
-                id: nextId,
+                fileType: 'image',
+                id: 'img-' + Date.now() + '-' + Math.floor(Math.random() * 1000000),
                 image: loadEvt && loadEvt.target ? loadEvt.target.result : null,
                 attachment: {
                   type: 'image',
@@ -990,16 +1015,57 @@ define([
               });
             };
             reader.onerror = function() {
-              reject(new Error('Unable to read selected image file "' + (file.name || 'image') + '".'));
+              reject(new Error('Unable to read image "' + (file.name || 'image') + '".'));
             };
             reader.readAsDataURL(file);
-          }));
+          })));
+        }));
+
+        // Process text files (NEW)
+        textFiles.forEach(lang.hitch(this, function(file) {
+          readPromises.push(new Promise(lang.hitch(this, function(resolve, reject) {
+            if (file.size > maxFileBytes) {
+              reject(new Error('File "' + (file.name || 'file') + '" is larger than 100 KB.'));
+              return;
+            }
+            var reader = new FileReader();
+            reader.onload = function(loadEvt) {
+              var content = loadEvt && loadEvt.target ? loadEvt.target.result : '';
+              // Validate it's valid text (check for null bytes as binary indicator)
+              if (content && content.indexOf('\u0000') !== -1) {
+                reject(new Error('File "' + (file.name || 'file') + '" appears to be a binary file. Only text files are supported.'));
+                return;
+              }
+              resolve({
+                fileType: 'text',
+                id: 'file-' + Date.now() + '-' + Math.floor(Math.random() * 1000000),
+                name: file.name || 'Uploaded file',
+                content: content,
+                size: file.size,
+                mimeType: file.type || 'text/plain',
+                attachment: {
+                  type: 'file',
+                  source: 'upload',
+                  name: file.name || 'Uploaded file',
+                  size: file.size
+                }
+              });
+            };
+            reader.onerror = function() {
+              reject(new Error('Unable to read file "' + (file.name || 'file') + '".'));
+            };
+            reader.readAsText(file);
+          })));
         }));
 
         Promise.all(readPromises).then(lang.hitch(this, function(results) {
           results.forEach(lang.hitch(this, function(entry) {
-            if (entry && entry.image && this.attachedImages.length < maxImages) {
+            var total = this.attachedImages.length + this.attachedFiles.length;
+            if (total >= maxAttachments) return;
+            if (entry.fileType === 'image' && entry.image) {
               this.attachedImages.push(entry);
+            } else if (entry.fileType === 'text' && entry.content !== undefined) {
+              this.attachedFiles.push(entry);
             }
           }));
           this._renderAttachedImageIndicator();
@@ -1013,6 +1079,7 @@ define([
 
       _clearAttachedImage: function() {
         this.attachedImages = [];
+        this.attachedFiles = [];
         if (this.imageUploadInput) {
           this.imageUploadInput.value = '';
         }
@@ -1030,23 +1097,20 @@ define([
         if (!this.imageAttachmentCounter || !this.imageAttachmentCountNode) {
           return;
         }
-        if (!Array.isArray(this.attachedImages) || this.attachedImages.length === 0) {
+        var imageCount = this.attachedImages.length;
+        var fileCount = this.attachedFiles ? this.attachedFiles.length : 0;
+        var totalCount = imageCount + fileCount;
+        if (totalCount > 0) {
+          var parts = [];
+          if (imageCount > 0) parts.push(imageCount + (imageCount === 1 ? ' image' : ' images'));
+          if (fileCount > 0) parts.push(fileCount + (fileCount === 1 ? ' file' : ' files'));
+          this.imageAttachmentCountNode.textContent = parts.join(', ');
+          this.imageAttachmentCounter.style.display = 'inline-flex';
+          this.imageAttachmentCounter.classList.toggle('hasImages', totalCount > 0);
+        } else {
           this.imageAttachmentCounter.style.display = 'none';
           this.imageAttachmentCountNode.textContent = '';
-          return;
         }
-        var count = this.attachedImages.length;
-        var label = count === 1 ? '1 image' : count + ' images';
-        var imageNames = this.attachedImages.map(function(entry) {
-          return entry && entry.attachment && entry.attachment.name ? entry.attachment.name : 'Image';
-        });
-        this.imageAttachmentCountNode.textContent = label;
-        this.imageAttachmentCounter.title = count > 0
-          ? ('Attached images (' + count + ')' +
-            (imageNames.length > 0 ? '\n' + imageNames.join('\n') : ''))
-          : 'No images attached';
-        this.imageAttachmentCounter.classList.toggle('hasImages', count > 0);
-        this.imageAttachmentCounter.style.display = count > 0 ? 'inline-flex' : 'none';
       },
 
       _buildUserMessageForSubmit: function(inputText, attachmentMeta) {
@@ -1092,6 +1156,30 @@ define([
         };
       },
 
+
+      _getUploadedFilesPayload: function() {
+        if (!Array.isArray(this.attachedFiles) || this.attachedFiles.length === 0) {
+          return null;
+        }
+        return {
+          files: this.attachedFiles.map(function(entry) {
+            return {
+              name: entry.name,
+              content: entry.content,
+              mime_type: entry.mimeType || 'text/plain',
+              size: entry.size || 0
+            };
+          }),
+          attachments: this.attachedFiles.map(function(entry) {
+            return {
+              type: 'file',
+              source: 'upload',
+              name: entry.name || 'Uploaded file',
+              size: entry.size || 0
+            };
+          })
+        };
+      },
 
       /**
        * Updates selected RAG database and UI
@@ -1405,6 +1493,8 @@ define([
       var _self = this;
       var uploadedImagePayload = this._getUploadedImagePayload();
       var hasUploadedImage = !!(uploadedImagePayload && Array.isArray(uploadedImagePayload.images) && uploadedImagePayload.images.length > 0 && this._modelSupportsImage(this.model));
+      var uploadedFilesPayload = this._getUploadedFilesPayload();
+      var hasUploadedFiles = !!(uploadedFilesPayload && Array.isArray(uploadedFilesPayload.files) && uploadedFilesPayload.files.length > 0);
       var submitModel = hasUploadedImage ? this._resolveImageModel() : this.model;
 
       if (this.state) {
@@ -1415,15 +1505,22 @@ define([
       topic.publish('ChatMessageSubmitted');
 
       // Immediately show user message and clear text area
+      var allAttachments = [];
+      if (hasUploadedImage) {
+        allAttachments = allAttachments.concat(uploadedImagePayload.attachments);
+      }
+      if (hasUploadedFiles) {
+        allAttachments = allAttachments.concat(uploadedFilesPayload.attachments);
+      }
       var userMessage = this._buildUserMessageForSubmit(
         inputText,
-        hasUploadedImage ? uploadedImagePayload.attachments : null
+        allAttachments.length > 0 ? allAttachments : null
       );
 
       this.chatStore.addMessage(userMessage);
       this.displayWidget.showMessages(this.chatStore.query());
       this.textArea.set('value', '');
-      if (hasUploadedImage) {
+      if (hasUploadedImage || hasUploadedFiles) {
         this._clearAttachedImage();
       }
 
@@ -1464,6 +1561,9 @@ define([
       };
       if (hasUploadedImage) {
         params.images = uploadedImagePayload.images;
+      }
+      if (hasUploadedFiles) {
+        params.files = uploadedFilesPayload.files;
       }
       this._appendWorkspaceSelectionToStreamParams(params);
 
@@ -1584,6 +1684,8 @@ define([
       var _self = this;
       var uploadedImagePayload = this._getUploadedImagePayload();
       var hasUploadedImage = !!(uploadedImagePayload && Array.isArray(uploadedImagePayload.images) && uploadedImagePayload.images.length > 0 && this._modelSupportsImage(this.model));
+      var uploadedFilesPayload = this._getUploadedFilesPayload();
+      var hasUploadedFiles = !!(uploadedFilesPayload && Array.isArray(uploadedFilesPayload.files) && uploadedFilesPayload.files.length > 0);
       var submitModel = hasUploadedImage ? this._resolveImageModel() : this.model;
       if (this.state) {
         console.log('state', this.state);
@@ -1593,15 +1695,22 @@ define([
       topic.publish('ChatMessageSubmitted');
 
       // Immediately show user message and clear text area
+      var allAttachments = [];
+      if (hasUploadedImage) {
+        allAttachments = allAttachments.concat(uploadedImagePayload.attachments);
+      }
+      if (hasUploadedFiles) {
+        allAttachments = allAttachments.concat(uploadedFilesPayload.attachments);
+      }
       var userMessage = this._buildUserMessageForSubmit(
           inputText,
-          hasUploadedImage ? uploadedImagePayload.attachments : null
+          allAttachments.length > 0 ? allAttachments : null
       );
 
       this.chatStore.addMessage(userMessage);
       this.displayWidget.showMessages(this.chatStore.query());
       this.textArea.set('value', '');
-      if (hasUploadedImage) {
+      if (hasUploadedImage || hasUploadedFiles) {
         this._clearAttachedImage();
       }
 
@@ -1640,6 +1749,9 @@ define([
       };
       if (hasUploadedImage) {
         params.images = uploadedImagePayload.images;
+      }
+      if (hasUploadedFiles) {
+        params.files = uploadedFilesPayload.files;
       }
       this._appendWorkspaceSelectionToStreamParams(params);
       console.log('[HANDLER] About to call submitCopilotQueryStream with params:', params);
@@ -1815,6 +1927,9 @@ define([
 
         this.displayWidget.hideLoadingIndicator();
 
+        var uploadedFilesPayloadPage = this._getUploadedFilesPayload();
+        var hasUploadedFilesPage = !!(uploadedFilesPayloadPage && Array.isArray(uploadedFilesPayloadPage.files) && uploadedFilesPayloadPage.files.length > 0);
+
         const params = {
             inputText: inputText,
             sessionId: this.sessionId,
@@ -1826,7 +1941,14 @@ define([
             images: [base64Image],
             enhancedPrompt: this.enhancedPrompt
         };
+        if (hasUploadedFilesPage) {
+          params.files = uploadedFilesPayloadPage.files;
+        }
         this._appendWorkspaceSelectionToStreamParams(params);
+
+        if (hasUploadedFilesPage) {
+          this._clearAttachedImage();
+        }
 
         this._submitCopilotQueryStreamWithRegistration(params,
             (chunk, toolMetadata) => {

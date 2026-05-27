@@ -338,6 +338,9 @@ define([
             if (Array.isArray(params.images) && params.images.length > 0) {
                 data.images = params.images;
             }
+            if (Array.isArray(params.files) && params.files.length > 0) {
+                data.files = params.files;
+            }
             if (params.enhancedPrompt) {
                 data.enhanced_prompt = params.enhancedPrompt;
             }

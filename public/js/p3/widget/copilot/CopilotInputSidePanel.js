@@ -125,7 +125,6 @@ define([
 
         this.imageUploadInput = domConstruct.create('input', {
           type: 'file',
-          accept: 'image/png,image/jpeg,image/jpg',
           multiple: true,
           style: 'display: none;'
         }, wrapperDiv);
@@ -135,7 +134,7 @@ define([
         };
 
         screenshotHalf.title = 'Include a screenshot of the current page with your next message.';
-        uploadHalf.title = 'Attach one or more images from your computer.';
+        uploadHalf.title = 'Attach images or text files from your computer.';
 
         on(screenshotHalf, 'click', lang.hitch(this, function(evt) {
           evt.preventDefault();
@@ -149,7 +148,7 @@ define([
         on(uploadHalf, 'click', lang.hitch(this, function(evt) {
           evt.preventDefault();
           evt.stopPropagation();
-          if (!this._modelSupportsImage(this.model) || !this.imageUploadInput) {
+          if (!this.imageUploadInput) {
             return;
           }
           this.imageUploadInput.click();

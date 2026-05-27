@@ -778,15 +778,29 @@ define([
       }, messageDiv);
 
       this.message.attachments.forEach(lang.hitch(this, function(attachment) {
-        if (!attachment || attachment.type !== 'image') {
-          return;
+        if (!attachment) return;
+
+        if (attachment.type === 'image') {
+          var label = attachment.name || (attachment.source === 'screenshot' ? 'Page screenshot' : 'Attached image');
+          domConstruct.create('div', {
+            class: 'message-attachment-chip',
+            innerHTML: '<i class="fa icon-image"></i> ' + this.escapeHtml(label)
+          }, container);
+        } else if (attachment.type === 'file') {
+          var fileLabel = attachment.name || 'Attached file';
+          var sizeStr = attachment.size ? ' (' + this._formatFileSize(attachment.size) + ')' : '';
+          domConstruct.create('div', {
+            class: 'message-attachment-chip',
+            innerHTML: '<i class="fa icon-file-text-o"></i> ' + this.escapeHtml(fileLabel) + sizeStr
+          }, container);
         }
-        var label = attachment.name || (attachment.source === 'screenshot' ? 'Page screenshot' : 'Attached image');
-        domConstruct.create('div', {
-          class: 'message-attachment-chip',
-          innerHTML: '<i class="fa icon-image"></i> ' + this.escapeHtml(label)
-        }, container);
       }));
+    },
+
+    _formatFileSize: function(bytes) {
+      if (bytes < 1024) return bytes + ' B';
+      if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + ' KB';
+      return (bytes / (1024 * 1024)).toFixed(1) + ' MB';
     },
 
     /**
