@@ -1094,12 +1094,22 @@ define([
     /**
      * Displays error message when API request fails
      * Implementation:
-     * - Clears existing messages
+     * - Appends error message below existing messages (non-destructive)
      * - Shows error message with reload button
+     * - Removes any loading indicator that may still be visible
      */
     onQueryError: function(error = null) {
       console.log('onQueryError', error);
-      domConstruct.empty(this.resultContainer);
+
+      // Remove any existing loading indicator without wiping messages
+      this.hideLoadingIndicator();
+
+      // Remove any previously appended error container so we don't
+      // stack multiple error banners (e.g. rapid retries).
+      var existingError = this.resultContainer.querySelector('.copilot-error-container');
+      if (existingError) {
+        domConstruct.destroy(existingError);
+      }
 
       // Extract error message safely, handling various error formats
       var errorMessage = 'An error occurred while processing your request.';
@@ -1162,10 +1172,13 @@ define([
         class: 'copilot-error-reload-button'
       }, errorContainer);
 
+      // Scroll the error into view so the user notices it
+      this.resultContainer.scrollTop = this.resultContainer.scrollHeight;
+
       on(reloadButton, 'click', lang.hitch(this, function() {
         // If we have a session ID, reload it; otherwise start new chat
         if (this.sessionId) {
-          // Clear the error display
+          // Clear the entire display and reload from DB
           domConstruct.empty(this.resultContainer);
 
           // Show loading state

@@ -698,6 +698,17 @@ define([
                                     // These are handled by the event handler above
                                     break;
 
+                                case 'needs_input':
+                                    // The agent needs clarification from the user (e.g.
+                                    // missing taxon_id for annotation).  Deliver the
+                                    // question as a normal text chunk so it renders as
+                                    // an assistant message the user can reply to.
+                                    var questionText = parsed.message || parsed.question || '';
+                                    if (questionText && onData) {
+                                        onData(questionText, null);
+                                    }
+                                    break;
+
                                 case 'session_file_created':
                                     // File creation metadata is handled as a dedicated SSE event.
                                     // Consumers can update the session Files panel immediately.
