@@ -336,10 +336,10 @@
     display: none;
     margin-left: 12px;
     padding: 3px 10px;
-    background: #fff3cd;
-    border: 1px solid #ffc107;
+    background: var(--main-bg);
+    border: 1px solid var(--border-gray);
     border-radius: 3px;
-    color: #856404;
+    color: #555;
     font-size: 13px;
     font-weight: 600;
     flex-shrink: 0;
