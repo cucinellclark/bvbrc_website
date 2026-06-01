@@ -279,7 +279,18 @@ define([
                 var keyMap = {};
                 keys.forEach(function (f) {
                   if (this.type == 'genome_sequence') {
-                    keyMap[f.sequence_id] = f;
+                    if (f.sequence_id) {
+                      keyMap[f.sequence_id] = f;
+                    }
+                    if (f.accession) {
+                      keyMap[f.accession] = f;
+                    }
+                    if (f.genome_id && f.accession) {
+                      keyMap[f.genome_id + '.' + f.accession] = f;
+                    }
+                    if (f.genome_id && f.sequence_id) {
+                      keyMap[f.genome_id + '.' + f.sequence_id] = f;
+                    }
                   } else {
                     if (f.annotation == 'RefSeq') {
                       keyMap[f.refseq_locus_tag] = f;
