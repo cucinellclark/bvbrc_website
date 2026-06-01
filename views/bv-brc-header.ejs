@@ -29,7 +29,7 @@
     var virus = [
         {name: "Adenoviridae", href: "/view/Taxonomy/10508#view_tab=overview"},
         {name: "Asfarviridae", href: "/view/Taxonomy/137992#view_tab=overview"},
-        {name: "Bunyavirales", href: "/view/Taxonomy/1980410#view_tab=overview"},
+        {name: "Bunyaviricetes", href: "/view/Taxonomy/3151693#view_tab=overview"},
         {name: "Caliciviridae", href: "/view/Taxonomy/11974#view_tab=overview"},
         {name: "Coronaviridae", href: "/view/Taxonomy/11118#view_tab=overview"},
         {name: "Filoviridae", href: "/view/Taxonomy/11266#view_tab=overview"},
@@ -164,6 +164,8 @@
                     <span>SEARCHES</span>
 
                     <div data-dojo-type="p3/widget/TooltipDialog">
+                        <div class="menuHeader" style="padding-right: 20px;">Feature Search</div>
+                        <div><a class="navigationLink" href="/searches/InfluenzaSearch">Influenza (BETA)</a></div>
                         <div class="menuHeader" style="padding-right: 20px;">Advanced Search</div>
                         <div><a class="navigationLink" href="/searches/TaxaSearch">Taxa</a></div>
                         <div><a class="navigationLink" href="/searches/GenomeSearch">Genomes</a></div>
@@ -451,6 +453,7 @@
                     <div class="menu-header" onclick="toggleSubMenu(this)">SEARCHES <span
                                 class="icon-chevron-down"></span></div>
                     <div class="menu-items" style="display: none;">
+                        <div><a href="/searches/InfluenzaSearch">Influenza (BETA)</a></div>
                         <div><a href="/searches/TaxaSearch">Taxa</a></div>
                         <div><a href="/searches/GenomeSearch">Genomes</a></div>
                         <div><a href="/searches/StrainSearch">Strains</a></div>

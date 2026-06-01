@@ -2,7 +2,9 @@ define([
   'dojo/_base/declare', 'dojo/topic',
   'dijit/_TemplatedMixin', 'dijit/_WidgetsInTemplateMixin',
   'dojo/text!./templates/PredictStructure.html', './AppBase',
-  '../../WorkspaceManager'
+  '../../WorkspaceManager',
+  'dijit/form/Button', 'dijit/form/Select', 'dijit/form/SimpleTextarea',
+  'p3/widget/WorkspaceFilenameValidationTextBox', 'p3/widget/WorkspaceObjectSelector'
 ], function (
   declare, Topic,
   Templated, WidgetsInTemplate,
@@ -14,13 +16,15 @@ define([
     applicationName: 'PredictStructure',
     requireAuth: true,
     applicationLabel: 'Protein Structure Prediction',
-    applicationDescription: 'Predict protein structures using Boltz-2, OpenFold 3, Chai-1, AlphaFold 2, or ESMFold. Provides a unified interface with automatic parameter mapping, format conversion, output normalization, and confidence scoring.',
+    applicationDescription: 'Predict biomolecular structures (proteins, complexes, protein-DNA/RNA, protein-ligand) using Boltz-2, OpenFold 3, Chai-1, AlphaFold 2, or ESMFold. Provides a unified interface with automatic parameter mapping, format conversion, output normalization, and confidence scoring. Advanced knobs (num_samples, num_recycles, seed, output_format, all tool-specific parameters) use sensible defaults from the predict-structure CLI; expose them via the PredictStructureFull spec or direct CLI / CWL invocation.',
     applicationHelp: 'quick_references/services/predict_structure_service.html',
     tutorialLink: 'tutorial/predict_structure/predict_structure.html',
     videoLink: '',
     pageTitle: 'Protein Structure Prediction Service | BV-BRC',
     required: true,
     defaultPath: '',
+    validLigands: true,
+    validSmiles: true,
 
     startup: function () {
       var _self = this;
@@ -37,11 +41,11 @@ define([
       } catch (error) {
         console.error(error);
       }
+      this.checkParameterRequiredFields();
     },
 
     postCreate: function () {
       this.inherited(arguments);
-      this.onInputChange();
       this.onToolChange();
     },
 
@@ -49,223 +53,182 @@ define([
       Topic.publish('/navigate', { href: '/job/' });
     },
 
-    onInputChange: function () {
-      // Sequence input radios
-      if (typeof this.input_source_text != 'undefined') {
-        if (this.input_source_text.checked) {
-          dojo.style(this.block_input_file, 'display', 'none');
-          dojo.style(this.block_text_input, 'display', 'block');
-        } else {
-          dojo.style(this.block_input_file, 'display', 'block');
-          dojo.style(this.block_text_input, 'display', 'none');
-        }
-      }
-      // MSA mode
-      if (typeof this.msa_mode != 'undefined') {
-        var mode = this.msa_mode.get('value');
-        var currentTool = this.tool ? this.tool.get('value') : '';
-        dojo.style(this.block_msa_upload, 'display', mode === 'upload' ? 'block' : 'none');
-        // MSA Server URL only applies when Boltz/Chai use the ColabFold server.
-        var serverFieldVisible = (mode === 'server' && (currentTool === 'boltz' || currentTool === 'chai'));
-        dojo.style(this.block_msa_server_url, 'display', serverFieldVisible ? 'inline-block' : 'none');
+    onToolChange: function () {
+      if (this.msa_policy_message) {
+        var required = this._isMsaRequired();
+        this.msa_policy_message.innerHTML = required
+          ? 'Required for the selected prediction tool.'
+          : 'Optional for Auto, AlphaFold 2, and ESMFold.';
       }
       this.checkParameterRequiredFields();
-    },
-
-    onToolChange: function () {
-      if (typeof this.tool == 'undefined') { return; }
-      var tool = this.tool.get('value');
-      var blocks = {
-        boltz: this.block_boltz,
-        chai: this.block_chai,
-        esmfold: this.block_esmfold,
-        alphafold: this.block_alphafold,
-        openfold: this.block_openfold
-      };
-      Object.keys(blocks).forEach(function (key) {
-        dojo.style(blocks[key], 'display', key === tool ? 'block' : 'none');
-      });
-      // ESMFold does not use MSAs at all — hide the whole MSA section.
-      var msaSupported = (tool !== 'esmfold');
-      if (this.block_msa) {
-        dojo.style(this.block_msa, 'display', msaSupported ? 'block' : 'none');
-      }
-      // "server" MSA mode is only supported by Boltz and Chai. Rebuild the
-      // option list so the server entry appears/disappears and stays in the
-      // right display order. Fall back to "none" if it was selected.
-      var serverAllowed = (tool === 'boltz' || tool === 'chai');
-      if (this.msa_mode) {
-        if (!msaSupported) {
-          if (this.msa_mode.get('value') !== 'none') {
-            this.msa_mode.set('value', 'none');
-          }
-        } else {
-          var current = this.msa_mode.get('value');
-          if (!serverAllowed && current === 'server') { current = 'none'; }
-          var options = [{ value: 'none', label: 'None' }];
-          if (serverAllowed) { options.push({ value: 'server', label: 'ColabFold Server' }); }
-          options.push({ value: 'upload', label: 'Upload Pre-computed' });
-          this.msa_mode.removeOption(this.msa_mode.getOptions().map(function (o) { return o.value; }));
-          this.msa_mode.addOption(options);
-          this.msa_mode.set('value', current);
-        }
-      }
-      this.onInputChange();
     },
 
     getValues: function () {
       var values = this.inherited(arguments);
       var submit = {
         tool: values.tool,
-        num_recycles: parseInt(values.num_recycles, 10),
-        seed: parseInt(values.seed, 10),
-        output_format: values.output_format,
-        output_path: values.output_path,
-        output_file: values.output_file
+        output_path: values.output_path
       };
-      if (values.tool !== 'esmfold') {
-        submit.msa_mode = values.msa_mode;
+
+      this._copyIfPresent(submit, 'input_file', values.input_file);
+      this._copyIfPresent(submit, 'dna_file', values.dna_file);
+      this._copyIfPresent(submit, 'rna_file', values.rna_file);
+      this._copyIfPresent(submit, 'msa_file', values.msa_file);
+      this._copyIfPresent(submit, 'output_file', values.output_file);
+
+      var ligands = this._parseLigands(values.ligand);
+      if (ligands.length > 0) {
+        submit.ligand = ligands;
       }
 
-      // Sequence input: workspace file OR text input (one or the other).
-      // Backend expects the FASTA text as a single string with embedded "\n"
-      // separators, not a JSON array.
-      if (values.input_source === 'text') {
-        var rawText = values.text_input || '';
-        submit.text_input = rawText
-          .replace(/\r\n?/g, '\n')
-          .split('\n')
-          .map(function (l) { return l.trim(); })
-          .filter(function (l) { return l.length > 0; })
-          .join('\n');
-      } else {
-        if (values.input_file) {
-          submit.input_file = values.input_file;
-        }
-      }
-
-      // MSA extras (ESMFold does not use MSAs)
-      if (values.tool !== 'esmfold') {
-        if (values.msa_mode === 'upload' && values.msa_file) {
-          submit.msa_file = values.msa_file;
-        }
-        // msa_server_url only applies to Boltz/Chai with server mode
-        if (values.msa_server_url && values.msa_mode === 'server'
-            && (values.tool === 'boltz' || values.tool === 'chai')) {
-          submit.msa_server_url = values.msa_server_url;
-        }
-      }
-
-      // Engine-specific parameters — only include the block relevant to the tool
-      switch (values.tool) {
-        case 'boltz':
-          submit.num_samples = parseInt(values.num_samples_boltz, 10);
-          submit.sampling_steps = parseInt(values.sampling_steps_boltz, 10);
-          submit.use_potentials = !!values.use_potentials;
-          break;
-        case 'chai':
-          submit.num_samples = parseInt(values.num_samples_chai, 10);
-          submit.sampling_steps = parseInt(values.sampling_steps_chai, 10);
-          break;
-        case 'esmfold':
-          submit.fp16 = !!values.fp16;
-          if (values.chunk_size !== '' && values.chunk_size !== undefined && values.chunk_size !== null) {
-            submit.chunk_size = parseInt(values.chunk_size, 10);
-          }
-          if (values.max_tokens_per_batch !== '' && values.max_tokens_per_batch !== undefined && values.max_tokens_per_batch !== null) {
-            submit.max_tokens_per_batch = parseInt(values.max_tokens_per_batch, 10);
-          }
-          break;
-        case 'alphafold':
-          submit.af2_model_preset = values.af2_model_preset;
-          submit.af2_db_preset = values.af2_db_preset;
-          submit.af2_max_template_date = values.af2_max_template_date;
-          submit.af2_data_dir = values.af2_data_dir;
-          break;
-        case 'openfold':
-          submit.num_diffusion_samples = parseInt(values.num_diffusion_samples, 10);
-          submit.num_model_seeds = parseInt(values.num_model_seeds, 10);
-          submit.use_templates = !!values.use_templates;
-          break;
-        // 'auto' uses defaults — send nothing extra
+      var smiles = this._parseLines(values.smiles);
+      if (smiles.length > 0) {
+        submit.smiles = smiles;
       }
 
       return submit;
     },
 
-    validFasta: 0,
-    minResidues: 10,
+    _copyIfPresent: function (target, key, value) {
+      if (value !== undefined && value !== null && String(value).trim() !== '') {
+        target[key] = value;
+      }
+    },
 
-    checkFasta: function () {
-      // Validate the pasted FASTA text using the shared AppBase helper
-      // (seqType 'aa' — this is a protein-structure prediction service).
-      // Pass replace=false so missing '>' headers are reported as an error
-      // instead of silently auto-prepended.
-      var fastaText = this.text_input ? this.text_input.get('value') : '';
-      if (!fastaText || !fastaText.trim()) {
-        this.validFasta = 0;
-        if (this.sequence_message) { this.sequence_message.textContent = ''; }
-        this.checkParameterRequiredFields();
+    _parseLines: function (value) {
+      if (!value) { return []; }
+      return String(value)
+        .replace(/\r\n?/g, '\n')
+        .split('\n')
+        .map(function (line) { return line.trim(); })
+        .filter(function (line) { return line.length > 0; });
+    },
+
+    _parseLigands: function (value) {
+      return this._parseLines(value).map(function (line) {
+        return line.toUpperCase();
+      });
+    },
+
+    _listToText: function (value, key) {
+      if (!value) { return ''; }
+      if (!Array.isArray(value)) { return String(value); }
+      return value.map(function (item) {
+        if (item && typeof item === 'object') {
+          return item[key] || '';
+        }
+        return item;
+      }).filter(function (item) {
+        return item !== undefined && item !== null && String(item).trim() !== '';
+      }).join('\n');
+    },
+
+    _hasAnyBiomoleculeInput: function () {
+      if (this.input_file && this.input_file.get('value')) { return true; }
+      if (this.dna_file && this.dna_file.get('value')) { return true; }
+      if (this.rna_file && this.rna_file.get('value')) { return true; }
+      return false;
+    },
+
+    _isMsaRequired: function () {
+      if (!this.tool) { return false; }
+      var tool = this.tool.get('value');
+      return tool === 'boltz' || tool === 'openfold' || tool === 'chai';
+    },
+
+    _hasRequiredMsa: function () {
+      return !this._isMsaRequired() || (this.msa_file && this.msa_file.get('value'));
+    },
+
+    _isValidSmiles: function (smiles) {
+      // Must contain only legal SMILES characters
+      if (!/^[A-Za-z0-9@+\-\[\]()\=#:\/\\\.%*]+$/.test(smiles)) {
         return false;
       }
-      var fastaObject = this.validateFasta(fastaText, 'aa', false);
-      var message = fastaObject.message || '';
-      var valid = !!fastaObject.valid;
-      // Enforce a minimum per-record residue count — a handful of letters is
-      // never a meaningful input for structure prediction, and the shared
-      // validator accepts any length.
-      if (valid) {
-        var shortRecord = this._findShortRecord(fastaObject.trimFasta, this.minResidues);
-        if (shortRecord) {
-          valid = false;
-          message = 'Sequence "' + shortRecord.id + '" is too short ('
-            + shortRecord.length + ' residues); provide at least '
-            + this.minResidues + '.';
+
+      // Must start with a valid atom: bracket atom [..], or organic-subset atom
+      // Organic subset: B, C, N, O, P, S, F, Cl, Br, I (and aromatic b,c,n,o,p,s)
+      if (!/^(\[|B(?!r)|C(?!l)|N|O|P|S(?!i)|F|Cl|Br|I|b|c|n|o|p|s)/.test(smiles)) {
+        return false;
+      }
+
+      // Must contain at least one atom (letter that is a valid element start)
+      // Reject strings that are purely digits/symbols with no atom letter
+      if (!/[A-Za-z]/.test(smiles)) {
+        return false;
+      }
+
+      // Check balanced parentheses and brackets
+      var parenDepth = 0;
+      var bracketDepth = 0;
+      var inBracket = false;
+      for (var i = 0; i < smiles.length; i++) {
+        var c = smiles[i];
+        if (c === '[') {
+          bracketDepth++;
+          inBracket = true;
+        } else if (c === ']') {
+          bracketDepth--;
+          inBracket = false;
+          if (bracketDepth < 0) { return false; }
+        } else if (!inBracket) {
+          if (c === '(') { parenDepth++; }
+          else if (c === ')') {
+            parenDepth--;
+            if (parenDepth < 0) { return false; }
+          }
         }
       }
-      if (this.sequence_message) {
-        this.sequence_message.textContent = message;
+      if (parenDepth !== 0 || bracketDepth !== 0) { return false; }
+
+      // Reject bare backslashes not used as bond stereo (must be followed by a valid char)
+      // A lone \ or \\ at end is invalid
+      if (/\\$/.test(smiles)) { return false; }
+
+      // Reject strings with no valid organic-subset atom or bracket atom at all.
+      // Valid atom pattern: bracket [...] or one of B,C,N,O,P,S,F,Cl,Br,I (case-sensitive for capitals),
+      // or aromatic b,c,n,o,p,s
+      var atomPattern = /\[|(?:Cl|Br|[BCNOPSFIbcnops])/;
+      if (!atomPattern.test(smiles)) { return false; }
+
+      return true;
+    },
+
+    checkSmiles: function () {
+      var lines = this.smiles ? this._parseLines(this.smiles.get('value')) : [];
+      var _self = this;
+      var firstInvalid = -1;
+      lines.forEach(function (line, idx) {
+        if (firstInvalid === -1 && !_self._isValidSmiles(line)) {
+          firstInvalid = idx + 1;
+        }
+      });
+      this.validSmiles = firstInvalid === -1;
+      if (this.smiles_message) {
+        this.smiles_message.textContent = this.validSmiles
+          ? ''
+          : 'Invalid SMILES string on line ' + firstInvalid + '. Check for unbalanced brackets/parentheses or illegal characters.';
       }
-      this.validFasta = valid ? fastaObject.numseq : 0;
       this.checkParameterRequiredFields();
-      return valid;
     },
 
-    _findShortRecord: function (fasta, minLen) {
-      var lines = (fasta || '').split('\n');
-      var currentId = null;
-      var currentLen = 0;
-      for (var i = 0; i <= lines.length; i++) {
-        var line = i < lines.length ? lines[i] : null;
-        if (line === null || (line.length > 0 && line[0] === '>')) {
-          if (currentId !== null && currentLen < minLen) {
-            return { id: currentId, length: currentLen };
-          }
-          if (line !== null) {
-            currentId = line.slice(1).split(/\s+/)[0] || 'record';
-            currentLen = 0;
-          }
-        } else if (line.length > 0) {
-          currentLen += line.replace(/-/g, '').length;
-        }
+    checkLigands: function () {
+      var ligands = this.ligand ? this._parseLines(this.ligand.get('value')) : [];
+      var invalid = ligands.filter(function (line) {
+        return !/^[A-Za-z0-9]{1,3}$/.test(line);
+      });
+      this.validLigands = invalid.length === 0;
+      if (this.ligand_message) {
+        this.ligand_message.innerHTML = this.validLigands
+          ? ''
+          : 'CCD codes must be 1-3 alphanumeric characters.';
       }
-      return null;
-    },
-
-    _hasSequenceInput: function () {
-      if (this.input_source_text && this.input_source_text.checked) {
-        var text = this.text_input ? this.text_input.get('value') : '';
-        if (!text || !String(text).trim()) { return false; }
-        return this.validFasta > 0;
-      }
-      return !!(this.input_file && this.input_file.get('value'));
+      this.checkParameterRequiredFields();
     },
 
     validate: function () {
       var valid = this.inherited(arguments);
-      // The radio-selected sequence input source is required; neither widget
-      // is marked required in the template because only one applies at a time.
-      if (!this._hasSequenceInput()) {
+      if (!valid || !this._hasAnyBiomoleculeInput() || !this._hasRequiredMsa() || !this.validLigands || !this.validSmiles) {
         if (this.submitButton) { this.submitButton.set('disabled', true); }
         return false;
       }
@@ -274,9 +237,11 @@ define([
 
     checkParameterRequiredFields: function () {
       if (
-        this._hasSequenceInput() &&
+        this._hasAnyBiomoleculeInput() &&
         this.output_path.get('value') &&
-        this.output_file.get('displayedValue')
+        this._hasRequiredMsa() &&
+        this.validLigands &&
+        this.validSmiles
       ) {
         this.validate();
       } else {
@@ -298,61 +263,17 @@ define([
 
     addRerunFields: function (job_params) {
       if (job_params.tool) { this.tool.set('value', job_params.tool); }
-
-      // Sequence input — text_input is a single FASTA string (with "\n"
-      // separators); legacy array form is tolerated for backwards-compat.
-      var rerunText = job_params.text_input;
-      if (Array.isArray(rerunText)) { rerunText = rerunText.join('\n'); }
-      if (rerunText && String(rerunText).trim().length > 0) {
-        this.input_source_text.set('checked', true);
-        this.text_input.set('value', rerunText);
-      } else if (job_params.input_file) {
-        this.input_source_file.set('checked', true);
-        this.input_file.set('value', job_params.input_file);
-      }
-
-      // MSA
-      if (job_params.msa_mode) { this.msa_mode.set('value', job_params.msa_mode); }
+      if (job_params.input_file) { this.input_file.set('value', job_params.input_file); }
+      if (job_params.dna_file) { this.dna_file.set('value', job_params.dna_file); }
+      if (job_params.rna_file) { this.rna_file.set('value', job_params.rna_file); }
       if (job_params.msa_file) { this.msa_file.set('value', job_params.msa_file); }
-      if (job_params.msa_server_url) { this.msa_server_url.set('value', job_params.msa_server_url); }
-
-      // Common params
-      if (job_params.num_recycles !== undefined) { this.num_recycles.set('value', job_params.num_recycles); }
-      if (job_params.seed !== undefined) { this.seed.set('value', job_params.seed); }
-      if (job_params.output_format) { this.output_format.set('value', job_params.output_format); }
-
-      // Engine-specific — set what matches the restored tool
-      switch (job_params.tool) {
-        case 'boltz':
-          if (job_params.num_samples !== undefined) { this.num_samples_boltz.set('value', job_params.num_samples); }
-          if (job_params.sampling_steps !== undefined) { this.sampling_steps_boltz.set('value', job_params.sampling_steps); }
-          if (job_params.use_potentials !== undefined) { this.use_potentials.set('checked', !!job_params.use_potentials); }
-          break;
-        case 'chai':
-          if (job_params.num_samples !== undefined) { this.num_samples_chai.set('value', job_params.num_samples); }
-          if (job_params.sampling_steps !== undefined) { this.sampling_steps_chai.set('value', job_params.sampling_steps); }
-          break;
-        case 'esmfold':
-          if (job_params.fp16 !== undefined) { this.fp16.set('checked', !!job_params.fp16); }
-          if (job_params.chunk_size !== undefined) { this.chunk_size.set('value', job_params.chunk_size); }
-          if (job_params.max_tokens_per_batch !== undefined) { this.max_tokens_per_batch.set('value', job_params.max_tokens_per_batch); }
-          break;
-        case 'alphafold':
-          if (job_params.af2_model_preset) { this.af2_model_preset.set('value', job_params.af2_model_preset); }
-          if (job_params.af2_db_preset) { this.af2_db_preset.set('value', job_params.af2_db_preset); }
-          if (job_params.af2_max_template_date) { this.af2_max_template_date.set('value', job_params.af2_max_template_date); }
-          if (job_params.af2_data_dir) { this.af2_data_dir.set('value', job_params.af2_data_dir); }
-          break;
-        case 'openfold':
-          if (job_params.num_diffusion_samples !== undefined) { this.num_diffusion_samples.set('value', job_params.num_diffusion_samples); }
-          if (job_params.num_model_seeds !== undefined) { this.num_model_seeds.set('value', job_params.num_model_seeds); }
-          if (job_params.use_templates !== undefined) { this.use_templates.set('checked', !!job_params.use_templates); }
-          break;
-      }
-
+      if (job_params.ligand) { this.ligand.set('value', this._listToText(job_params.ligand, 'ccd_code')); }
+      if (job_params.smiles) { this.smiles.set('value', this._listToText(job_params.smiles, 'smiles_str')); }
       if (job_params.output_path) { this.output_path.set('value', job_params.output_path); }
+      if (job_params.output_file) { this.output_file.set('value', job_params.output_file); }
 
-      this.onInputChange();
+      this.checkLigands();
+      this.checkSmiles();
       this.onToolChange();
     },
 

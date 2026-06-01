@@ -11,7 +11,7 @@ define([
       this.inherited(arguments);
 
       this.priorityPathogen = new PriorityPathogen({
-        title: 'Priority Pathogen',
+        title: 'Priority Pathogens',
         id: this.viewer.id + '_priorityPathogen',
         state: this.state
       });
