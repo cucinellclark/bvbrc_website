@@ -87,7 +87,7 @@ define([
       if (this._isInfluenzaABTaxon(taxon)) {
         cards.push({
           href: '/view/VaccineStrain',
-          title: 'Influenza Vaccine Strain',
+          title: 'Influenza Vaccine Strains',
           img: 'https://www.bv-brc.org/api/content/images/cards/influenza_vaccine_strain.png'
         });
       }

@@ -8,7 +8,7 @@ define([
   ViewerBase, VaccineStrainGrid
 ) {
   return declare([ViewerBase], {
-    title: 'Influenza Vaccine Strain',
+    title: 'Influenza Vaccine Strains',
     gutters: false,
     design: 'headline',
     isLoaded: false,
@@ -34,8 +34,8 @@ define([
         splitter: false,
         style: 'padding: 0; border: none;',
         content: '<div class="vs-page-header">' +
-          '<h2>Influenza Vaccine Strain</h2>' +
-          /*'<p>Recommended influenza vaccine strain compositions by flu season, hemisphere, and subtype.</p>' +*/
+          '<h2>Influenza Vaccine Strains</h2>' +
+          /*'<p>Recommended influenza vaccine strains compositions by flu season, hemisphere, and subtype.</p>' +*/
           '</div>'
       });
       this.addChild(this.headerPane);
@@ -393,7 +393,7 @@ define([
         var rows = this._parseCsvText(csvText || '');
         if (!rows.length) {
           this.grid.setGridData([], []);
-          this.grid.set('noDataMessage', 'No data found in Influenza Vaccine Strain CSV.');
+          this.grid.set('noDataMessage', 'No data found in Influenza Vaccine Strains CSV.');
           return;
         }
 
@@ -411,7 +411,7 @@ define([
         this._allHeaders = [];
         this._allRows = [];
         this.grid.setGridData([], []);
-        this.grid.set('noDataMessage', 'Unable to load Influenza Vaccine Strain CSV.');
+        this.grid.set('noDataMessage', 'Unable to load Influenza Vaccine Strains CSV.');
         this.countBadgeNode.innerHTML = '0';
       }));
     }
