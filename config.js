@@ -9,15 +9,15 @@ const defaults = {
   'appLabel': 'dev',
   'newsFeedRSS': 'https://docs.patricbrc.org/news.rss',
   'sessionTTL': 2628000000,
-  'workspaceServiceURL': 'https://p3.theseed.org/services/Workspace',
-  'appServiceURL': 'https://p3.theseed.org/services/app_service',
+  'workspaceServiceURL': 'https://www.bv-brc.org/services/Workspace',
+  'appServiceURL': 'https://www.bv-brc.org/services/app_service',
   appBaseURL: 'https://www.patricbrc.org',
-  'homologyServiceURL': 'https://p3.theseed.org/services/homology_service',
-  'genomedistanceServiceURL': 'https://p3.theseed.org/services/minhash_service',
-  'compareregionServiceURL': 'https://p3.theseed.org/services/compare_regions',
-  'probModelSeedServiceURL': 'https://p3.theseed.org/services/ProbModelSEED', // only for status dashboard
-  'shockServiceURL': 'https://p3.theseed.org/services/shock_api', // only for status dashboard
-  dataServiceURL: 'https://p3.theseed.org/services/data_api',
+  'homologyServiceURL': 'https://www.bv-brc.org/services/homology_service',
+  'genomedistanceServiceURL': 'https://www.bv-brc.org/services/minhash_service',
+  'compareregionServiceURL': 'https://www.bv-brc.org/services/compare_regions',
+  'probModelSeedServiceURL': 'https://www.bv-brc.org/services/ProbModelSEED', // only for status dashboard
+  'shockServiceURL': 'https://www.bv-brc.org/services/shock_api', // only for status dashboard
+  dataServiceURL: 'https://www.bv-brc.org/services/data_api',
   accountURL: 'http://user.patric.local:3002/',
   docsServiceURL: 'https://www.bv-brc.org/docs/',
   userServiceURL: '',
