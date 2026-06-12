@@ -2362,12 +2362,14 @@ define([
         reviewButton.innerHTML = 'Loading...';
         reviewButton.disabled = true;
         self.copilotApi.getWorkflowById(workflowId).then(function(fullWorkflow) {
-          // Inject workflow_id + execution_metadata for WorkflowEngine compat
+          // Inject workflow_id, submission_id + execution_metadata for WorkflowEngine compat
           fullWorkflow.workflow_id = workflowId;
+          fullWorkflow.submission_id = wf.submission_id || null;
           fullWorkflow.status = currentStatus;
           fullWorkflow.auto_submitted = !!(wf.auto_submitted);
           fullWorkflow.execution_metadata = {
             workflow_id: workflowId,
+            submission_id: wf.submission_id || null,
             status: currentStatus,
             is_planned: currentStatus === 'planned',
             is_submitted: currentStatus !== 'planned'
@@ -2405,6 +2407,11 @@ define([
             var newStatus = (response && response.status) || 'submitted';
             currentStatus = newStatus;
             wf.status = newStatus;
+
+            // Capture submission_id from GoWe response for status tracking
+            if (response && response.submission_id) {
+              wf.submission_id = response.submission_id;
+            }
 
             // Update badge
             statusBadge.innerHTML = self.escapeHtml(newStatus.toUpperCase());
@@ -2445,7 +2452,9 @@ define([
         on(checkBtn, 'click', function() {
           checkBtn.disabled = true;
           checkBtn.innerHTML = 'Checking...';
-          self.copilotApi.getWorkflowStatus(workflowId).then(function(statusResp) {
+          // Use submission_id for GoWe status checks; fall back to workflow_id
+          var statusId = wf.submission_id || workflowId;
+          self.copilotApi.getWorkflowStatus(statusId).then(function(statusResp) {
             var liveStatus = statusResp && statusResp.status;
             if (liveStatus) {
               currentStatus = liveStatus;

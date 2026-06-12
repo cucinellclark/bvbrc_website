@@ -2158,7 +2158,12 @@ define([
       this._stopStatusPolling();
       this._pollingAttempts = 0;
 
-      console.log('[WorkflowEngine] Starting status polling for workflow:', workflow.workflow_id);
+      // Use submission_id for GoWe status checks; fall back to workflow_id
+      var statusId = workflow.submission_id ||
+        (workflow.execution_metadata && workflow.execution_metadata.submission_id) ||
+        workflow.workflow_id;
+
+      console.log('[WorkflowEngine] Starting status polling for submission:', statusId);
 
       this._pollingIntervalId = setInterval(lang.hitch(this, function() {
         this._pollingAttempts++;
@@ -2169,7 +2174,7 @@ define([
           return;
         }
 
-        this.copilotApi.getWorkflowStatus(workflow.workflow_id).then(
+        this.copilotApi.getWorkflowStatus(statusId).then(
           lang.hitch(this, function(statusResp) {
             if (!statusResp) return;
 
@@ -2506,20 +2511,25 @@ define([
             return;
           }
 
-          // Response from workflow engine should contain:
-          // { workflow_id, status, message }
+          // Response from GoWe should contain:
+          // { workflow_id, submission_id, status, message }
           var workflowId = response.workflow_id;
-          var status = response.status || 'pending';
+          var submissionId = response.submission_id || workflowId;
+          var status = response.status || 'PENDING';
           var message = response.message || 'Workflow submitted successfully';
 
           if (workflowId) {
-            // Construct status URL
-            var workflowEngineUrl = window.App.workflow_url || 'https://dev-7.bv-brc.org/api/v1';
-            var statusUrl = workflowEngineUrl + '/workflows/' + workflowId + '/status';
+            // Construct status URL using submission_id (GoWe tracks status per submission)
+            var goweUrl = window.App.workflow_url || 'https://gowe.software-smithy.org/api/v1';
+            var statusUrl = goweUrl + '/submissions/' + submissionId;
+
+            // Store submission_id on the workflow data for status polling
+            _self.workflowData.submission_id = submissionId;
 
             // Update the workflow data with the submission response
             _self.workflowData.execution_metadata = {
               workflow_id: workflowId,
+              submission_id: submissionId,
               status: status,
               submitted_at: new Date().toISOString(),
               message: message,
