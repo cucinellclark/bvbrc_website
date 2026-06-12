@@ -1370,118 +1370,59 @@ define([
             console.log('[CopilotApi] submitWorkflowForExecution called');
             console.log('[CopilotApi] Workflow JSON:', workflowJson);
 
-            // Get workflow engine URL from config
-            var workflowEngineUrl = window.App.workflow_url || 'https://dev-7.bv-brc.org/api/v1';
+            // Get GoWe workflow engine URL from config
+            var goweUrl = window.App.workflow_url || 'https://gowe.software-smithy.org/api/v1';
             var normalizedInput = workflowJson || {};
             var workflowId = normalizedInput.workflow_id ||
                 (normalizedInput.execution_metadata && normalizedInput.execution_metadata.workflow_id) ||
                 null;
-            var workflowStatus = (normalizedInput.execution_metadata && normalizedInput.execution_metadata.status) ||
-                normalizedInput.status ||
-                null;
-            var shouldSubmitById = !!(workflowId && String(workflowStatus || '').toLowerCase() === 'planned');
 
-            var submitPromise;
-
-            if (shouldSubmitById) {
-                var submitByIdUrl = workflowEngineUrl + '/workflows/' + encodeURIComponent(workflowId) + '/submit';
-                console.log('[CopilotApi] Submitting planned workflow by ID:', submitByIdUrl);
-                submitPromise = request.post(submitByIdUrl, {
-                    headers: {
-                        'Content-Type': 'application/json',
-                        'Authorization': (window.App.authorizationToken || '')
-                    },
-                    handleAs: 'json'
-                });
-            } else {
-                var submitUrl = workflowEngineUrl + '/workflows/submit';
-                console.log('[CopilotApi] Submitting workflow manifest directly:', submitUrl);
-
-                // Clean the workflow before submission - remove fields that workflow engine assigns
-                var workflowForSubmission = JSON.parse(JSON.stringify(normalizedInput));
-
-                // Remove workflow_id (including placeholder values like "<scheduler_generated_id>")
-                // Always remove it - the engine will assign a real one
-                delete workflowForSubmission.workflow_id;
-                delete workflowForSubmission.status;       // Engine assigns this
-                delete workflowForSubmission.created_at;   // Engine assigns this
-                delete workflowForSubmission.updated_at;   // Engine assigns this
-                delete workflowForSubmission.execution_metadata; // Frontend metadata, not for engine
-
-                // Clean steps - remove execution metadata
-                if (workflowForSubmission.steps) {
-                    workflowForSubmission.steps.forEach(function(step) {
-                        delete step.step_id;    // Engine assigns this
-                        delete step.status;     // Execution metadata
-                        delete step.task_id;    // Execution metadata
-                        delete step.submitted_at; // Execution metadata
-                        delete step.started_at;   // Execution metadata
-                        delete step.completed_at; // Execution metadata
-                        delete step.elapsed_time; // Execution metadata
-                        delete step.error_message; // Execution metadata
-
-                        // Drop optional list params that are null/empty.
-                        // Workflow engine expects these to be omitted when unused.
-                        if (step.params && typeof step.params === 'object') {
-                            Object.keys(step.params).forEach(function(paramKey) {
-                                var value = step.params[paramKey];
-                                var looksLikeListParam = /(_libs|_ids)$/.test(paramKey);
-                                var isNullish = value === null || typeof value === 'undefined';
-                                var isEmptyArray = Array.isArray(value) && value.length === 0;
-                                if (looksLikeListParam && (isNullish || isEmptyArray)) {
-                                    delete step.params[paramKey];
-                                }
-                            });
-                        }
-                    });
-                }
-
-                console.log('[CopilotApi] Cleaned workflow for submission:', workflowForSubmission);
-
-                submitPromise = request.post(submitUrl, {
-                    data: JSON.stringify(workflowForSubmission),
-                    headers: {
-                        'Content-Type': 'application/json',
-                        'Authorization': (window.App.authorizationToken || '')
-                    },
-                    handleAs: 'json'
-                });
+            // GoWe submission: POST /submissions with {workflow_id, inputs}
+            // The workflow must already be registered with GoWe (done by the service agent).
+            if (!workflowId) {
+                return Promise.reject(new Error(
+                    'No workflow_id found. The workflow must be planned and registered before submission.'
+                ));
             }
 
+            var submissionsUrl = goweUrl + '/submissions';
+            console.log('[CopilotApi] Creating GoWe submission for workflow:', workflowId);
+
+            var submitPromise = request.post(submissionsUrl, {
+                data: JSON.stringify({
+                    workflow_id: workflowId,
+                    inputs: {}
+                }),
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': (window.App.authorizationToken || '')
+                },
+                handleAs: 'json'
+            });
+
             return submitPromise.then(function(response) {
-                console.log('[CopilotApi] Workflow submission response:', response);
-                // Response format from workflow engine:
-                // {
-                //   "workflow_id": "wf_123...",
-                //   "status": "pending",
-                //   "message": "Workflow submitted for execution"
-                // }
-                return response;
+                console.log('[CopilotApi] GoWe submission response:', response);
+                // GoWe response envelope: {status, request_id, timestamp, data}
+                var data = response.data || response;
+                return {
+                    workflow_id: workflowId,
+                    submission_id: data.id || null,
+                    status: data.state || 'PENDING',
+                    message: 'Workflow submitted for execution via GoWe'
+                };
             }).catch(function(error) {
                 console.error('[CopilotApi] Error submitting workflow:', error);
-                console.error('[CopilotApi] Error object keys:', Object.keys(error));
 
-                // Extract error message from dojo/request error
                 var errorMsg = 'Failed to submit workflow';
-
-                // dojo/request error structure - check response.data first (parsed JSON)
                 if (error.response) {
                     if (error.response.data) {
-                        // Already parsed JSON error response
                         var errorData = error.response.data;
                         if (typeof errorData === 'object') {
-                            errorMsg = errorData.detail || errorData.message || errorData.error || JSON.stringify(errorData);
+                            // GoWe error envelope: {status: "error", error: {code, message, details}}
+                            var goweError = errorData.error || errorData;
+                            errorMsg = goweError.message || goweError.detail || JSON.stringify(goweError);
                         } else {
                             errorMsg = errorData;
-                        }
-                    } else if (typeof error.response === 'string') {
-                        // Response is a string
-                        errorMsg = error.response;
-                        try {
-                            var errorJson = JSON.parse(errorMsg);
-                            errorMsg = errorJson.detail || errorJson.message || errorJson.error || errorMsg;
-                        } catch (e) {
-                            // Keep as-is
                         }
                     } else if (error.message) {
                         errorMsg = error.message;
@@ -1504,8 +1445,8 @@ define([
             if (!this._checkLoggedIn()) return Promise.reject('Not logged in');
             if (!workflowId) return Promise.reject(new Error('workflowId is required'));
 
-            var workflowEngineUrl = window.App.workflow_url || 'https://dev-7.bv-brc.org/api/v1';
-            var workflowUrl = workflowEngineUrl + '/workflows/' + encodeURIComponent(workflowId);
+            var goweUrl = window.App.workflow_url || 'https://gowe.software-smithy.org/api/v1';
+            var workflowUrl = goweUrl + '/workflows/' + encodeURIComponent(workflowId);
 
             return request.get(workflowUrl, {
                 headers: {
@@ -1514,7 +1455,8 @@ define([
                 },
                 handleAs: 'json'
             }).then(function(response) {
-                return response;
+                // GoWe envelope: {status, data}
+                return response.data || response;
             }).catch(function(error) {
                 console.error('[CopilotApi] Error fetching workflow by id:', error);
                 throw error;
@@ -1526,12 +1468,12 @@ define([
          * @param {string} workflowId Workflow identifier
          * @returns {Promise} Promise resolving to workflow status payload
          */
-        getWorkflowStatus: function(workflowId) {
+        getWorkflowStatus: function(submissionId) {
             if (!this._checkLoggedIn()) return Promise.reject('Not logged in');
-            if (!workflowId) return Promise.reject(new Error('workflowId is required'));
+            if (!submissionId) return Promise.reject(new Error('submissionId is required'));
 
-            var workflowEngineUrl = window.App.workflow_url || 'https://dev-7.bv-brc.org/api/v1';
-            var statusUrl = workflowEngineUrl + '/workflows/' + encodeURIComponent(workflowId) + '/status';
+            var goweUrl = window.App.workflow_url || 'https://gowe.software-smithy.org/api/v1';
+            var statusUrl = goweUrl + '/submissions/' + encodeURIComponent(submissionId);
 
             return request.get(statusUrl, {
                 headers: {
@@ -1540,9 +1482,10 @@ define([
                 },
                 handleAs: 'json'
             }).then(function(response) {
-                return response;
+                // GoWe envelope: {status, data}
+                return response.data || response;
             }).catch(function(error) {
-                console.error('[CopilotApi] Error fetching workflow status:', error);
+                console.error('[CopilotApi] Error fetching submission status:', error);
                 throw error;
             });
         },
@@ -1552,19 +1495,35 @@ define([
          * @param {Array<string>} workflowIds Array of workflow IDs
          * @returns {Promise<Object>} Promise resolving to { statuses: {id: statusObj}, not_found: [] }
          */
-        getBatchWorkflowStatus: function(workflowIds) {
+        getBatchWorkflowStatus: function(submissionIds) {
             if (!this._checkLoggedIn()) return Promise.reject('Not logged in');
-            if (!workflowIds || !workflowIds.length) {
+            if (!submissionIds || !submissionIds.length) {
                 return Promise.resolve({ statuses: {}, not_found: [] });
             }
-            var workflowEngineUrl = window.App.workflow_url || 'https://dev-7.bv-brc.org/api/v1';
-            return request.post(workflowEngineUrl + '/workflows/batch-status', {
-                data: JSON.stringify({ workflow_ids: workflowIds.slice(0, 20) }),
-                headers: {
-                    'Content-Type': 'application/json',
-                    'Authorization': (window.App.authorizationToken || '')
-                },
-                handleAs: 'json'
+
+            // GoWe does not have a batch status endpoint.
+            // Fetch each submission individually and assemble the result.
+            var self = this;
+            var ids = submissionIds.slice(0, 20);
+            var promises = ids.map(function(id) {
+                return self.getWorkflowStatus(id).then(function(data) {
+                    return { id: id, status: data, found: true };
+                }).catch(function() {
+                    return { id: id, status: null, found: false };
+                });
+            });
+
+            return Promise.all(promises).then(function(results) {
+                var statuses = {};
+                var notFound = [];
+                results.forEach(function(r) {
+                    if (r.found) {
+                        statuses[r.id] = r.status;
+                    } else {
+                        notFound.push(r.id);
+                    }
+                });
+                return { statuses: statuses, not_found: notFound };
             });
         },
 

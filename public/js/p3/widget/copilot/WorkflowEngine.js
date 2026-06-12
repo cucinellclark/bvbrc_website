@@ -2514,8 +2514,8 @@ define([
 
           if (workflowId) {
             // Construct status URL
-            var workflowEngineUrl = window.App.workflow_url || 'https://dev-7.bv-brc.org/api/v1';
-            var statusUrl = workflowEngineUrl + '/workflows/' + workflowId + '/status';
+            var goweUrl = window.App.workflow_url || 'https://gowe.software-smithy.org/api/v1';
+            var statusUrl = goweUrl + '/submissions/' + workflowId;
 
             // Update the workflow data with the submission response
             _self.workflowData.execution_metadata = {

@@ -23,7 +23,7 @@ const defaults = {
   userServiceURL: '',
   'copilotApiURL': 'https://www.bv-brc.org/services/copilot-api/copilot-api/chatbrc',
   'copilotDbURL': 'https://www.bv-brc.org/services/copilot-api/copilot-api/db',
-  'workflow_url': 'https://dev-7.bv-brc.org/api/v1',
+  'workflow_url': 'https://gowe.software-smithy.org/api/v1',
   'copilotEnablePublications': false,
   'copilotEnableEnhancePrompt': false,
   'copilotEnableShowPromptDetails': false,

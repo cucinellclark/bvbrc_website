@@ -2185,7 +2185,7 @@ define([
       }, card);
 
       // Fetch workflow data from API
-      var workflowUrl = window.App.workflow_url || 'https://dev-7.bv-brc.org/api/v1';
+      var workflowUrl = window.App.workflow_url || 'https://gowe.software-smithy.org/api/v1';
       var url = workflowUrl + '/workflows/' + encodeURIComponent(workflowId);
 
       request.get(url, {

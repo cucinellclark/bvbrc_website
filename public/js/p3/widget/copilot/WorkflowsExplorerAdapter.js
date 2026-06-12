@@ -238,7 +238,7 @@ define([
       }
 
       // Fallback: per-ID fetch if copilotApi not available
-      var workflowUrl = (window && window.App && window.App.workflow_url) ? window.App.workflow_url : 'https://dev-7.bv-brc.org/api/v1';
+      var workflowUrl = (window && window.App && window.App.workflow_url) ? window.App.workflow_url : 'https://gowe.software-smithy.org/api/v1';
       var headers = { 'Accept': 'application/json' };
       if (window && window.App && window.App.authorizationToken) {
         headers.Authorization = window.App.authorizationToken;
