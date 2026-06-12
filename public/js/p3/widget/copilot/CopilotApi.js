@@ -1464,9 +1464,9 @@ define([
         },
 
         /**
-         * Retrieves the latest workflow status from workflow engine.
-         * @param {string} workflowId Workflow identifier
-         * @returns {Promise} Promise resolving to workflow status payload
+         * Retrieves the latest submission status from GoWe.
+         * @param {string} submissionId GoWe submission identifier
+         * @returns {Promise} Promise resolving to submission status payload
          */
         getWorkflowStatus: function(submissionId) {
             if (!this._checkLoggedIn()) return Promise.reject('Not logged in');

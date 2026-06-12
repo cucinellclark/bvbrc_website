@@ -89,6 +89,7 @@ define([
         chunk: typeof chunk === 'string' ? chunk : JSON.stringify(chunk),
         workflow: {
           workflow_id: workflowId,
+          submission_id: source.submission_id || null,
           status: workflowStatus,
           persisted: persisted,
           auto_submitted: autoSubmitted,
