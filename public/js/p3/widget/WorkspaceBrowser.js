@@ -713,7 +713,7 @@ define([
         tooltip: 'View Taxonomic Classification'
       }, function (selection) {
         var sel = selection[0],
-          path = sel.path + '.' + sel.name + '/TaxonomicReport.html';
+          path = sel.path + '.' + sel.name + '/Taxonomic-Classification-Service-BVBRC_multiqc_report.html';
         Topic.publish('/navigate', { href: '/workspace' + encodePath(path) });
       }, false);
 
@@ -953,7 +953,84 @@ define([
           console.log('Error: could not find assembly_report.html');
         }
       });
-
+      this.browserHeader.addAction(
+        "ViewCoreGenomeMLSTReport",
+        "fa icon-eye fa-2x",
+        {
+          label: "REPORT",
+          multiple: false,
+          validTypes: ["CoreGenomeMLST"],
+          tooltip: "View Whole Core Genome MLST Report",
+        },
+        function (selection) {
+          var path;
+          selection[0].autoMeta.output_files.forEach(
+            lang.hitch(this, function (file_data) {
+              var filepath = file_data[0].split("/");
+              if (filepath[filepath.length - 1] === "cgMLST_Report.html") {
+                path = filepath.join("/");
+              }
+            })
+          );
+          if (path) {
+            Topic.publish("/navigate", { href: "/workspace" + encodePath(path) });
+          } else {
+            console.log("Error: could not find cgMLST_Report.html");
+          }
+        }
+      );
+      this.browserHeader.addAction(
+        "ViewSARS2WastewaterReport",
+        "fa icon-eye fa-2x",
+        {
+          label: "REPORT",
+          multiple: false,
+          validTypes: ["SARS2Wastewater"],
+          tooltip: "View SARS2 Wastewater  Analysis Report",
+        },
+        function (selection) {
+          var path;
+          selection[0].autoMeta.output_files.forEach(
+            lang.hitch(this, function (file_data) {
+              var filepath = file_data[0].split("/");
+              if (filepath[filepath.length - 1] === "SARS2Wastewater_report.html") {
+                path = filepath.join("/");
+              }
+            })
+          );
+          if (path) {
+            Topic.publish("/navigate", { href: "/workspace" + encodePath(path) });
+          } else {
+            console.log("Error: could not find SARS2Wastewater_report.html");
+          }
+        }
+      );
+      this.browserHeader.addAction(
+        "ViewWholeGenomeSNPAnalysisReport",
+        "fa icon-eye fa-2x",
+        {
+          label: "REPORT",
+          multiple: false,
+          validTypes: ["WholeGenomeSNPAnalysis"],
+          tooltip: "View Whole Genome SNP Analysis Report",
+        },
+        function (selection) {
+          var path;
+          selection[0].autoMeta.output_files.forEach(
+            lang.hitch(this, function (file_data) {
+              var filepath = file_data[0].split("/");
+              if (filepath[filepath.length - 1] === "WholeGenomeSNP_Report.html") {
+                path = filepath.join("/");
+              }
+            })
+          );
+          if (path) {
+            Topic.publish("/navigate", { href: "/workspace" + encodePath(path) });
+          } else {
+            console.log("Error: could not find WholeGenomeSNP_Report.html");
+          }
+        }
+      );
       this.browserHeader.addAction(
         "ViewDockingReport",
         "fa icon-eye fa-2x",
@@ -968,7 +1045,7 @@ define([
           selection[0].autoMeta.output_files.forEach(
             lang.hitch(this, function (file_data) {
               var filepath = file_data[0].split("/");
-              if (filepath[filepath.length - 1] === "DockingReport.html") {
+              if (filepath[filepath.length - 1] === "small_molecule_docking_report.html") {
                 path = filepath.join("/");
               }
             })
@@ -976,10 +1053,11 @@ define([
           if (path) {
             Topic.publish("/navigate", { href: "/workspace" + encodePath(path) });
           } else {
-            console.log("Error: could not find DockingReport.html");
+            console.log("Error: could not find small_molecule_docking_report.html");
           }
         }
       );
+
       // TODO: Paired_Filter report??
       this.browserHeader.addAction('ViewFastqUtilsOutput', 'fa icon-eye fa-2x', {
         label: 'VIEW',
