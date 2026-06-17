@@ -121,6 +121,31 @@ define([
         selectedTaxonId = this.defaultTaxonId;
       }
 
+      // Retrieve product values for gene
+      const self = this;
+      const sfURL = PathJoin(window.App.dataAPI, '/sequence_feature/');
+      const data = `q=taxon_id:${self.proteinOptions.join(' OR ')}&fl=gene,product&group=true&group.field=gene`;
+      const geneProductPromise = when(xhr.post(sfURL, {
+        handleAs: 'json',
+        headers: {
+          Accept: 'application/solr+json',
+          'Content-Type': 'application/solrquery+x-www-form-urlencoded',
+          'X-Requested-With': null,
+          Authorization: (window.App.authorizationToken || '')
+        },
+        data: data
+      }), function (response) {
+        if (response && response.grouped && response.grouped.gene) {
+          response.grouped.gene.groups.forEach(group => {
+            const gene = group.groupValue;
+            const product = group.doclist.docs[0].product;
+            self.geneProductMapping[gene] = product;
+          });
+        }
+      }, function (err) {
+        console.error('Failed to load gene/product mapping:', err);
+      });
+
       storeBuilder('sequence_feature', 'taxon_id').then(lang.hitch(this, (store) => {
         // Display correct names based on taxon id
         store.data = store.data.filter(item => {
@@ -142,7 +167,10 @@ define([
 
         this.pathogenGroupNode.store = store;
         if (selectedTaxonId) {
-          this.pathogenGroupNode.set('value', selectedTaxonId);
+          // Wait for the gene/product mapping so gene labels render correctly
+          when(geneProductPromise, lang.hitch(this, function () {
+            this.pathogenGroupNode.set('value', selectedTaxonId);
+          }));
         }
       }));
 
@@ -155,58 +183,6 @@ define([
             });
         }
       }));
-
-      // Retrieve product values for gene
-      let self = this;
-      const sfURL = PathJoin(window.App.dataAPI, '/sequence_feature/');
-      const data = `q=taxon_id:${self.proteinOptions.join(' OR ')}&fl=gene,product&group=true&group.field=gene`;
-      if (selectedTaxonId === this.defaultTaxonId) {
-        when(xhr.post(sfURL, {
-          handleAs: 'json',
-          headers: {
-            Accept: 'application/solr+json',
-            'Content-Type': 'application/solrquery+x-www-form-urlencoded',
-            'X-Requested-With': null,
-            Authorization: (window.App.authorizationToken || '')
-          },
-          data: data
-        }), function (response) {
-          if (response && response.grouped && response.grouped.gene) {
-            response.grouped.gene.groups.forEach(group => {
-              const gene = group.groupValue;
-              const product = group.doclist.docs[0].product;
-              self.geneProductMapping[gene] = product;
-            });
-          }
-        });
-      } else {
-        // Make a sync call to retrieve protein data
-        let xhr = new XMLHttpRequest();
-        xhr.open('POST', sfURL, false);
-        xhr.setRequestHeader('Accept', 'application/solr+json');
-        xhr.setRequestHeader('Content-Type', 'application/solrquery+x-www-form-urlencoded');
-        xhr.setRequestHeader('X-Requested-With', 'null');
-        if (window.App.authorizationToken) {
-          xhr.setRequestHeader('Authorization', window.App.authorizationToken);
-        }
-        xhr.send(data);
-
-        // Check if the request was successful
-        if (xhr.status >= 200 && xhr.status < 300) {
-          const response = JSON.parse(xhr.responseText);
-
-          // Check if the response is valid and has the desired data
-          if (response && response.grouped && response.grouped.gene) {
-            response.grouped.gene.groups.forEach(function (group) {
-              const gene = group.groupValue;
-              const product = group.doclist.docs[0].product;
-              self.geneProductMapping[gene] = product;
-            });
-          }
-        } else {
-          console.error('Request failed with status:', xhr.status, xhr.statusText);
-        }
-      }
     },
 
     onPathogenChange: function () {
@@ -229,7 +205,7 @@ define([
       //this.additionalMetadataNode.set('options', []);
       //this.additionalMetadataNode.reset();
 
-      //Update virus type multi select values with selected pathogen
+      // Update subtype/gene multi select values with selected pathogen
       const condition = 'taxon_id:' + taxonId;
       storeBuilder('sequence_feature', 'subtype', condition).then(lang.hitch(this, (store) => {
         let hItems = [];
