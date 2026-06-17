@@ -440,8 +440,7 @@ define([
             .join(' OR ');
           solrQuery += ` AND (${prefixClause})`;
         }
-        const sfvtQuery = '?in(sfvt_sequence,(' + encodeURIComponent(escapeSpecialCharacters(sfvtSequenceValue)) + '))&select(sf_id)&limit(2500000)';
-        const sfvtResponse = await xhr.post(PathJoin(window.App.dataAPI, 'sequence_feature_vt', sfvtQuery), {
+        const sfvtResponse = await xhr.post(PathJoin(window.App.dataAPI, 'sequence_feature_vt') + '/', {
           headers: {
             accept: 'application/json',
             'Content-Type': 'application/solrquery+x-www-form-urlencoded',
