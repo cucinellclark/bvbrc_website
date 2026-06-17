@@ -517,8 +517,9 @@ define([
     onReset: function (evt) {
       this.keywordNode.reset();
       this.sfvtSequenceNode.reset();
+      this.sfvtSequenceMessage.innerHTML = '';
 
-      for (let el of [this.sequenceFeatureTypeNode, this.subtypeHNode, this.subtypeNNode, this.subtypeNode, this.geneNode]) {
+      for (let el of [this.sequenceFeatureTypeNode, this.subtypeHNode, this.subtypeNNode, this.subtypeNode, this.geneNode, this.additionalMetadataNode]) {
         el.set('value', []);
         el._updateSelection();
       }
