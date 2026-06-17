@@ -67,6 +67,9 @@ define([
         style: 'max-width: 50%;'
       });
       sfvtSeqSearchButton.open = false;
+      sfvtSeqSearchButton.info_dialog.on('hide', function () {
+        sfvtSeqSearchButton.open = false;
+      });
       on(sfvtSeqSearchButton, 'click', function () {
         if (!sfvtSeqSearchButton.open) {
           sfvtSeqSearchButton.open = true;
