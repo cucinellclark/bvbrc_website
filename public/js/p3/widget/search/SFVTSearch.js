@@ -56,6 +56,7 @@ define([
     segmentOptions: [TAXON.INFLUENZA_A],
     sfvtSequenceErrorMessage: 'There are too many Sequence Feature hits. Please refine Sequence Feature Variant Type Sequence pattern to narrow down the results.',
     sfvtMaxLimit: 300,
+    sfvtIntermediateLimit: 400,
     geneProductMapping: {},
 
     startup: function () {
@@ -459,9 +460,10 @@ define([
         const groups = sfvtResponse.sf_id.groups;
         let sfIds = groups.map(g => g.groupValue);
 
-        if (sfIds.length > 400) {
+        // Guard against building an oversized secondary query below.
+        if (sfIds.length > this.sfvtIntermediateLimit) {
           this.sfvtSequenceMessage.innerHTML = this.sfvtSequenceErrorMessage;
-          throw Error('There are more than 100 sequence feature hits');
+          throw Error('There are more than ' + this.sfvtIntermediateLimit + ' sequence feature hits');
         }
 
         // Filter SF IDs if there are other selections
@@ -480,9 +482,14 @@ define([
           sfIds = sfList.map(sf => sf.sf_id);
         }
 
-        if (sfIds.length > 300) {
+        if (sfIds.length === 0) {
+          this.sfvtSequenceMessage.innerHTML = 'No sequence features matched the provided SFVT Sequence pattern.';
+          throw Error('No sequence feature hits for the provided SFVT Sequence pattern');
+        }
+
+        if (sfIds.length > this.sfvtMaxLimit) {
           this.sfvtSequenceMessage.innerHTML = this.sfvtSequenceErrorMessage;
-          throw Error('There are more than 100 sequence feature hits');
+          throw Error('There are more than ' + this.sfvtMaxLimit + ' sequence feature hits');
         }
         filterArr.push(`or(${sfIds.map(id => `eq(sf_id,"${sanitizeInput(id)}")`)})`);
       }
