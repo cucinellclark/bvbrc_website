@@ -8,6 +8,15 @@ define([
   Dialog, on, when, domConstruct
 ) {
 
+  // Taxon ids that get special-cased in this search.
+  const TAXON = {
+    CHIKUNGUNYA: '37124',
+    DENGUE: '12637',
+    INFLUENZA_A: '11320',
+    MEASLES: '11234',
+    MONKEYPOX: '10244'
+  };
+
   const influenzaSegmentMapping = {
     'PB2': '1',
     'PB1': '2',
@@ -42,9 +51,9 @@ define([
     dataKey: 'genome_feature',
     resultUrlBase: '/view/Taxonomy/{taxon_id}?',
     resultUrlHash: '#view_tab=sfvt',
-    defaultTaxonId: '11320',
-    proteinOptions: ['10244', '11234', '12637', '37124'],
-    segmentOptions: ['11320'],
+    defaultTaxonId: TAXON.INFLUENZA_A,
+    proteinOptions: [TAXON.MONKEYPOX, TAXON.MEASLES, TAXON.DENGUE, TAXON.CHIKUNGUNYA],
+    segmentOptions: [TAXON.INFLUENZA_A],
     sfvtSequenceErrorMessage: 'There are too many Sequence Feature hits. Please refine Sequence Feature Variant Type Sequence pattern to narrow down the results.',
     sfvtMaxLimit: 300,
     geneProductMapping: {},
@@ -301,8 +310,8 @@ define([
       }
 
       const taxonMapping = {
-        '10244': ['sequenceFeatureType', 'cladeType'],
-        '12637': ['sequenceFeatureType', 'subtype'],
+        [TAXON.MONKEYPOX]: ['sequenceFeatureType', 'cladeType'],
+        [TAXON.DENGUE]: ['sequenceFeatureType', 'subtype'],
         'default': ['sequenceFeatureType']
       };
 
@@ -322,7 +331,7 @@ define([
       const taxonId = this.pathogenGroupNode.value;
 
       // Reorganize table columns for Monkeypox virus
-      return taxonId === '10244' ? '-source_strain,additional_metadata' : '';
+      return taxonId === TAXON.MONKEYPOX ? '-source_strain,additional_metadata' : '';
     },
 
     buildFilter: async function () {
