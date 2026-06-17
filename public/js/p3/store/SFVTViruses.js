@@ -8,6 +8,7 @@ define([
     data: [
       {name: 'Chikungunya virus', id: 37124},
       {name: 'Dengue virus', id: 12637},
+      {name: 'Ebola virus', id: 3044781},
       {name: 'Influenza A virus', id: 11320},
       {name: 'Influenza A virus', id: 2955291},
       {name: 'Measles virus', id: 11234},
