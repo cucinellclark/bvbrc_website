@@ -98,6 +98,9 @@ define([
     postCreate: function () {
       this.inherited(arguments);
 
+      // Preserve the original URL template
+      this.resultUrlBaseTemplate = this.resultUrlBase;
+
       this.additionalMetadataNode.addOption([
         {
           value: 'Clade I',
@@ -343,7 +346,7 @@ define([
       // Update taxon id to redirect correct taxonomy page
       const pathogenGroupValue = this.pathogenGroupNode.get('value');
       if (pathogenGroupValue !== '') {
-        this.resultUrlBase = this.resultUrlBase.replace('{taxon_id}', pathogenGroupValue);
+        this.resultUrlBase = this.resultUrlBaseTemplate.replace('{taxon_id}', pathogenGroupValue);
       }
 
       const keywordValue = this.keywordNode.get('value');
