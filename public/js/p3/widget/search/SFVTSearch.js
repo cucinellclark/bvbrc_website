@@ -488,7 +488,6 @@ define([
               Authorization: (window.App.authorizationToken || '')
             },
             handleAs: 'json',
-            'Content-Type': 'application/rqlquery+x-www-form-urlencoded',
             data: sfQuery
           });
           sfIds = sfList.map(sf => sf.sf_id);
