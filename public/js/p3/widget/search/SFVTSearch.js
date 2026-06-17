@@ -30,6 +30,11 @@ define([
     return str.replace(/([[\]])/g, '\\$1');
   }
 
+  // Escape Solr special characters (including spaces)
+  function escapeSolrPrefix(str) {
+    return str.replace(/([+\-!(){}[\]^"~*?:\\/ ])/g, '\\$1');
+  }
+
   return declare([SearchBase], {
     templateString: template,
     searchAppName: 'Sequence Feature Variant Type (SFVT) Search - BETA',
@@ -441,8 +446,11 @@ define([
       if (sfvtSequenceValue !== '') {
         const pathogen = SFVTViruses.data.find(entry => entry.id === parseInt(pathogenGroupValue, 10));
         let solrQuery = `sfvt_sequence:${escapeSpecialCharacters(sfvtSequenceValue)}`;
-        if (pathogen && pathogen.name) {
-          solrQuery += ` AND sf_id:*${pathogen.name.split(' ')[0]}*`;
+        if (pathogen && pathogen.sfIdPrefixes && pathogen.sfIdPrefixes.length) {
+          const prefixClause = pathogen.sfIdPrefixes
+            .map(prefix => `sf_id:${escapeSolrPrefix(prefix)}_*`)
+            .join(' OR ');
+          solrQuery += ` AND (${prefixClause})`;
         }
         const sfvtQuery = '?in(sfvt_sequence,(' + encodeURIComponent(escapeSpecialCharacters(sfvtSequenceValue)) + '))&select(sf_id)&limit(2500000)';
         const sfvtResponse = await xhr.post(PathJoin(window.App.dataAPI, 'sequence_feature_vt', sfvtQuery), {
