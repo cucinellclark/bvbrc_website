@@ -148,6 +148,7 @@ define([
         headers['Authorization'] = window.App.authorizationToken;
       }
 
+      console.log('[LiteratureSearch] POST to:', apiUrl, 'query:', query, 'topK:', topK, 'useGraph:', useGraph);
       var self = this;
       request.post(apiUrl, {
         data: JSON.stringify({
@@ -164,11 +165,16 @@ define([
         },
         function (err) {
           self._setLoading(false);
+          var status = err.response ? err.response.status : 'no response';
+          var errText = err.response && err.response.text ? err.response.text : '';
+          console.error('[LiteratureSearch] Request failed — status:', status, 'url:', apiUrl, 'error:', err.message || err, 'body:', errText);
           var msg = 'An error occurred while searching.';
           if (err.response && err.response.status === 401) {
             msg = 'Authentication required. Please log in to use Literature Search.';
           } else if (err.response && err.response.status === 0) {
-            msg = 'Unable to connect to the literature search service.';
+            msg = 'Unable to connect to the literature search service. (status: 0, possible CORS or network issue)';
+          } else if (err.response && err.response.status >= 400) {
+            msg = 'Search failed (HTTP ' + err.response.status + '). ' + (errText || '');
           }
           self._showError(msg);
         }
