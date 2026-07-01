@@ -3,7 +3,7 @@
 }
 
 .litSearchForm {
-  max-width: 900px;
+  max-width: 960px;
 }
 
 .litSearchTitle {
@@ -36,6 +36,14 @@
   color: #555;
 }
 
+.litFormGroupFlex1 {
+  flex: 1;
+}
+
+.litFormGroupFixed {
+  min-width: 180px;
+}
+
 .litFormGroupQuery {
   flex: 1;
 }
@@ -63,6 +71,25 @@
 }
 
 .litInput:focus {
+  border-color: #2196F3;
+  outline: none;
+  box-shadow: 0 0 0 2px rgba(33, 150, 243, 0.15);
+}
+
+.litSelect {
+  padding: 8px 12px;
+  border: 1px solid #ccc;
+  border-radius: 4px;
+  font-size: 14px;
+  width: 100%;
+  box-sizing: border-box;
+  background: #fff;
+  cursor: pointer;
+  transition: border-color 0.2s;
+  appearance: auto;
+}
+
+.litSelect:focus {
   border-color: #2196F3;
   outline: none;
   box-shadow: 0 0 0 2px rgba(33, 150, 243, 0.15);
@@ -159,9 +186,222 @@
   opacity: 0.7;
 }
 
+/* Results wrapper */
+.litResultsWrapper {
+  max-width: 960px;
+}
+
+/* Buttons row */
+.litBtnRow {
+  flex-direction: row !important;
+  align-items: center !important;
+  gap: 8px;
+}
+
+.litEditPromptBtn {
+  padding: 8px 16px;
+  background: #fff;
+  color: #555;
+  border: 1px solid #ccc;
+  border-radius: 4px;
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: background 0.2s, border-color 0.2s;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.litEditPromptBtn:hover {
+  background: #f5f5f5;
+  border-color: #999;
+}
+
+.litEditPromptBtn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+/* Prompt Dialog */
+.litPromptDialogContent {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.litPromptTextarea {
+  width: 100%;
+  height: 400px;
+  padding: 12px;
+  border: 1px solid #ccc;
+  border-radius: 4px;
+  font-family: 'Menlo', 'Consolas', 'Monaco', monospace;
+  font-size: 12px;
+  line-height: 1.5;
+  color: #333;
+  background: #fafafa;
+  resize: none;
+  overflow-y: auto;
+  box-sizing: border-box;
+  transition: border-color 0.2s;
+}
+
+.litPromptTextarea:focus {
+  border-color: #2196F3;
+  outline: none;
+  box-shadow: 0 0 0 2px rgba(33, 150, 243, 0.15);
+}
+
+.litPromptDialogBtnRow {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.litRegenerateBtn {
+  background: #43a047;
+  color: #fff;
+  border: none;
+  border-radius: 4px;
+  padding: 8px 18px;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.2s;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.litRegenerateBtn:hover {
+  background: #388e3c;
+}
+
+.litPromptCancelBtn {
+  background: #fff;
+  color: #555;
+  border: 1px solid #ccc;
+  border-radius: 4px;
+  padding: 8px 18px;
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: background 0.2s;
+}
+
+.litPromptCancelBtn:hover {
+  background: #f5f5f5;
+}
+
+/* Generated Answer */
+.litAnswerContainer {
+  margin-bottom: 20px;
+}
+
+.litAnswerCard {
+  border: 1px solid #c8e6c9;
+  border-radius: 8px;
+  background: #f1f8e9;
+  overflow: hidden;
+}
+
+.litAnswerCard.litAnswerError {
+  border-color: #ffcdd2;
+  background: #fff5f5;
+}
+
+.litAnswerHeader {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 12px 20px;
+  background: rgba(0, 0, 0, 0.03);
+  border-bottom: 1px solid rgba(0, 0, 0, 0.06);
+}
+
+.litAnswerIcon {
+  font-size: 18px;
+  color: #558b2f;
+}
+
+.litAnswerError .litAnswerIcon {
+  color: #d32f2f;
+}
+
+.litAnswerTitle {
+  margin: 0;
+  font-size: 1em;
+  font-weight: 600;
+  color: #333;
+  flex: 1;
+}
+
+.litAnswerModel {
+  font-size: 12px;
+  padding: 2px 10px;
+  border-radius: 12px;
+  background: rgba(0, 0, 0, 0.06);
+  color: #666;
+  font-weight: 500;
+}
+
+.litAnswerBody {
+  padding: 16px 20px;
+}
+
+.litAnswerText {
+  font-size: 14px;
+  line-height: 1.7;
+  color: #333;
+  word-break: break-word;
+}
+
+.litAnswerText strong {
+  font-weight: 600;
+}
+
+/* Table output */
+.litTable {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+  margin-top: 4px;
+}
+
+.litTable thead {
+  background: #e8f5e9;
+}
+
+.litTable th {
+  padding: 8px 12px;
+  text-align: left;
+  font-weight: 600;
+  color: #333;
+  border-bottom: 2px solid #a5d6a7;
+  white-space: nowrap;
+}
+
+.litTable td {
+  padding: 8px 12px;
+  border-bottom: 1px solid #e0e0e0;
+  color: #444;
+  vertical-align: top;
+  line-height: 1.4;
+}
+
+.litTable tbody tr:hover {
+  background: rgba(0, 0, 0, 0.02);
+}
+
+.litTable tbody tr:last-child td {
+  border-bottom: none;
+}
+
 /* Results */
 .litResultsContainer {
-  max-width: 900px;
+  max-width: 960px;
 }
 
 .litStatusMessage {
