@@ -13,9 +13,11 @@ define([
   './WorkflowEngine', // Workflow engine widget for displaying workflows
   './workflowForms/CopilotServiceFormAdapter', // Dojo form wrappers for single-step direct form modal
   '../../WorkspaceManager', // Workspace manager for file operations
-  './WorkspacePathUtils'
+  './WorkspacePathUtils',
+  './PlanCard', // Plan card widget for planning agent
+  './ClarificationChips' // Clarification chips for planning agent questions
 ], function (
-  declare, domConstruct, on, topic, lang, Deferred, request, markdownit, linkAttributes, Dialog, CopilotToolHandler, WorkflowEngine, CopilotServiceFormAdapter, WorkspaceManager, WorkspacePathUtils
+  declare, domConstruct, on, topic, lang, Deferred, request, markdownit, linkAttributes, Dialog, CopilotToolHandler, WorkflowEngine, CopilotServiceFormAdapter, WorkspaceManager, WorkspacePathUtils, PlanCard, ClarificationChips
 ) {
   /**
    * @class ChatMessage
@@ -554,6 +556,16 @@ define([
           };
         }
       }
+      // Infer plan metadata from persisted planning_agent messages.
+      if (sourceTool && sourceTool.indexOf('planning_agent') !== -1) {
+        if (this.message.plan) {
+          this.message.isPlan = true;
+          if (!this.message.planData) {
+            this.message.planData = this.message.plan;
+          }
+        }
+      }
+
       // Ensure persisted tool_call survives downstream processing.
       if (messageToolCall && !this.message.tool_call) {
         this.message.tool_call = messageToolCall;
@@ -790,7 +802,11 @@ define([
         (this.message.tool_call && this.message.tool_call.tool) ||
         '';
 
-      if (this.message.workflow && this.message.workflow.workflow_id) {
+      if (this.message.isPlan && this.message.planData) {
+        this.renderPlanCard(messageDiv);
+      } else if (this.message.isPlanClarification && this.message.clarificationData) {
+        this.renderClarificationChips(messageDiv);
+      } else if (this.message.workflow && this.message.workflow.workflow_id) {
         if (this.message.workflow.persisted === false) {
           // Engine persistence failed — render an inline warning instead of a card
           this._renderWorkflowPersistWarning(messageDiv);
@@ -2814,6 +2830,66 @@ define([
           overlayNode.parentNode.removeChild(overlayNode);
         }
         console.error('[ChatMessage] Error showing workflow dialog:', e);
+      }
+    },
+
+    // ==================== Planning Agent Rendering ====================
+
+    /**
+     * Render a PlanCard widget for the planning agent's plan.
+     * @param {HTMLElement} parentNode - The message content node to append to.
+     */
+    renderPlanCard: function (parentNode) {
+      try {
+        var planData = this.message.planData;
+        if (!planData || !planData.steps) {
+          console.warn('[ChatMessage] renderPlanCard called without valid planData');
+          return;
+        }
+
+        var planCard = new PlanCard({
+          plan: planData,
+          sessionId: this.message.session_id || null,
+          completedResults: {}
+        });
+
+        var cardContainer = domConstruct.create('div', {
+          'class': 'plan-card-container'
+        }, parentNode);
+
+        planCard.placeAt(cardContainer);
+        planCard.startup();
+      } catch (e) {
+        console.error('[ChatMessage] Error rendering plan card:', e);
+      }
+    },
+
+    /**
+     * Render ClarificationChips widget for planning agent questions.
+     * @param {HTMLElement} parentNode - The message content node to append to.
+     */
+    renderClarificationChips: function (parentNode) {
+      try {
+        var clarData = this.message.clarificationData;
+        if (!clarData || !clarData.questions || clarData.questions.length === 0) {
+          console.warn('[ChatMessage] renderClarificationChips called without valid data');
+          return;
+        }
+
+        var chips = new ClarificationChips({
+          questions: clarData.questions,
+          sessionId: this.message.session_id || null,
+          originalQuery: this.message.originalQuery || ''
+        });
+
+        var chipsContainer = domConstruct.create('div', {
+          'class': 'clarification-chips-container'
+        }, parentNode);
+
+        chips.placeAt(chipsContainer);
+        chips.startup();
+      } catch (e) {
+        console.error('[ChatMessage] Error rendering clarification chips:', e);
       }
     }
   });

@@ -642,6 +642,25 @@ define([
         return parsed;
       }
 
+      // Handle planning agent results
+      if (currentEvent === 'final_response' &&
+          tool && tool.indexOf('planning_agent') !== -1 &&
+          parsed.chunk) {
+        try {
+          var planData = typeof parsed.chunk === 'string' ? JSON.parse(parsed.chunk) : parsed.chunk;
+          if (planData && planData.plan && planData.plan.plan_id) {
+            return {
+              source_tool: 'planning_agent',
+              chunk: planData.answer || parsed.chunk,
+              isPlan: true,
+              planData: planData.plan
+            };
+          }
+        } catch (e) {
+          // Not plan JSON, fall through
+        }
+      }
+
       // No special handling needed
       return null;
     },
@@ -962,6 +981,15 @@ define([
             uiAction: processed.uiAction
           };
         }
+      }
+
+      // Handle planning agent persisted messages.
+      // When a session is reloaded, the plan data is stored on the message
+      // object directly (message.plan) by the gateway persistence layer.
+      // We just pass the content through — the plan rendering is handled
+      // by ChatMessage.js via isPlan/planData flags set in renderMessage().
+      if (sourceTool && sourceTool.indexOf('planning_agent') !== -1) {
+        return { content: content };
       }
 
       // No special handling for this tool, return original content

@@ -79,6 +79,7 @@ define([
       constructor: function(args) {
         declare.safeMixin(this, args);
         this._nextImageAttachmentId = 0;
+        this._topicHandles = [];
       },
 
       _toContextImageItems: function(entries) {
@@ -304,6 +305,19 @@ define([
         assistantMessage.isQueryCollection = toolMetadata.isQueryCollection;
         assistantMessage.queryCollectionData = toolMetadata.queryCollectionData;
 
+        // Planning agent
+        if (toolMetadata.isPlan) {
+          assistantMessage.isPlan = true;
+          assistantMessage.planData = toolMetadata.planData;
+        }
+        if (toolMetadata.isPlanClarification) {
+          assistantMessage.isPlanClarification = true;
+          assistantMessage.clarificationData = toolMetadata.clarificationData;
+        }
+        if (toolMetadata.originalQuery) {
+          assistantMessage.originalQuery = toolMetadata.originalQuery;
+        }
+
         // UI action/payload
         assistantMessage.chatSummary = toolMetadata.chatSummary;
         assistantMessage.uiPayload = toolMetadata.uiPayload;
@@ -402,6 +416,119 @@ define([
             onError(error);
           }
         });
+      },
+
+      /**
+       * Submits a planning agent action via the standard SSE streaming path.
+       * Reuses _submitCopilotQueryStreamWithRegistration with target_agent='planning'
+       * so all SSE events (plan_created, plan_step_*, ask_questions) flow through
+       * the normal onData/onEnd/onError/onStatusMessage callbacks.
+       *
+       * @param {string} queryText - Human-readable description of the action
+       * @param {string} sessionId - Chat session ID
+       * @param {Object} workflowContext - Planning workflow context (plan_action, plan, etc.)
+       */
+      _submitPlanAction: function(queryText, sessionId, workflowContext) {
+        var _self = this;
+
+        // Prevent concurrent submissions
+        if (this.isSubmitting) {
+          console.warn('[CopilotInput] _submitPlanAction: already submitting, ignoring');
+          return;
+        }
+
+        // Switch to Messages tab
+        topic.publish('ChatMessageSubmitted');
+
+        this.isSubmitting = true;
+        this.isQueryProgressActive = false;
+        this.submitButton.set('disabled', true);
+        this._updateAbortButtonState();
+
+        this.displayWidget.showLoadingIndicator(this.chatStore.query());
+
+        var assistantMessage = null;
+        var statusMessageId = null;
+        var assistantMessageCreated = false;
+
+        this.displayWidget.hideLoadingIndicator();
+
+        var params = {
+          inputText: queryText,
+          sessionId: sessionId || this.sessionId,
+          systemPrompt: '',
+          model: this.model,
+          save_chat: true,
+          target_agent: 'planning',
+          workflow_context: workflowContext
+        };
+
+        this._submitCopilotQueryStreamWithRegistration(params,
+          function(chunk, toolMetadata) {
+            // onData — same pattern as _handleRegularSubmitStream
+            if (!assistantMessageCreated) {
+              if (statusMessageId) {
+                _self.chatStore.removeMessage(statusMessageId);
+                statusMessageId = null;
+              }
+              assistantMessage = {
+                role: 'assistant',
+                content: '',
+                message_id: 'assistant_' + Date.now(),
+                timestamp: new Date().toISOString()
+              };
+              if (toolMetadata) {
+                _self._applyToolMetadataToAssistantMessage(assistantMessage, toolMetadata);
+              }
+              _self.chatStore.addMessage(assistantMessage);
+              assistantMessageCreated = true;
+            }
+            if (toolMetadata) {
+              _self._applyToolMetadataToAssistantMessage(assistantMessage, toolMetadata);
+            }
+            assistantMessage.content += chunk;
+            _self.displayWidget.showMessages(_self.chatStore.query());
+          },
+          function() {
+            // onEnd
+            _self.isSubmitting = false;
+            _self.isQueryProgressActive = false;
+            _self.submitButton.set('disabled', false);
+            _self._updateAbortButtonState();
+          },
+          function(error) {
+            // onError
+            topic.publish('CopilotApiError', { error: error });
+            _self.displayWidget.hideLoadingIndicator();
+            _self.isSubmitting = false;
+            _self.isQueryProgressActive = false;
+            _self.submitButton.set('disabled', false);
+            _self._updateAbortButtonState();
+          },
+          function(progressInfo) {
+            // onProgress — silent for plan actions
+          },
+          function(statusMessage) {
+            // onStatusMessage — same pattern as _handleRegularSubmitStream
+            _self._handleAbortStatusMessageEvent(statusMessage);
+
+            if (statusMessage.should_remove) {
+              _self.chatStore.removeMessage(statusMessage.message_id);
+              if (statusMessageId === statusMessage.message_id) {
+                statusMessageId = null;
+              }
+            } else {
+              statusMessageId = statusMessage.message_id;
+              var existingMessage = _self.chatStore.getMessageById(statusMessage.message_id);
+              if (existingMessage) {
+                _self.chatStore.updateMessage(statusMessage);
+              } else {
+                _self.chatStore.addMessage(statusMessage);
+              }
+            }
+            _self.displayWidget.showMessages(_self.chatStore.query());
+          }
+        );
       },
 
       /**
@@ -565,7 +692,7 @@ define([
         this.abortButton.placeAt(inputContainer);
 
         // Subscribe to page content toggle changes from ChatSessionOptionsBar
-        topic.subscribe('pageContentToggleChanged', lang.hitch(this, function(checked) {
+        this._topicHandles.push(topic.subscribe('pageContentToggleChanged', lang.hitch(this, function(checked) {
             if (!this._modelSupportsImage(this.model)) {
                 this.pageContentEnabled = false;
                 this._updateToggleButtonStyle();
@@ -574,10 +701,10 @@ define([
             this.pageContentEnabled = checked;
             this._updateToggleButtonStyle();
             console.log('Page content toggle changed to:', checked);
-        }));
+        })));
 
         // Subscribe to session changes to reset state
-        topic.subscribe('ChatSession:Selected', lang.hitch(this, function(data) {
+        this._topicHandles.push(topic.subscribe('ChatSession:Selected', lang.hitch(this, function(data) {
             // Reset screenshot toggle state
             this.pageContentEnabled = false;
             this._updateToggleButtonStyle();
@@ -592,7 +719,7 @@ define([
             this.selectedJobs = [];
             this._renderJobsSelectionIndicator();
             this.selectedWorkflows = [];
-        }));
+        })));
 
         // Maximum height for textarea before scrolling
         const maxHeight = 200; // ~9 rows
@@ -628,12 +755,12 @@ define([
             }
         }));
 
-        topic.subscribe('enhancePromptChange', lang.hitch(this, function(enhancedPrompt) {
+        this._topicHandles.push(topic.subscribe('enhancePromptChange', lang.hitch(this, function(enhancedPrompt) {
           this.enhancedPrompt = enhancedPrompt;
-        }));
+        })));
 
         // Subscribe to main chat suggestion selection to populate input text area
-        topic.subscribe('populateInputSuggestion', lang.hitch(this, function(suggestion) {
+        this._topicHandles.push(topic.subscribe('populateInputSuggestion', lang.hitch(this, function(suggestion) {
           if (this.textArea) {
             this._setInputTextValue(suggestion);
             // Focus on the text area and place cursor at the end
@@ -643,7 +770,132 @@ define([
               textbox.selectionStart = textbox.selectionEnd = suggestion.length;
             }
           }
-        }));
+        })));
+
+        // ==================== Planning Agent Topic Subscribers ====================
+
+        // 1. CopilotPlanAnswerQuestions — user answered clarification questions
+        this._topicHandles.push(topic.subscribe('CopilotPlanAnswerQuestions', lang.hitch(this, function(data) {
+          if (!data || !data.answers) { return; }
+          console.log('[CopilotInput] CopilotPlanAnswerQuestions received:', data);
+
+          // Build a human-readable summary of answers as the query text
+          var answerSummary = data.answers.map(function(a) {
+            return a.question + ': ' + a.answer;
+          }).join('\n');
+
+          this._submitPlanAction(
+            answerSummary || data.originalQuery || 'Answering clarification questions',
+            data.sessionId,
+            {
+              plan_action: 'answer_questions',
+              clarification_answers: data.answers,
+              original_query: data.originalQuery || ''
+            }
+          );
+        })));
+
+        // 2. CopilotPlanApproved — user approved the plan, start step 0
+        this._topicHandles.push(topic.subscribe('CopilotPlanApproved', lang.hitch(this, function(data) {
+          if (!data || !data.plan) { return; }
+          console.log('[CopilotInput] CopilotPlanApproved received:', data);
+
+          this._submitPlanAction(
+            'Execute approved plan: ' + (data.plan.plan_name || data.plan.plan_id || 'plan'),
+            data.sessionId,
+            {
+              plan: data.plan,
+              plan_action: 'execute_next',
+              current_step_index: 0,
+              completed_step_results: {}
+            }
+          );
+        })));
+
+        // 3. CopilotPlanExecuteNext — execute the next step in plan
+        this._topicHandles.push(topic.subscribe('CopilotPlanExecuteNext', lang.hitch(this, function(data) {
+          if (!data || !data.plan) { return; }
+          console.log('[CopilotInput] CopilotPlanExecuteNext received:', data);
+
+          var stepIndex = data.currentStepIndex || 0;
+          var stepLabel = data.plan.steps && data.plan.steps[stepIndex]
+            ? data.plan.steps[stepIndex].description || ('step ' + (stepIndex + 1))
+            : 'step ' + (stepIndex + 1);
+
+          this._submitPlanAction(
+            'Execute plan step: ' + stepLabel,
+            data.sessionId,
+            {
+              plan: data.plan,
+              plan_action: 'execute_next',
+              current_step_index: stepIndex,
+              completed_step_results: data.completedResults || {}
+            }
+          );
+        })));
+
+        // 4. CopilotPlanSkipStep — skip a step during plan execution
+        this._topicHandles.push(topic.subscribe('CopilotPlanSkipStep', lang.hitch(this, function(data) {
+          if (!data || !data.plan || !data.stepId) { return; }
+          console.log('[CopilotInput] CopilotPlanSkipStep received:', data);
+
+          // Mark the step as skipped in the plan and advance to next
+          var plan = data.plan;
+          var nextIndex = 0;
+          if (plan.steps) {
+            for (var i = 0; i < plan.steps.length; i++) {
+              if (plan.steps[i].step_id === data.stepId) {
+                plan.steps[i].status = 'skipped';
+                nextIndex = i + 1;
+                break;
+              }
+            }
+          }
+
+          this._submitPlanAction(
+            'Skip step and continue plan execution',
+            data.sessionId,
+            {
+              plan: plan,
+              plan_action: 'execute_next',
+              current_step_index: nextIndex,
+              completed_step_results: data.completedResults || {}
+            }
+          );
+        })));
+
+        // 5. CopilotPlanEdited — user edited plan steps (non-streaming)
+        this._topicHandles.push(topic.subscribe('CopilotPlanEdited', lang.hitch(this, function(data) {
+          if (!data || !data.plan) { return; }
+          console.log('[CopilotInput] CopilotPlanEdited received:', data);
+
+          var planId = data.plan.plan_id;
+          if (!planId) {
+            console.warn('[CopilotInput] CopilotPlanEdited: no plan_id, ignoring');
+            return;
+          }
+          this.copilotApi.editPlan(planId, data.plan, data.sessionId).then(
+            function(result) {
+              console.log('[CopilotInput] Plan edit saved:', result);
+            },
+            function(error) {
+              console.error('[CopilotInput] Plan edit failed:', error);
+              topic.publish('CopilotApiError', { error: error });
+            }
+          );
+        })));
+
+        // 6. CopilotPlanRegenerate — re-submit original query through normal chat flow
+        this._topicHandles.push(topic.subscribe('CopilotPlanRegenerate', lang.hitch(this, function(data) {
+          if (!data || !data.plan) { return; }
+          console.log('[CopilotInput] CopilotPlanRegenerate received:', data);
+
+          // Use the plan's original query if available, otherwise fallback
+          var originalQuery = data.plan.original_query || data.plan.plan_name || 'Regenerate plan';
+          this._setInputTextValue(originalQuery);
+          // Trigger a fresh submit through the normal chat path
+          this.submitButton.onClick();
+        })));
 
         this._renderWorkspaceSelectionIndicator();
         this._renderJobsSelectionIndicator();
@@ -2371,6 +2623,8 @@ define([
     },
 
     destroy: function() {
+      this._topicHandles.forEach(function(h) { h.remove(); });
+      this._topicHandles = [];
       this.inherited(arguments);
     }
   });

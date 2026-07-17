@@ -13,9 +13,10 @@
  */
 define([
   'dojo/_base/declare',
-  'dojo/_base/lang'
+  'dojo/_base/lang',
+  'dojo/topic'
 ], function(
-  declare, lang
+  declare, lang, topic
 ) {
 
   return declare(null, {
@@ -393,6 +394,87 @@ define([
       }
 
       return this.updateStatusMessage(content, 'cancelled');
+    },
+
+    // ==================== Planning Agent Event Formatters ====================
+
+    /**
+     * Formats 'ask_questions' event (planning agent clarification questions)
+     */
+    format_ask_questions: function(data) {
+      // Store questions for CopilotApi/ChatMessage to render as chips
+      return {
+        type: 'ask_questions',
+        questions: data.questions || [],
+        should_remove: false
+      };
+    },
+
+    /**
+     * Formats 'plan_created' event (planning agent produced a plan)
+     */
+    format_plan_created: function(data) {
+      return {
+        type: 'plan_created',
+        plan: data.plan || {},
+        should_remove: false
+      };
+    },
+
+    /**
+     * Formats 'plan_step_started' event
+     */
+    format_plan_step_started: function(data) {
+      topic.publish('CopilotPlanStepUpdate', {
+        event: 'started',
+        plan_id: data.plan_id,
+        step_id: data.step_id,
+        step_index: data.step_index
+      });
+
+      var stepNum = (data.step_index !== undefined ? data.step_index + 1 : '?');
+      var content = 'Executing step ' + stepNum + '...';
+      if (data.agent) {
+        content += ' (**' + data.agent + '** agent)';
+      }
+      return this.updateStatusMessage(content, 'plan_step_started');
+    },
+
+    /**
+     * Formats 'plan_step_completed' event
+     */
+    format_plan_step_completed: function(data) {
+      topic.publish('CopilotPlanStepUpdate', {
+        event: 'completed',
+        plan_id: data.plan_id,
+        step_id: data.step_id,
+        step_index: data.step_index,
+        result_summary: data.result_summary,
+        agent_result: data.agent_result
+      });
+
+      return {
+        type: 'plan_step_completed',
+        should_remove: true
+      };
+    },
+
+    /**
+     * Formats 'plan_step_failed' event
+     */
+    format_plan_step_failed: function(data) {
+      topic.publish('CopilotPlanStepUpdate', {
+        event: 'failed',
+        plan_id: data.plan_id,
+        step_id: data.step_id,
+        step_index: data.step_index,
+        error: data.error
+      });
+
+      return {
+        type: 'plan_step_failed',
+        should_remove: true
+      };
     }
 
   });

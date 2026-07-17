@@ -344,6 +344,13 @@ define([
             if (params.enhancedPrompt) {
                 data.enhanced_prompt = params.enhancedPrompt;
             }
+            // Planning agent routing — passed by plan topic subscribers
+            if (params.target_agent) {
+                data.target_agent = params.target_agent;
+            }
+            if (params.workflow_context) {
+                data.workflow_context = params.workflow_context;
+            }
             // Include auto-submit preference if set
             var autoSubmitPref = window.App.copilotAutoSubmitPreference
                              || localStorage.getItem('copilot-auto-submit')
@@ -381,7 +388,9 @@ define([
                     toolMetadata.isWorkspaceListing ||
                     toolMetadata.isWorkspaceBrowse ||
                     toolMetadata.isJobsBrowse ||
-                    toolMetadata.isQueryCollection
+                    toolMetadata.isQueryCollection ||
+                    toolMetadata.isPlan ||
+                    toolMetadata.isPlanClarification
                 );
             };
 
@@ -733,6 +742,48 @@ define([
                                     // File creation metadata is handled as a dedicated SSE event.
                                     // Consumers can update the session Files panel immediately.
                                     topic.publish('CopilotSessionFileCreated', parsed);
+                                    break;
+
+                                case 'ask_questions':
+                                    // Planning agent clarification questions.
+                                    // Deliver as tool metadata so ChatMessage renders ClarificationChips.
+                                    // Include the original query so ClarificationChips can pass it back
+                                    // when the user submits answers.
+                                    if (parsed.questions && onData) {
+                                        onData('', {
+                                            isPlanClarification: true,
+                                            clarificationData: {
+                                                questions: parsed.questions,
+                                                agent: parsed.agent
+                                            },
+                                            originalQuery: data.query || ''
+                                        });
+                                    }
+                                    break;
+
+                                case 'plan_created':
+                                    // Planning agent produced a plan for approval.
+                                    // Deliver as tool metadata so ChatMessage renders PlanCard.
+                                    if (parsed.plan && onData) {
+                                        onData('', {
+                                            isPlan: true,
+                                            planData: parsed.plan
+                                        });
+                                    }
+                                    break;
+
+                                case 'plan_step_started':
+                                case 'plan_step_completed':
+                                case 'plan_step_failed':
+                                    // These are handled by CopilotSSEEventHandler
+                                    // which publishes CopilotPlanStepUpdate topic
+                                    // for PlanCard to consume
+                                    if (onStatusMessage) {
+                                        var statusResult = eventHandler.handleEvent(currentEvent, parsed);
+                                        if (statusResult) {
+                                            onStatusMessage(statusResult);
+                                        }
+                                    }
                                     break;
 
                                 default:
@@ -1692,6 +1743,100 @@ define([
             }).catch(function(error) {
                 console.error('Error getting path state:', error);
                 throw error;
+            });
+        },
+
+        // ==================== Planning Agent API Methods ====================
+
+        /**
+         * Submit answers to planning agent clarification questions.
+         */
+        answerPlanQuestions: function(answers, originalQuery, sessionId) {
+            return request.post(this.apiUrlBase + '/answer-questions', {
+                data: JSON.stringify({
+                    answers: answers,
+                    original_query: originalQuery,
+                    session_id: sessionId
+                }),
+                headers: {
+                    'Content-Type': 'application/json',
+                    Authorization: (window.App.authorizationToken || '')
+                },
+                handleAs: 'json'
+            });
+        },
+
+        /**
+         * Approve a plan and start executing the first step.
+         * Returns an SSE stream — use with fetch(), not xhr.
+         */
+        approvePlan: function(planId, plan, sessionId) {
+            return fetch(this.apiUrlBase + '/plan/' + encodeURIComponent(planId) + '/approve', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    Authorization: (window.App.authorizationToken || '')
+                },
+                body: JSON.stringify({
+                    plan: plan,
+                    session_id: sessionId
+                })
+            });
+        },
+
+        /**
+         * Execute the next step in a plan.
+         * Returns an SSE stream — use with fetch(), not xhr.
+         */
+        executeNextStep: function(planId, plan, currentStepIndex, completedResults, sessionId) {
+            return fetch(this.apiUrlBase + '/plan/' + encodeURIComponent(planId) + '/execute-next', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    Authorization: (window.App.authorizationToken || '')
+                },
+                body: JSON.stringify({
+                    plan: plan,
+                    current_step_index: currentStepIndex,
+                    completed_step_results: completedResults || {},
+                    session_id: sessionId
+                })
+            });
+        },
+
+        /**
+         * Skip a step during plan execution.
+         */
+        skipPlanStep: function(planId, stepId, plan, currentStepIndex, completedResults, sessionId) {
+            return fetch(this.apiUrlBase + '/plan/' + encodeURIComponent(planId) + '/skip-step/' + encodeURIComponent(stepId), {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    Authorization: (window.App.authorizationToken || '')
+                },
+                body: JSON.stringify({
+                    plan: plan,
+                    current_step_index: currentStepIndex,
+                    completed_step_results: completedResults || {},
+                    session_id: sessionId
+                })
+            });
+        },
+
+        /**
+         * Edit remaining steps of a plan.
+         */
+        editPlan: function(planId, plan, sessionId) {
+            return request.post(this.apiUrlBase + '/plan/' + encodeURIComponent(planId) + '/edit', {
+                data: JSON.stringify({
+                    plan: plan,
+                    session_id: sessionId
+                }),
+                headers: {
+                    'Content-Type': 'application/json',
+                    Authorization: (window.App.authorizationToken || '')
+                },
+                handleAs: 'json'
             });
         }
     });
