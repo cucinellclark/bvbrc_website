@@ -12,9 +12,9 @@
  * - Provides model and RAG database selection UI
  */
 define([
-    'dojo/_base/declare', 'dojo/dom-construct', 'dojo/on', 'dijit/layout/ContentPane', 'dijit/form/Textarea', 'dijit/form/Button', 'dojo/topic', 'dojo/_base/lang', 'html2canvas/dist/html2canvas.min'
+    'dojo/_base/declare', 'dojo/dom-construct', 'dojo/on', 'dijit/layout/ContentPane', 'dijit/form/Textarea', 'dijit/form/Button', 'dojo/topic', 'dojo/_base/lang', 'html2canvas/dist/html2canvas.min', './WorkspacePathUtils', './CopilotWorkspacePathPicker'
   ], function (
-    declare, domConstruct, on, ContentPane, Textarea, Button, topic, lang, html2canvas
+    declare, domConstruct, on, ContentPane, Textarea, Button, topic, lang, html2canvas, WorkspacePathUtils, CopilotWorkspacePathPicker
   ) {
     /**
      * @class CopilotInput
@@ -116,6 +116,132 @@ define([
         var div = document.createElement('div');
         div.textContent = text;
         return div.innerHTML;
+      },
+
+      _getInputValue: function() {
+        if (!this.textArea) {
+          return '';
+        }
+        return this.textArea.get('value') || '';
+      },
+
+      _setInputTextValue: function(value) {
+        if (!this.textArea) {
+          return;
+        }
+        this.textArea.set('value', value || '');
+        this._renderWorkspacePathTokenEditor();
+      },
+
+      _focusWorkspacePathInTextarea: function(match) {
+        if (!match || !this.textArea || !this.textArea.textbox) {
+          return;
+        }
+        var textbox = this.textArea.textbox;
+        textbox.focus();
+        if (typeof textbox.setSelectionRange === 'function') {
+          textbox.setSelectionRange(match.start, match.end);
+        }
+      },
+
+      _removeWorkspacePathFromInput: function(match) {
+        if (!match) {
+          return;
+        }
+        var currentValue = this._getInputValue();
+        if (!currentValue) {
+          return;
+        }
+        var nextValue = currentValue.slice(0, match.start) + currentValue.slice(match.end);
+        nextValue = nextValue.replace(/[ \t]{2,}/g, ' ').replace(/\n{3,}/g, '\n\n');
+        this._setInputTextValue(nextValue);
+      },
+
+      _renderWorkspacePathTokenEditor: function() {
+        if (!this.workspacePathTokenEditorNode) {
+          return;
+        }
+        domConstruct.empty(this.workspacePathTokenEditorNode);
+        var value = this._getInputValue();
+        var matches = WorkspacePathUtils.findPathMatches(value);
+        if (!matches.length) {
+          this.workspacePathTokenEditorNode.style.display = 'none';
+          return;
+        }
+
+        this.workspacePathTokenEditorNode.style.display = 'flex';
+
+        var tokenListNode = domConstruct.create('div', {
+          className: 'workspacePathTokenEditorList'
+        }, this.workspacePathTokenEditorNode);
+
+        matches.forEach(lang.hitch(this, function(match) {
+          var tokenNode = domConstruct.create('div', {
+            className: 'workspacePathEditorToken'
+          }, tokenListNode);
+
+          var focusButton = domConstruct.create('button', {
+            type: 'button',
+            className: 'workspacePathEditorTokenFocus',
+            title: 'Click to select this path in the text area'
+          }, tokenNode);
+          domConstruct.create('i', {
+            className: 'fa icon-folder-open-o',
+            style: 'margin-right: 4px; color: #5b7aa7;'
+          }, focusButton);
+          var segments = match.path.split('/').filter(function(s) { return s; });
+          var displayName = segments.length > 1
+            ? '\u2026/' + segments[segments.length - 1]
+            : match.path;
+          domConstruct.create('span', { textContent: displayName }, focusButton);
+          focusButton.title = match.path;
+          on(focusButton, 'click', lang.hitch(this, function(evt) {
+            evt.preventDefault();
+            this._focusWorkspacePathInTextarea(match);
+          }));
+
+          var removeButton = domConstruct.create('button', {
+            type: 'button',
+            className: 'workspacePathEditorTokenRemove',
+            textContent: '\u00d7',
+            title: 'Remove this path from the prompt'
+          }, tokenNode);
+          on(removeButton, 'click', lang.hitch(this, function(evt) {
+            evt.preventDefault();
+            this._removeWorkspacePathFromInput(match);
+          }));
+        }));
+      },
+
+      _openWorkspaceChooser: function() {
+        var _self = this;
+        var userPath = (window.App && window.App.user && window.App.user.id)
+          ? '/' + window.App.user.id
+          : '/';
+
+        if (!this._workspacePicker) {
+          this._workspacePicker = new CopilotWorkspacePathPicker({
+            title: 'Select Workspace Path',
+            path: userPath,
+            onSelect: function(selectedPath) {
+              if (!selectedPath || typeof selectedPath !== 'string') {
+                return;
+              }
+              var pathOnly = selectedPath.trim();
+              var current = _self._getInputValue();
+              var separator = '';
+              if (current.length > 0 && !/\s$/.test(current)) {
+                separator = '\n';
+              }
+              _self._setInputTextValue(current + separator + pathOnly);
+              if (_self.textArea) {
+                _self.textArea.focus();
+              }
+            }
+          });
+        }
+        this._workspacePicker.path = userPath;
+        this._workspacePicker.show();
       },
 
       _getSelectedWorkspaceItemsForRequest: function() {
@@ -369,16 +495,41 @@ define([
         // Initialize button style
         this._updateToggleButtonStyle();
 
+        // Textarea wrapper with workspace icon inside
+        var textAreaWrapper = domConstruct.create('div', {
+            className: 'copilotTextAreaWrapper',
+            style: 'width: 60%; position: relative; margin-right: 10px;'
+        }, inputContainer);
+
         // Configure textarea with auto-expansion and styling
         this.textArea = new Textarea({
-            style: 'width: 60%; min-height: 50px; max-height: 100%; resize: none; overflow-y: hidden; border-radius: 5px; margin-right: 10px;',
-            rows: 3, // Default visible rows
+            style: 'width: 100%; min-height: 50px; max-height: 100%; resize: none; overflow-y: hidden; border-radius: 5px; padding-bottom: 24px;',
+            rows: 3,
             maxLength: 10000,
             placeholder: 'Enter your text here...'
         });
 
-        // Add textarea to container
-        this.textArea.placeAt(inputContainer);
+        // Add textarea to wrapper
+        this.textArea.placeAt(textAreaWrapper);
+
+        // Workspace path icon inside textarea border (bottom-left)
+        var wsIconButton = domConstruct.create('button', {
+            type: 'button',
+            className: 'copilotWsPathInlineButton',
+            title: 'Browse workspace to add a path to your message',
+            innerHTML: '<i class="fa icon-folder-open-o"></i>'
+        }, textAreaWrapper);
+        on(wsIconButton, 'click', lang.hitch(this, function(evt) {
+            evt.preventDefault();
+            evt.stopPropagation();
+            this._openWorkspaceChooser();
+        }));
+
+        // Path token chips row beneath textarea
+        this.workspacePathTokenEditorNode = domConstruct.create('div', {
+            className: 'workspacePathTokenEditor',
+            style: 'display: none;'
+        }, textAreaWrapper);
 
         // Configure submit button with click handler
         this.submitButton = new Button({
@@ -458,7 +609,16 @@ define([
             } else {
             this.textArea.style.overflowY = 'hidden';
             }
+            this._renderWorkspacePathTokenEditor();
         }.bind(this));
+
+        // Update path tokens after paste (Dojo Textarea may not fire 'input' on paste)
+        on(this.textArea, 'paste', lang.hitch(this, function() {
+            setTimeout(lang.hitch(this, this._renderWorkspacePathTokenEditor), 0);
+        }));
+
+        // Also sync tokens on keyup to catch deletions, cut, and other edits
+        on(this.textArea, 'keyup', lang.hitch(this, this._renderWorkspacePathTokenEditor));
 
         // Handle Enter key for submission (except with Shift)
         on(this.textArea, 'keypress', lang.hitch(this, function(evt) {
@@ -475,7 +635,7 @@ define([
         // Subscribe to main chat suggestion selection to populate input text area
         topic.subscribe('populateInputSuggestion', lang.hitch(this, function(suggestion) {
           if (this.textArea) {
-            this.textArea.set('value', suggestion);
+            this._setInputTextValue(suggestion);
             // Focus on the text area and place cursor at the end
             this.textArea.focus();
             if (this.textArea.textbox) {
@@ -489,6 +649,7 @@ define([
         this._renderJobsSelectionIndicator();
         this._updateImageCapabilityUI();
         this._updateAbortButtonState();
+        this._renderWorkspacePathTokenEditor();
       },
 
       _isAbortableQueryTool: function(toolId) {
@@ -637,7 +798,7 @@ define([
 
         this.chatStore.addMessage(userMessage);
         this.displayWidget.showMessages(this.chatStore.query());
-        this.textArea.set('value', '');
+        this._setInputTextValue('');
 
         this.isSubmitting = true;
         this.submitButton.set('disabled', true);
@@ -717,7 +878,7 @@ define([
 
         this.chatStore.addMessage(userMessage);
         this.displayWidget.showMessages(this.chatStore.query());
-        this.textArea.set('value', '');
+        this._setInputTextValue('');
 
         this.isSubmitting = true;
         this.submitButton.set('disabled', true);
@@ -776,7 +937,7 @@ define([
       startNewChat: function() {
         this.new_chat = true;
         this.session_registered = false;
-        this.textArea.set('value', '');
+        this._setInputTextValue('');
 
         // If an SSE stream was in progress, reset the submit state so the
         // input is re-enabled for the new session.
@@ -1277,7 +1438,7 @@ define([
 
         this.chatStore.addMessage(userMessage);
         this.displayWidget.showMessages(this.chatStore.query());
-        this.textArea.set('value', '');
+        this._setInputTextValue('');
 
         this.isSubmitting = true;
         this.submitButton.set('disabled', true);
@@ -1372,7 +1533,7 @@ define([
 
       this.chatStore.addMessage(userMessage);
       this.displayWidget.showMessages(this.chatStore.query());
-      this.textArea.set('value', '');
+      this._setInputTextValue('');
 
       const pageHtml = document.documentElement.innerHTML;
 
@@ -1519,7 +1680,7 @@ define([
 
       this.chatStore.addMessage(userMessage);
       this.displayWidget.showMessages(this.chatStore.query());
-      this.textArea.set('value', '');
+      this._setInputTextValue('');
       if (hasUploadedImage || hasUploadedFiles) {
         this._clearAttachedImage();
       }
@@ -1709,7 +1870,7 @@ define([
 
       this.chatStore.addMessage(userMessage);
       this.displayWidget.showMessages(this.chatStore.query());
-      this.textArea.set('value', '');
+      this._setInputTextValue('');
       if (hasUploadedImage || hasUploadedFiles) {
         this._clearAttachedImage();
       }
@@ -1895,7 +2056,7 @@ define([
 
       this.chatStore.addMessage(userMessage);
       this.displayWidget.showMessages(this.chatStore.query());
-      this.textArea.set('value', '');
+      this._setInputTextValue('');
 
       this.isSubmitting = true;
       this.submitButton.set('disabled', true);
@@ -2064,7 +2225,7 @@ define([
 
       this.chatStore.addMessage(userMessage);
       this.displayWidget.showMessages(this.chatStore.query());
-      this.textArea.set('value', '');
+      this._setInputTextValue('');
 
       const pageHtml = document.documentElement.innerHTML;
 

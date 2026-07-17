@@ -12,9 +12,10 @@ define([
   './CopilotToolHandler', // Tool handler for special tool processing
   './WorkflowEngine', // Workflow engine widget for displaying workflows
   './workflowForms/CopilotServiceFormAdapter', // Dojo form wrappers for single-step direct form modal
-  '../../WorkspaceManager' // Workspace manager for file operations
+  '../../WorkspaceManager', // Workspace manager for file operations
+  './WorkspacePathUtils'
 ], function (
-  declare, domConstruct, on, topic, lang, Deferred, request, markdownit, linkAttributes, Dialog, CopilotToolHandler, WorkflowEngine, CopilotServiceFormAdapter, WorkspaceManager
+  declare, domConstruct, on, topic, lang, Deferred, request, markdownit, linkAttributes, Dialog, CopilotToolHandler, WorkflowEngine, CopilotServiceFormAdapter, WorkspaceManager, WorkspacePathUtils
 ) {
   /**
    * @class ChatMessage
@@ -128,11 +129,86 @@ define([
     },
 
     _buildWorkspaceBrowserUrl: function(path) {
-      if (!path || typeof path !== 'string') {
-        return null;
+      return WorkspacePathUtils.toWorkspaceBrowserUrl(path);
+    },
+
+    _createWorkspacePathChipNode: function(path) {
+      var openLink = WorkspacePathUtils.toWorkspaceBrowserUrl(path);
+      var chipTag = openLink ? 'a' : 'span';
+      var chipAttrs = {
+        className: 'workspace-path-chip'
+      };
+      if (openLink) {
+        chipAttrs.href = openLink;
+        chipAttrs.target = '_blank';
+        chipAttrs.rel = 'noopener noreferrer';
       }
-      var normalizedPath = path.charAt(0) === '/' ? path : '/' + path;
-      return '/workspace' + normalizedPath;
+      chipAttrs.title = path;
+      var chipNode = domConstruct.create(chipTag, chipAttrs);
+
+      domConstruct.create('i', {
+        className: 'fa icon-folder-open-o workspace-path-chip-icon'
+      }, chipNode);
+
+      var segments = path.split('/').filter(function(s) { return s; });
+      var displayName = segments.length > 0 ? segments[segments.length - 1] : path;
+
+      domConstruct.create('span', {
+        className: 'workspace-path-chip-name',
+        textContent: displayName
+      }, chipNode);
+
+      return chipNode;
+    },
+
+    _decorateWorkspacePaths: function(contentNode) {
+      if (!contentNode || typeof contentNode.querySelectorAll !== 'function') {
+        return;
+      }
+      var showTextMask = (window.NodeFilter && window.NodeFilter.SHOW_TEXT) ? window.NodeFilter.SHOW_TEXT : 4;
+      var walker = document.createTreeWalker(contentNode, showTextMask, null, false);
+      var textNodes = [];
+      var currentNode = walker.nextNode();
+      while (currentNode) {
+        textNodes.push(currentNode);
+        currentNode = walker.nextNode();
+      }
+
+      textNodes.forEach(lang.hitch(this, function(textNode) {
+        if (!textNode || !textNode.nodeValue) {
+          return;
+        }
+        var parentElement = textNode.parentElement;
+        if (!parentElement) {
+          return;
+        }
+        var parentTag = parentElement.tagName ? parentElement.tagName.toLowerCase() : '';
+        if (parentTag === 'code' || parentTag === 'pre' || parentTag === 'a' || parentTag === 'script' || parentTag === 'style') {
+          return;
+        }
+
+        var textValue = textNode.nodeValue;
+        var matches = WorkspacePathUtils.findPathMatches(textValue);
+        if (!matches.length) {
+          return;
+        }
+
+        var fragment = document.createDocumentFragment();
+        var cursor = 0;
+        matches.forEach(lang.hitch(this, function(match) {
+          if (match.start > cursor) {
+            fragment.appendChild(document.createTextNode(textValue.slice(cursor, match.start)));
+          }
+          fragment.appendChild(this._createWorkspacePathChipNode(match.path));
+          cursor = match.end;
+        }));
+        if (cursor < textValue.length) {
+          fragment.appendChild(document.createTextNode(textValue.slice(cursor)));
+        }
+        if (textNode.parentNode) {
+          textNode.parentNode.replaceChild(fragment, textNode);
+        }
+      }));
     },
 
     _extractRagSummaryText: function() {
@@ -660,10 +736,11 @@ define([
      * @param {HTMLElement} messageDiv - Container to render status message into
      */
     renderStatusMessage: function(messageDiv) {
-      domConstruct.create('div', {
+      var statusContentNode = domConstruct.create('div', {
         innerHTML: this.message.content ? this.md.render(this.message.content) : '',
         class: 'markdown-content status-content'
       }, messageDiv);
+      this._decorateWorkspacePaths(statusContentNode);
     },
 
     /**
@@ -701,6 +778,7 @@ define([
           class: 'markdown-content',
           style: 'font-size: ' + this.fontSize + 'px;'
         }, messageDiv);
+        this._decorateWorkspacePaths(markdownContainer);
 
         // Process code blocks to make large ones collapsible
         this.makeLargeCodeBlocksCollapsible(markdownContainer);

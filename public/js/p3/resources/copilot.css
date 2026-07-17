@@ -3413,3 +3413,177 @@
   border-top: 1px solid #e5e7eb;
   background: #f8fafc;
 }
+
+/* Workspace path chips in markdown messages */
+.workspace-path-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 1px 7px 1px 5px;
+  margin: 0 1px;
+  border-radius: 4px;
+  background: #eef2f9;
+  border: 1px solid #cdd6e4;
+  vertical-align: baseline;
+  text-decoration: none;
+  color: inherit;
+  cursor: pointer;
+  transition: background 0.12s ease, border-color 0.12s ease;
+  line-height: 1.4;
+}
+
+a.workspace-path-chip:hover {
+  background: #dce4f2;
+  border-color: #9bb0cf;
+  text-decoration: none;
+}
+
+.workspace-path-chip-icon {
+  color: #6a89ad;
+  font-size: 11px;
+  flex-shrink: 0;
+}
+
+.workspace-path-chip-name {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-size: 12px;
+  color: #1e3a5f;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+/* Toolbar row beneath textarea: add-workspace button + path chips */
+.copilotInputPathToolbar {
+  width: 100%;
+  align-self: stretch;
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+  flex-wrap: nowrap;
+  gap: 6px;
+  margin-top: 2px;
+}
+
+/* Textarea wrapper for positioning inline icon */
+.copilotTextAreaWrapper {
+  display: flex;
+  flex-direction: column;
+}
+
+/* Workspace path icon button inside textarea area */
+.copilotWsPathInlineButton {
+  position: absolute;
+  bottom: 4px;
+  left: 6px;
+  width: 22px;
+  height: 22px;
+  padding: 0;
+  margin: 0;
+  border: none;
+  border-radius: 3px;
+  background: transparent;
+  color: #94a3b8;
+  font-size: 14px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: color 0.12s ease, background 0.12s ease;
+  z-index: 1;
+}
+
+.copilotWsPathInlineButton:hover {
+  color: #3b82f6;
+  background: rgba(59, 130, 246, 0.08);
+}
+
+.copilotAddWorkspacePathButton {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  border: 1px solid #cdd6e4;
+  border-radius: 4px;
+  background: #f8fafb;
+  color: #475569;
+  font-size: 11.5px;
+  padding: 3px 9px;
+  cursor: pointer;
+  transition: background 0.12s ease, border-color 0.12s ease;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+.copilotAddWorkspacePathButton:hover {
+  background: #e9eef6;
+  border-color: #9bb0cf;
+  color: #1e3a5f;
+}
+
+.copilotAddWorkspacePathButton .fa {
+  font-size: 12px;
+}
+
+/* Workspace path token editor — sits inline in the path toolbar */
+.workspacePathTokenEditor {
+  display: flex;
+  align-items: center;
+  flex-wrap: nowrap;
+  gap: 5px;
+  overflow-x: auto;
+}
+
+.workspacePathTokenEditorTitle {
+  display: none;
+}
+
+.workspacePathTokenEditorList {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+  align-items: center;
+}
+
+.workspacePathEditorToken {
+  display: inline-flex;
+  align-items: center;
+  border: 1px solid #c7d4e8;
+  border-radius: 4px;
+  background: #eef2f9;
+  overflow: hidden;
+  max-width: 100%;
+}
+
+.workspacePathEditorTokenFocus {
+  border: 0;
+  background: transparent;
+  color: #1e3a5f;
+  padding: 3px 8px;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  max-width: 340px;
+  text-overflow: ellipsis;
+  overflow: hidden;
+  white-space: nowrap;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+}
+
+.workspacePathEditorTokenFocus:hover {
+  background: #dce4f2;
+}
+
+.workspacePathEditorTokenRemove {
+  border: 0;
+  border-left: 1px solid #d4dde8;
+  background: transparent;
+  color: #94a3b8;
+  cursor: pointer;
+  padding: 3px 6px;
+  font-size: 13px;
+  line-height: 1;
+}
+
+.workspacePathEditorTokenRemove:hover {
+  background: #fee2e2;
+  color: #b91c1c;
+}
