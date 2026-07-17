@@ -779,17 +779,22 @@ define([
           if (!data || !data.answers) { return; }
           console.log('[CopilotInput] CopilotPlanAnswerQuestions received:', data);
 
-          // Build a human-readable summary of answers as the query text
+          var clarificationMessage = this._buildClarificationResponseMessage(data.answers);
+          this.chatStore.addMessage(clarificationMessage);
+          this.displayWidget.showMessages(this.chatStore.query());
+
+          // Keep this compact for backend logs/history. Structured answers are in workflow_context.
           var answerSummary = data.answers.map(function(a) {
             return a.question + ': ' + a.answer;
           }).join('\n');
 
           this._submitPlanAction(
-            answerSummary || data.originalQuery || 'Answering clarification questions',
+            'Submitted clarification responses.',
             data.sessionId,
             {
               plan_action: 'answer_questions',
               clarification_answers: data.answers,
+              clarification_summary: answerSummary,
               original_query: data.originalQuery || ''
             }
           );
@@ -1559,6 +1564,23 @@ define([
           }
         }
         return userMessage;
+      },
+
+      _buildClarificationResponseMessage: function(answers) {
+        var formattedLines = ['**Clarification Responses**'];
+        (answers || []).forEach(function(a, idx) {
+          var question = (a && a.question) ? String(a.question) : ('Question ' + (idx + 1));
+          var answer = (a && a.answer) ? String(a.answer) : '(no answer)';
+          formattedLines.push((idx + 1) + '. **' + question + '**');
+          formattedLines.push('   - ' + answer);
+        });
+
+        return {
+          role: 'user_clarification',
+          content: formattedLines.join('\n'),
+          message_id: 'user_clarification_' + Date.now(),
+          timestamp: new Date().toISOString()
+        };
       },
 
       _getUploadedImagePayload: function() {

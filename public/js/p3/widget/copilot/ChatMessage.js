@@ -849,7 +849,7 @@ define([
         this.createMessageActionButtons(buttonContainer);
       }
 
-      if (this.message.role === 'user') {
+      if (this.message.role === 'user' || this.message.role === 'user_clarification') {
         // Create button container for user messages - positioned in bottom right
         var buttonContainer = domConstruct.create('div', {
           class: 'user-message-button-container'

@@ -974,6 +974,35 @@
   position: relative; /* For absolute positioning of button */
 }
 
+.message.user_clarification {
+  background-color: #eefaf4;
+  border: 1px solid #b8e7c9;
+  margin-left: auto;
+  float: right;
+  clear: both;
+  padding: 10px 12px;
+  border-radius: 8px;
+  max-width: 68%;
+  display: inline-block;
+  margin-top: 10px;
+  position: relative;
+}
+
+.message.user_clarification .markdown-content {
+  color: #114b2f;
+}
+
+.message.user_clarification .markdown-content > p:first-child {
+  margin-top: 0;
+  font-weight: 600;
+}
+
+.message.user_clarification .markdown-content ul,
+.message.user_clarification .markdown-content ol {
+  margin-top: 6px;
+  margin-bottom: 2px;
+}
+
 /* User message button container - positioned in bottom right corner */
 .user-message-button-container {
   position: absolute;
