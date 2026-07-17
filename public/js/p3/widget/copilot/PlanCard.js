@@ -32,6 +32,7 @@ define([
     workspace: '#a855f7',
     helpdesk: '#f59e0b',
     analysis: '#ef4444',
+    review: '#0ea5e9',
     direct: '#6b7280'
   };
 
@@ -57,6 +58,8 @@ define([
     _completedResults: null,  // {step_id: result_data}
     _stepNodes: null,         // Map of step_id -> DOM node
     _topicHandles: null,
+    _reviewData: null,        // Active review step data (from plan_review_ready)
+    _reviewStepId: null,      // step_id of the active review step
 
     constructor: function (params) {
       this.plan = params.plan || {};
@@ -65,6 +68,8 @@ define([
       this._completedResults = params.completedResults || {};
       this._stepNodes = {};
       this._topicHandles = [];
+      this._reviewData = null;
+      this._reviewStepId = null;
     },
 
     postCreate: function () {
@@ -73,6 +78,10 @@ define([
       // Subscribe to step update events
       var handle = topic.subscribe('CopilotPlanStepUpdate', lang.hitch(this, '_onStepUpdate'));
       this._topicHandles.push(handle);
+
+      // Subscribe to review-ready events
+      var reviewHandle = topic.subscribe('CopilotPlanReviewReady', lang.hitch(this, '_onReviewReady'));
+      this._topicHandles.push(reviewHandle);
     },
 
     buildRendering: function () {
@@ -132,6 +141,11 @@ define([
 
       (plan.steps || []).forEach(function (step, idx) {
         self._renderStep(step, idx, stepsList);
+
+        // Render review panel inline after the review step
+        if (self._reviewData && step.step_id === self._reviewStepId) {
+          self._renderReviewPanel(stepsList);
+        }
       });
 
       // Action buttons
@@ -362,7 +376,7 @@ define([
           'class': 'plan-step-agent-select'
         }, stepNode);
 
-        ['data', 'service', 'workspace', 'helpdesk', 'analysis', 'direct'].forEach(function (agentKey) {
+        ['data', 'service', 'workspace', 'helpdesk', 'analysis', 'review', 'direct'].forEach(function (agentKey) {
           var opt = domConstruct.create('option', {
             value: agentKey,
             innerHTML: agentKey.charAt(0).toUpperCase() + agentKey.slice(1)
@@ -461,11 +475,28 @@ define([
           step.status = 'completed';
           step.result_summary = data.result_summary || '';
           if (data.agent_result) {
-            this._completedResults[data.step_id] = data.agent_result;
+            var resultData = data.agent_result;
+            if (data.structured_data) {
+              resultData.structured_data = data.structured_data;
+            }
+            this._completedResults[data.step_id] = resultData;
           }
           // Auto-advance to next step if not paused
           if (!this._paused) {
             var self = this;
+            // Check if the next step is a review step -- don't auto-advance
+            // into review steps (the plan_review_ready event will handle it)
+            var nextPending = null;
+            for (var j = 0; j < this.plan.steps.length; j++) {
+              if (this.plan.steps[j].status === 'pending') {
+                nextPending = this.plan.steps[j];
+                break;
+              }
+            }
+            if (nextPending && nextPending.agent === 'review') {
+              // Still auto-advance -- the review step will trigger
+              // plan_review_ready which will pause execution
+            }
             setTimeout(function () {
               self._executeNextPendingStep();
             }, 1000);
@@ -552,6 +583,217 @@ define([
         completedResults: this._completedResults,
         sessionId: this.sessionId
       });
+    },
+
+    // =========================================================================
+    // Review Step Handling
+    // =========================================================================
+
+    _onReviewReady: function (data) {
+      if (!data || data.plan_id !== this.plan.plan_id) return;
+
+      this._paused = true;
+      this._reviewData = data;
+      this._reviewStepId = data.step_id;
+
+      // Mark the review step as running
+      var step = this._findStep(data.step_id);
+      if (step) {
+        step.status = 'running';
+      }
+
+      this._render();
+    },
+
+    _renderReviewPanel: function (parentNode) {
+      var self = this;
+      var data = this._reviewData;
+      if (!data) return;
+
+      var reviewConfig = data.review_config || {};
+      var sourceData = data.source_data || {};
+      var structuredData = sourceData.structured_data || {};
+
+      var panel = domConstruct.create('div', {
+        'class': 'plan-review-panel'
+      }, parentNode);
+
+      // Review prompt
+      domConstruct.create('div', {
+        'class': 'plan-review-prompt',
+        innerHTML: data.prompt || 'Review the results before continuing.'
+      }, panel);
+
+      // Data summary
+      if (sourceData.answer) {
+        var summaryDiv = domConstruct.create('div', {
+          'class': 'plan-review-summary'
+        }, panel);
+
+        var summaryText = sourceData.answer;
+        if (summaryText.length > 500) {
+          summaryText = summaryText.substring(0, 500) + '...';
+        }
+        domConstruct.create('p', {
+          innerHTML: summaryText
+        }, summaryDiv);
+      }
+
+      // Structured data display
+      if (structuredData.record_count !== undefined && structuredData.record_count !== null) {
+        domConstruct.create('div', {
+          'class': 'plan-review-stat',
+          innerHTML: '<strong>Records found:</strong> ' + structuredData.record_count
+        }, panel);
+      }
+
+      if (structuredData.collection) {
+        domConstruct.create('div', {
+          'class': 'plan-review-stat',
+          innerHTML: '<strong>Collection:</strong> ' + structuredData.collection
+        }, panel);
+      }
+
+      // Facet distributions
+      if (structuredData.facets && Object.keys(structuredData.facets).length > 0) {
+        var facetSection = domConstruct.create('div', {
+          'class': 'plan-review-facets'
+        }, panel);
+
+        domConstruct.create('div', {
+          'class': 'plan-review-facet-title',
+          innerHTML: 'Distribution'
+        }, facetSection);
+
+        Object.keys(structuredData.facets).forEach(function (field) {
+          var facet = structuredData.facets[field];
+          var facetDiv = domConstruct.create('div', {
+            'class': 'plan-review-facet'
+          }, facetSection);
+
+          domConstruct.create('span', {
+            'class': 'plan-review-facet-label',
+            innerHTML: field + ': '
+          }, facetDiv);
+
+          if (typeof facet === 'object' && !Array.isArray(facet)) {
+            var entries = Object.entries(facet).slice(0, 10);
+            var facetText = entries.map(function (e) { return e[0] + ' (' + e[1] + ')'; }).join(', ');
+            if (Object.keys(facet).length > 10) {
+              facetText += ', ... (' + Object.keys(facet).length + ' total)';
+            }
+            domConstruct.create('span', {
+              innerHTML: facetText
+            }, facetDiv);
+          }
+        });
+      }
+
+      // Workflow selector (for workflow_choice review types)
+      var suggestedWorkflows = reviewConfig.suggested_workflows || [];
+      if (reviewConfig.review_type === 'workflow_choice' || suggestedWorkflows.length > 0) {
+        var wfSection = domConstruct.create('div', {
+          'class': 'plan-review-workflow-section'
+        }, panel);
+
+        domConstruct.create('label', {
+          innerHTML: 'Select analysis workflow:',
+          'class': 'plan-review-label'
+        }, wfSection);
+
+        var wfSelect = domConstruct.create('select', {
+          'class': 'plan-review-workflow-select'
+        }, wfSection);
+
+        domConstruct.create('option', {
+          value: '',
+          innerHTML: '-- Choose a workflow --'
+        }, wfSelect);
+
+        suggestedWorkflows.forEach(function (wf) {
+          domConstruct.create('option', {
+            value: wf,
+            innerHTML: wf
+          }, wfSelect);
+        });
+      }
+
+      // Action buttons
+      var reviewActions = domConstruct.create('div', {
+        'class': 'plan-review-actions'
+      }, panel);
+
+      var continueBtn = domConstruct.create('button', {
+        'class': 'plan-card-btn plan-card-btn-primary',
+        innerHTML: 'Continue with Results'
+      }, reviewActions);
+
+      on(continueBtn, 'click', function () {
+        var selections = {
+          selected_ids: structuredData.record_ids || [],
+          record_count: structuredData.record_count
+        };
+
+        // Capture chosen workflow if selector exists
+        var wfSelectNode = dojoQuery('.plan-review-workflow-select', panel)[0];
+        if (wfSelectNode && wfSelectNode.value) {
+          selections.chosen_workflow = wfSelectNode.value;
+        }
+
+        self._submitReviewSelections(selections);
+      });
+
+      var skipBtn = domConstruct.create('button', {
+        'class': 'plan-card-btn plan-card-btn-secondary',
+        innerHTML: 'Skip Review'
+      }, reviewActions);
+
+      on(skipBtn, 'click', function () {
+        self._skipReviewStep();
+      });
+    },
+
+    _submitReviewSelections: function (selections) {
+      var step = this._findStep(this._reviewStepId);
+      if (step) {
+        step.status = 'completed';
+        step.result_summary = 'Review completed';
+      }
+
+      // Store selections as this step's result
+      this._completedResults[this._reviewStepId] = {
+        answer: 'Review completed',
+        status: 'completed',
+        structured_data: selections
+      };
+
+      // Clear review state
+      var reviewData = this._reviewData;
+      this._reviewData = null;
+      this._reviewStepId = null;
+      this._paused = false;
+
+      topic.publish('CopilotPlanContinueReview', {
+        plan: this.plan,
+        currentStepIndex: reviewData.step_index,
+        completedResults: this._completedResults,
+        reviewSelections: selections,
+        sessionId: this.sessionId
+      });
+    },
+
+    _skipReviewStep: function () {
+      var step = this._findStep(this._reviewStepId);
+      if (step) {
+        step.status = 'skipped';
+      }
+
+      this._reviewData = null;
+      this._reviewStepId = null;
+      this._paused = false;
+
+      this._render();
+      this._executeNextPendingStep();
     },
 
     // =========================================================================

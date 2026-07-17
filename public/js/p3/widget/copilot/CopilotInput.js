@@ -864,7 +864,25 @@ define([
           );
         })));
 
-        // 5. CopilotPlanEdited — user edited plan steps (non-streaming)
+        // 5. CopilotPlanContinueReview — user completed a review step
+        this._topicHandles.push(topic.subscribe('CopilotPlanContinueReview', lang.hitch(this, function(data) {
+          if (!data || !data.plan) { return; }
+          console.log('[CopilotInput] CopilotPlanContinueReview received:', data);
+
+          this._submitPlanAction(
+            'Continue after review',
+            data.sessionId,
+            {
+              plan: data.plan,
+              plan_action: 'continue_review',
+              current_step_index: data.currentStepIndex,
+              completed_step_results: data.completedResults || {},
+              review_selections: data.reviewSelections || {}
+            }
+          );
+        })));
+
+        // 6. CopilotPlanEdited — user edited plan steps (non-streaming)
         this._topicHandles.push(topic.subscribe('CopilotPlanEdited', lang.hitch(this, function(data) {
           if (!data || !data.plan) { return; }
           console.log('[CopilotInput] CopilotPlanEdited received:', data);

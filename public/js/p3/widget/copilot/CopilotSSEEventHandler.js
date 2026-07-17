@@ -450,12 +450,33 @@ define([
         step_id: data.step_id,
         step_index: data.step_index,
         result_summary: data.result_summary,
-        agent_result: data.agent_result
+        agent_result: data.agent_result,
+        structured_data: data.structured_data || null
       });
 
       return {
         type: 'plan_step_completed',
         should_remove: true
+      };
+    },
+
+    /**
+     * Formats 'plan_review_ready' event
+     */
+    format_plan_review_ready: function(data) {
+      topic.publish('CopilotPlanReviewReady', {
+        plan_id: data.plan_id,
+        step_id: data.step_id,
+        step_index: data.step_index,
+        review_config: data.review_config || {},
+        source_data: data.source_data || {},
+        prompt: data.prompt || 'Review the results before continuing.'
+      });
+
+      return {
+        type: 'plan_review_ready',
+        content: data.prompt || 'Please review the results before continuing.',
+        should_remove: false
       };
     },
 
