@@ -400,17 +400,12 @@ define([
 
     /**
      * Formats 'ask_questions' event (planning agent clarification questions)
+     * Returns null because CopilotApi.js handles this via onData() directly,
+     * which creates the assistant message with clarificationData for ChatMessage
+     * to render as ClarificationChips.
      */
     format_ask_questions: function(data) {
-      // Store questions for CopilotApi/ChatMessage to render as chips.
-      // This message is ephemeral: once answered we remove it from the chat UI.
-      return {
-        role: 'assistant',
-        type: 'ask_questions',
-        questions: data.questions || [],
-        should_remove: false,
-        isPlanClarification: true
-      };
+      return null;
     },
 
     /**
