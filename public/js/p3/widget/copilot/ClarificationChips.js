@@ -183,8 +183,14 @@ define([
 
       this._submitted = true;
 
-      // Replace chips with text summary
+       // Replace chips with text summary
       this._replaceWithSummary(answers);
+
+      // Remove the now-answered ask_questions message from the chat UI.
+      // The persisted record is the user_clarification message we add below.
+      topic.publish('CopilotPlanClarificationAnswered', {
+        sessionId: this.sessionId
+      });
 
       // Publish event for the API to handle
       topic.publish('CopilotPlanAnswerQuestions', {

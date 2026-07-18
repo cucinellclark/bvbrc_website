@@ -1019,6 +1019,14 @@
   opacity: 1;
 }
 
+.message.user_clarification:hover .user-message-button-container {
+  opacity: 1;
+}
+
+.message.answered-questions:hover .user-message-button-container {
+  opacity: 1;
+}
+
 .message.assistant {
   background-color: transparent;
   border: 0;
@@ -3995,4 +4003,60 @@ a.workspace-path-chip:hover {
 .clarification-summary-a {
   color: #1f2937;
   font-weight: 600;
+}
+
+/* ========================================
+   ANSWERED QUESTIONS (PLANNING CLARIFICATION)
+   ======================================== */
+
+.message.answered-questions {
+  background: #f3f4f6;
+  border: 1px solid #e5e7eb;
+  border-radius: 10px;
+  padding: 10px 12px;
+  margin-left: auto;
+  float: right;
+  clear: both;
+  max-width: 68%;
+  display: inline-block;
+  position: relative;
+}
+
+.answered-questions-header {
+  font-size: 12px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: #6b7280;
+  margin-bottom: 8px;
+}
+
+.answered-questions-row {
+  padding: 8px 10px;
+  border-radius: 8px;
+  background: #ffffff;
+  border: 1px solid #e5e7eb;
+}
+
+.answered-questions-row + .answered-questions-row {
+  margin-top: 8px;
+}
+
+.answered-questions-q {
+  font-size: 13px;
+  font-weight: 600;
+  color: #374151;
+  margin-bottom: 4px;
+}
+
+.answered-questions-a {
+  font-size: 13px;
+  color: #111827;
+}
+
+/* Ensure the copy button sits nicely on this card */
+.message.answered-questions .user-message-button-container {
+  position: absolute;
+  bottom: 6px;
+  right: 8px;
 }

@@ -402,11 +402,13 @@ define([
      * Formats 'ask_questions' event (planning agent clarification questions)
      */
     format_ask_questions: function(data) {
-      // Store questions for CopilotApi/ChatMessage to render as chips
+      // Store questions for CopilotApi/ChatMessage to render as chips.
+      // This message is ephemeral: once answered we remove it from the chat UI.
       return {
         type: 'ask_questions',
         questions: data.questions || [],
-        should_remove: false
+        should_remove: false,
+        isPlanClarification: true
       };
     },
 

@@ -668,9 +668,15 @@ define([
       // Add more top margin for first message, less for subsequent
       var marginTop = this.container.children.length === 0 ? '20px' : '5px';
 
-      // Create main message container with role-based styling
+      // Create main message container with role-based styling.
+      // user_clarification is rendered as an "Answered Questions" widget.
+      var messageRoleClass = this.message.role;
+      if (this.message.role === 'user_clarification') {
+        messageRoleClass = 'user_clarification answered-questions';
+      }
+
       var messageDiv = domConstruct.create('div', {
-        class: 'message ' + this.message.role,
+        class: 'message ' + messageRoleClass,
         style: 'margin-top: ' + marginTop + ';'
       }, this.container);
 
@@ -686,6 +692,8 @@ define([
         }
       } else if (this.message.role === 'status') {
         this.renderStatusMessage(messageDiv);
+      } else if (this.message.role === 'user_clarification') {
+        this.renderAnsweredQuestionsMessage(messageDiv);
       } else {
         this.renderUserOrAssistantMessage(messageDiv);
       }
@@ -762,6 +770,58 @@ define([
      * - For workflow messages, shows a "Review Workflow" button instead
      * @param {HTMLElement} messageDiv - Container to render message into
      */
+    renderAnsweredQuestionsMessage: function(messageDiv) {
+      var answers = Array.isArray(this.message.clarificationAnswers)
+        ? this.message.clarificationAnswers
+        : [];
+
+      // Fallback for older persisted sessions (content contains markdown list).
+      if (answers.length === 0 && typeof this.message.content === 'string') {
+        this.renderUserOrAssistantMessage(messageDiv);
+        return;
+      }
+
+      var container = domConstruct.create('div', {
+        class: 'answered-questions-container'
+      }, messageDiv);
+
+      domConstruct.create('div', {
+        class: 'answered-questions-header',
+        innerHTML: 'Answered Questions'
+      }, container);
+
+      var list = domConstruct.create('div', {
+        class: 'answered-questions-list'
+      }, container);
+
+      answers.forEach(lang.hitch(this, function(a, idx) {
+        var q = (a && a.question) ? String(a.question) : ('Question ' + (idx + 1));
+        var ans = (a && a.answer) ? String(a.answer) : '(no answer)';
+
+        var row = domConstruct.create('div', {
+          class: 'answered-questions-row'
+        }, list);
+
+        domConstruct.create('div', {
+          class: 'answered-questions-q',
+          innerHTML: this.escapeHtml(q)
+        }, row);
+
+        domConstruct.create('div', {
+          class: 'answered-questions-a',
+          innerHTML: this.escapeHtml(ans)
+        }, row);
+      }));
+
+      // Copy button for the whole widget.
+      var buttonContainer = domConstruct.create('div', {
+        class: 'user-message-button-container'
+      }, messageDiv);
+      this.createUserMessageCopyButton(buttonContainer);
+
+      this.renderAttachments(messageDiv);
+    },
+
     renderUserOrAssistantMessage: function(messageDiv) {
       // Always render assistant/user text first, then append any tool UI widgets below.
       var contentToRender = '';

@@ -774,6 +774,21 @@ define([
 
         // ==================== Planning Agent Topic Subscribers ====================
 
+        // 0. CopilotPlanClarificationAnswered — remove the ask_questions chip UI message
+        this._topicHandles.push(topic.subscribe('CopilotPlanClarificationAnswered', lang.hitch(this, function(data) {
+          try {
+            var msgs = this.chatStore && this.chatStore.query ? this.chatStore.query() : [];
+            (msgs || []).forEach(lang.hitch(this, function(m) {
+              if (m && m.isPlanClarification === true) {
+                this.chatStore.removeMessage(m.message_id);
+              }
+            }));
+            this.displayWidget.showMessages(this.chatStore.query());
+          } catch (e) {
+            console.warn('[CopilotInput] Failed to remove clarification prompt message:', e);
+          }
+        })));
+
         // 1. CopilotPlanAnswerQuestions — user answered clarification questions
         this._topicHandles.push(topic.subscribe('CopilotPlanAnswerQuestions', lang.hitch(this, function(data) {
           if (!data || !data.answers) { return; }
@@ -1575,12 +1590,13 @@ define([
           formattedLines.push('   - ' + answer);
         });
 
-        return {
-          role: 'user_clarification',
-          content: formattedLines.join('\n'),
-          message_id: 'user_clarification_' + Date.now(),
-          timestamp: new Date().toISOString()
-        };
+          return {
+            role: 'user_clarification',
+            content: formattedLines.join('\n'),
+            message_id: 'user_clarification_' + Date.now(),
+            timestamp: new Date().toISOString(),
+            clarificationAnswers: answers || []
+          };
       },
 
       _getUploadedImagePayload: function() {
