@@ -405,6 +405,7 @@ define([
       // Store questions for CopilotApi/ChatMessage to render as chips.
       // This message is ephemeral: once answered we remove it from the chat UI.
       return {
+        role: 'assistant',
         type: 'ask_questions',
         questions: data.questions || [],
         should_remove: false,
