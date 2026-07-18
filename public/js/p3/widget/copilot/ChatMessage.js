@@ -450,6 +450,27 @@ define([
      *   3. User/Assistant messages (standard display)
      */
     renderMessage: function() {
+      // Omit empty assistant messages (common during planning/clarification flows).
+      // We only skip if there's no visible content and no widget/tool UI to render.
+      if (this.message && this.message.role === 'assistant') {
+        var hasText = typeof this.message.content === 'string' && this.message.content.trim() !== '';
+        var hasWidget = !!(
+          this.message.isPlan ||
+          this.message.planData ||
+          this.message.isPlanClarification ||
+          this.message.clarificationData ||
+          this.message.workflow ||
+          this.message.workflowData ||
+          this.message.uiPayload ||
+          this.message.workspaceBrowseResult ||
+          this.message.jobsBrowseResult ||
+          this.message.queryCollectionData
+        );
+        if (!hasText && !hasWidget) {
+          return;
+        }
+      }
+
       // Check if content is a JSON string containing source_tool (for real-time results)
       var sourceTool = this.message.ui_source_tool || this.message.source_tool;
       var contentToProcess = this.message.content;
