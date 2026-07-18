@@ -418,6 +418,7 @@ define([
      */
     format_plan_created: function(data) {
       return {
+        role: 'assistant',
         type: 'plan_created',
         plan: data.plan || {},
         should_remove: false
@@ -458,8 +459,10 @@ define([
       });
 
       return {
-        type: 'plan_step_completed',
-        should_remove: true
+        role: 'status',
+        type: 'plan_step_started',
+        content: content,
+        should_remove: false
       };
     },
 
@@ -477,6 +480,7 @@ define([
       });
 
       return {
+        role: 'assistant',
         type: 'plan_review_ready',
         content: data.prompt || 'Please review the results before continuing.',
         should_remove: false
@@ -496,6 +500,7 @@ define([
       });
 
       return {
+        role: 'assistant',
         type: 'plan_step_failed',
         should_remove: true
       };
