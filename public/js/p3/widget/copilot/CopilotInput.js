@@ -2051,7 +2051,10 @@ define([
       this._submitCopilotQueryStreamWithRegistration(params,
           (chunk, toolMetadata) => {
               // onData - create assistant message on first chunk if not exists
-              if (!assistantMessageCreated) {
+              var hasTextChunk = !!(chunk && String(chunk).length > 0);
+              var hasWidget = !!(toolMetadata && (toolMetadata.isPlan || toolMetadata.isPlanClarification || toolMetadata.workflowData));
+
+              if (!assistantMessageCreated && (hasTextChunk || hasWidget)) {
                   // Remove status message if it exists
                   if (statusMessageId) {
                       this.chatStore.removeMessage(statusMessageId);
@@ -2080,12 +2083,16 @@ define([
                   this.chatStore.addMessage(assistantMessage);
                   assistantMessageCreated = true;
               }
-              if (toolMetadata) {
+              if (assistantMessageCreated && toolMetadata) {
                   this._applyToolMetadataToAssistantMessage(assistantMessage, toolMetadata);
               }
               // Append content to assistant message
-              assistantMessage.content += chunk;
-              this.displayWidget.showMessages(this.chatStore.query());
+              if (assistantMessageCreated && hasTextChunk) {
+                  assistantMessage.content += chunk;
+              }
+              if (assistantMessageCreated) {
+                  this.displayWidget.showMessages(this.chatStore.query());
+              }
           },
           () => {
               // onEnd
@@ -2239,9 +2246,11 @@ define([
       this._submitCopilotQueryStreamWithRegistration(params,
           (chunk, toolMetadata) => {
               // onData - create assistant message on first chunk if not exists
-              console.log('[HANDLER] onData callback received chunk:', chunk);
-              console.log('[HANDLER] toolMetadata in onData:', toolMetadata);
-              if (!assistantMessageCreated) {
+              // Only create when we have actual text or a renderable widget.
+              var hasTextChunk = !!(chunk && String(chunk).length > 0);
+              var hasWidget = !!(toolMetadata && (toolMetadata.isPlan || toolMetadata.isPlanClarification || toolMetadata.workflowData));
+
+              if (!assistantMessageCreated && (hasTextChunk || hasWidget)) {
                   // Remove status message if it exists
                   if (statusMessageId) {
                       this.chatStore.removeMessage(statusMessageId);
@@ -2257,31 +2266,22 @@ define([
 
                   // Add tool metadata if available (for workflow handling)
                   if (toolMetadata) {
-                      console.log('[HANDLER] Adding toolMetadata to assistant message');
-                      console.log('[HANDLER] toolMetadata:', toolMetadata);
-                      console.log('[HANDLER] toolMetadata.workflowData:', toolMetadata.workflowData);
-                      console.log('[HANDLER] toolMetadata.workflowData type:', typeof toolMetadata.workflowData);
-                      if (toolMetadata.workflowData) {
-                          console.log('[HANDLER] toolMetadata.workflowData keys:', Object.keys(toolMetadata.workflowData));
-                          console.log('[HANDLER] toolMetadata.workflowData.workflow_name:', toolMetadata.workflowData.workflow_name);
-                      }
                       this._applyToolMetadataToAssistantMessage(assistantMessage, toolMetadata);
-                      console.log('[HANDLER] ✓ Assistant message updated with toolMetadata');
-                      console.log('[HANDLER] assistantMessage.workflowData:', assistantMessage.workflowData);
-                  } else {
-                      console.log('[HANDLER] No toolMetadata provided');
                   }
 
                   this.chatStore.addMessage(assistantMessage);
                   assistantMessageCreated = true;
               }
-              if (toolMetadata) {
+              if (assistantMessageCreated && toolMetadata) {
                   this._applyToolMetadataToAssistantMessage(assistantMessage, toolMetadata);
               }
               // Append content to assistant message
-              assistantMessage.content += chunk;
-              console.log('[HANDLER] Assistant message content now:', assistantMessage.content);
-              this.displayWidget.showMessages(this.chatStore.query());
+              if (assistantMessageCreated && hasTextChunk) {
+                  assistantMessage.content += chunk;
+              }
+              if (assistantMessageCreated) {
+                  this.displayWidget.showMessages(this.chatStore.query());
+              }
           },
           () => {
               // onEnd
@@ -2434,7 +2434,10 @@ define([
         this._submitCopilotQueryStreamWithRegistration(params,
             (chunk, toolMetadata) => {
                 // onData - create assistant message on first chunk if not exists
-                if (!assistantMessageCreated) {
+                var hasTextChunk = !!(chunk && String(chunk).length > 0);
+                var hasWidget = !!(toolMetadata && (toolMetadata.isPlan || toolMetadata.isPlanClarification || toolMetadata.workflowData));
+
+                if (!assistantMessageCreated && (hasTextChunk || hasWidget)) {
                     // Remove status message if it exists
                     if (statusMessageId) {
                         this.chatStore.removeMessage(statusMessageId);
@@ -2456,12 +2459,16 @@ define([
                     this.chatStore.addMessage(assistantMessage);
                     assistantMessageCreated = true;
                 }
-                if (toolMetadata) {
+                if (assistantMessageCreated && toolMetadata) {
                     this._applyToolMetadataToAssistantMessage(assistantMessage, toolMetadata);
                 }
                 // Append content to assistant message
-                assistantMessage.content += chunk;
-                this.displayWidget.showMessages(this.chatStore.query());
+                if (assistantMessageCreated && hasTextChunk) {
+                    assistantMessage.content += chunk;
+                }
+                if (assistantMessageCreated) {
+                    this.displayWidget.showMessages(this.chatStore.query());
+                }
             },
             () => {
                 // onEnd
