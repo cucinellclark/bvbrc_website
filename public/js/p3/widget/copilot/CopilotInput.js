@@ -466,7 +466,12 @@ define([
         this._submitCopilotQueryStreamWithRegistration(params,
           function(chunk, toolMetadata) {
             // onData — same pattern as _handleRegularSubmitStream
-            if (!assistantMessageCreated) {
+            // Only create an assistant message when we actually have something
+            // to render (text chunk or a UI widget such as plan/clarification).
+            var hasTextChunk = !!(chunk && String(chunk).length > 0);
+            var hasWidget = !!(toolMetadata && (toolMetadata.isPlan || toolMetadata.isPlanClarification));
+
+            if (!assistantMessageCreated && (hasTextChunk || hasWidget)) {
               if (statusMessageId) {
                 _self.chatStore.removeMessage(statusMessageId);
                 statusMessageId = null;
@@ -483,11 +488,18 @@ define([
               _self.chatStore.addMessage(assistantMessage);
               assistantMessageCreated = true;
             }
-            if (toolMetadata) {
+
+            if (assistantMessageCreated && toolMetadata) {
               _self._applyToolMetadataToAssistantMessage(assistantMessage, toolMetadata);
             }
-            assistantMessage.content += chunk;
-            _self.displayWidget.showMessages(_self.chatStore.query());
+
+            if (assistantMessageCreated && hasTextChunk) {
+              assistantMessage.content += chunk;
+            }
+
+            if (assistantMessageCreated) {
+              _self.displayWidget.showMessages(_self.chatStore.query());
+            }
           },
           function() {
             // onEnd
