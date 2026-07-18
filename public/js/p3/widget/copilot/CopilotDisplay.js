@@ -1073,6 +1073,13 @@ define([
      * - Appends to container
      */
     addMessage: function(message) {
+      // Skip empty assistant messages (can occur after answering questions)
+      if (message.role === 'assistant' && 
+          (!message.content || String(message.content).trim() === '')) {
+        console.log('Skipping empty assistant message', message);
+        return;
+      }
+      
       new ChatMessage({
         ...message,
         copilotApi: this.copilotApi,
