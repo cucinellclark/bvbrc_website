@@ -4264,6 +4264,32 @@ a.workspace-path-chip:hover {
   font-size: 12px;
 }
 
+/* View link -- opens genome/feature list in BV-BRC viewer */
+.plan-group-view-link-container {
+  margin: 10px 0;
+  padding: 8px 12px;
+  background: #f0f9ff;
+  border: 1px solid #bae6fd;
+  border-radius: 6px;
+}
+
+.plan-group-view-link {
+  font-size: 13px;
+  font-weight: 500;
+  color: #0369a1;
+  text-decoration: none;
+}
+
+.plan-group-view-link:hover {
+  text-decoration: underline;
+  color: #0284c7;
+}
+
+.plan-group-view-link-hint {
+  font-size: 11px;
+  color: #9ca3af;
+}
+
 /* Action section */
 .plan-group-action-section {
   margin-bottom: 12px;
