@@ -48,6 +48,9 @@ define([
     _loading: false,
     _destroyed: false,
 
+    // --- Internal state ---
+    _actionMode: 'create',  // 'create' | 'use_existing'
+
     postCreate: function () {
       this.inherited(arguments);
       domClass.add(this.domNode, 'plan-group-manager');
@@ -117,35 +120,84 @@ define([
         }, viewLinkDiv);
       }
 
-      // 4. Group name input
-      var formSection = domConstruct.create('div', {
-        'class': 'plan-group-create-section'
+      // 4. Radio toggle: Create new group / Use existing group
+      var actionSection = domConstruct.create('div', {
+        'class': 'plan-group-action-section'
       }, this.domNode);
+
+      var toggleDiv = domConstruct.create('div', {
+        'class': 'plan-group-action-toggle'
+      }, actionSection);
+
+      var createId = 'pgm-create-' + this.id;
+      var existingId = 'pgm-existing-' + this.id;
+
+      this._createRadio = domConstruct.create('input', {
+        type: 'radio',
+        name: 'pgm-action-' + this.id,
+        id: createId,
+        value: 'create',
+        checked: true
+      }, toggleDiv);
+      domConstruct.create('label', {
+        'for': createId,
+        innerHTML: 'Create new group'
+      }, toggleDiv);
+
+      domConstruct.create('span', { innerHTML: '&nbsp;&nbsp;&nbsp;' }, toggleDiv);
+
+      this._existingRadio = domConstruct.create('input', {
+        type: 'radio',
+        name: 'pgm-action-' + this.id,
+        id: existingId,
+        value: 'use_existing'
+      }, toggleDiv);
+      domConstruct.create('label', {
+        'for': existingId,
+        innerHTML: 'Use existing group'
+      }, toggleDiv);
+
+      on(this._createRadio, 'change', lang.hitch(this, function () {
+        if (this._createRadio.checked) {
+          this._actionMode = 'create';
+          this._showCreateSection();
+        }
+      }));
+      on(this._existingRadio, 'change', lang.hitch(this, function () {
+        if (this._existingRadio.checked) {
+          this._actionMode = 'use_existing';
+          this._showExistingSection();
+        }
+      }));
+
+      // --- Create new group section ---
+      this._createSection = domConstruct.create('div', {
+        'class': 'plan-group-create-section'
+      }, actionSection);
 
       domConstruct.create('label', {
         innerHTML: 'Group name:',
         'class': 'plan-group-label'
-      }, formSection);
+      }, this._createSection);
 
       this._groupNameInput = domConstruct.create('input', {
         type: 'text',
         'class': 'plan-group-name-input',
         placeholder: 'Enter group name...',
         value: rc.suggested_group_name || ''
-      }, formSection);
+      }, this._createSection);
 
       this._nameErrorNode = domConstruct.create('div', {
         'class': 'plan-group-error',
         style: 'display:none;'
-      }, formSection);
+      }, this._createSection);
 
       on(this._groupNameInput, 'input', lang.hitch(this, '_validateGroupName'));
 
-      // Folder display
       domConstruct.create('label', {
         innerHTML: 'Folder:',
         'class': 'plan-group-label'
-      }, formSection);
+      }, this._createSection);
 
       var defaultPath = WorkspaceManager.getDefaultFolder(groupType);
       this._folderPath = defaultPath;
@@ -153,7 +205,30 @@ define([
       domConstruct.create('div', {
         'class': 'plan-group-folder-path',
         innerHTML: defaultPath || '(default folder)'
-      }, formSection);
+      }, this._createSection);
+
+      // --- Use existing group section ---
+      this._existingSection = domConstruct.create('div', {
+        'class': 'plan-group-existing-section',
+        style: 'display:none;'
+      }, actionSection);
+
+      domConstruct.create('label', {
+        innerHTML: 'Select a group:',
+        'class': 'plan-group-label'
+      }, this._existingSection);
+
+      this._existingSelect = domConstruct.create('select', {
+        'class': 'plan-group-existing-select'
+      }, this._existingSection);
+
+      domConstruct.create('option', {
+        value: '',
+        innerHTML: 'Loading groups...'
+      }, this._existingSelect);
+
+      // Start loading existing groups in the background
+      this._loadExistingGroups();
 
       // 5. Buttons
       var actionDiv = domConstruct.create('div', {
@@ -244,6 +319,14 @@ define([
     // ---------------------------------------------------------------
 
     _onSave: function () {
+      this._hideActionError();
+
+      if (this._actionMode === 'use_existing') {
+        this._onUseExisting();
+        return;
+      }
+
+      // Create new group mode
       var name = this._groupNameInput ? this._groupNameInput.value.trim() : '';
 
       if (!name) {
@@ -269,7 +352,6 @@ define([
       }
 
       this._setLoading(true);
-      this._hideActionError();
       this._fetchIdsThenCreateGroup(name, folderPath);
     },
 
@@ -355,6 +437,118 @@ define([
     },
 
     // ---------------------------------------------------------------
+    // Section visibility
+    // ---------------------------------------------------------------
+
+    _showCreateSection: function () {
+      if (this._createSection) this._createSection.style.display = '';
+      if (this._existingSection) this._existingSection.style.display = 'none';
+      if (this._saveBtn) this._saveBtn.innerHTML = 'Save Group & Continue';
+    },
+
+    _showExistingSection: function () {
+      if (this._createSection) this._createSection.style.display = 'none';
+      if (this._existingSection) this._existingSection.style.display = '';
+      if (this._saveBtn) this._saveBtn.innerHTML = 'Use Group & Continue';
+    },
+
+    // ---------------------------------------------------------------
+    // Existing group loading
+    // ---------------------------------------------------------------
+
+    _loadExistingGroups: function () {
+      var groupType = this._groupType;
+      var defaultPath = WorkspaceManager.getDefaultFolder(groupType);
+      var self = this;
+
+      if (!defaultPath) {
+        this._populateExistingSelect([]);
+        return;
+      }
+
+      Deferred.when(
+        WorkspaceManager.api('Workspace.ls', [{ paths: [defaultPath] }]),
+        function (results) {
+          if (self._destroyed) return;
+          var groups = [];
+          if (results && results[0] && results[0][defaultPath]) {
+            var items = results[0][defaultPath];
+            items.forEach(function (item) {
+              var itemType = item[1] || '';
+              var itemName = item[0] || '';
+              var itemPath = item[2] || (defaultPath + '/' + itemName);
+              if (itemType === groupType) {
+                groups.push({ name: itemName, path: itemPath });
+              }
+            });
+          }
+          self._existingGroupsLoaded = true;
+          self._populateExistingSelect(groups);
+        },
+        function (err) {
+          console.warn('[PlanGroupManager] Failed to load existing groups:', err);
+          self._existingGroupsLoaded = true;
+          self._populateExistingSelect([]);
+        }
+      );
+    },
+
+    _populateExistingSelect: function (groups) {
+      if (!this._existingSelect) return;
+      this._existingSelect.innerHTML = '';
+
+      if (groups.length === 0) {
+        domConstruct.create('option', {
+          value: '',
+          innerHTML: 'No existing groups found'
+        }, this._existingSelect);
+        return;
+      }
+
+      domConstruct.create('option', {
+        value: '',
+        innerHTML: '-- Choose a group --'
+      }, this._existingSelect);
+
+      this._existingGroupsList = groups;
+      groups.forEach(lang.hitch(this, function (g) {
+        domConstruct.create('option', {
+          value: g.path,
+          innerHTML: g.name
+        }, this._existingSelect);
+      }));
+    },
+
+    _onUseExisting: function () {
+      var groupPath = this._existingSelect ? this._existingSelect.value : '';
+      if (!groupPath) {
+        this._showActionError('Please select a group.');
+        return;
+      }
+
+      var groupName = '';
+      if (this._existingGroupsList) {
+        this._existingGroupsList.forEach(function (g) {
+          if (g.path === groupPath) groupName = g.name;
+        });
+      }
+
+      this._hideActionError();
+      this._disableControls();
+
+      if (typeof this.onComplete === 'function') {
+        this.onComplete({
+          group_name: groupName,
+          group_path: groupPath,
+          group_type: this._groupType,
+          group_action: 'use_existing',
+          record_count: 0,
+          id_field: this._idField
+        });
+      }
+    },
+
+    // ---------------------------------------------------------------
     // UI helpers
     // ---------------------------------------------------------------
 
@@ -374,11 +568,9 @@ define([
       if (this._saveBtn) this._saveBtn.disabled = true;
       if (this._skipBtn) this._skipBtn.disabled = true;
       if (this._groupNameInput) this._groupNameInput.disabled = true;
-
-      if (this._saveBtn) {
-        this._saveBtn.innerHTML = 'Group Saved';
-        domClass.add(this._saveBtn, 'plan-group-btn-success');
-      }
+      if (this._existingSelect) this._existingSelect.disabled = true;
+      if (this._createRadio) this._createRadio.disabled = true;
+      if (this._existingRadio) this._existingRadio.disabled = true;
     },
 
     _showActionError: function (msg) {
