@@ -334,7 +334,18 @@ define([
     _executeNext: function () {
       if (!this._plan) return;
 
+      // Don't submit if paused (waiting for review) or already running
+      if (this._paused) {
+        this._scrollToPlanCard();
+        return;
+      }
+
       var steps = this._plan.steps || [];
+
+      // Check if any step is already running
+      var hasRunning = steps.some(function (s) { return s.status === 'running'; });
+      if (hasRunning) return;
+
       var nextIndex = -1;
       for (var i = 0; i < steps.length; i++) {
         if (steps[i].status === 'pending') {

@@ -914,6 +914,75 @@ define([
           );
         })));
 
+        // 5b. CopilotPlanReviewReady — attach review data to the plan message
+        // in the chat store so it survives showMessages() re-renders.
+        this._topicHandles.push(topic.subscribe('CopilotPlanReviewReady', lang.hitch(this, function(data) {
+          if (!data || !data.plan_id) { return; }
+          // Find the plan message in the chat store and attach review data
+          var messages = this.chatStore.query();
+          for (var i = 0; i < messages.length; i++) {
+            var msg = messages[i];
+            if (msg.isPlan && msg.planData && msg.planData.plan_id === data.plan_id) {
+              msg.planData._activeReviewData = data;
+              msg.planData._activeReviewStepId = data.step_id;
+              break;
+            }
+            // Also check msg.plan for persisted messages
+            if (msg.plan && msg.plan.plan_id === data.plan_id) {
+              if (!msg.planData) msg.planData = msg.plan;
+              msg.planData._activeReviewData = data;
+              msg.planData._activeReviewStepId = data.step_id;
+              break;
+            }
+          }
+        })));
+
+        // 5c. CopilotPlanStepUpdate — sync step statuses on the plan message
+        // in the chat store so they survive showMessages() re-renders.
+        this._topicHandles.push(topic.subscribe('CopilotPlanStepUpdate', lang.hitch(this, function(data) {
+          if (!data || !data.plan_id) { return; }
+          var messages = this.chatStore.query();
+          for (var i = 0; i < messages.length; i++) {
+            var msg = messages[i];
+            var planData = msg.planData || msg.plan;
+            if (planData && planData.plan_id === data.plan_id && planData.steps) {
+              for (var j = 0; j < planData.steps.length; j++) {
+                if (planData.steps[j].step_id === data.step_id) {
+                  if (data.event === 'started') {
+                    planData.steps[j].status = 'running';
+                    planData.status = 'executing';
+                  } else if (data.event === 'completed') {
+                    planData.steps[j].status = 'completed';
+                    planData.steps[j].result_summary = data.result_summary || '';
+                  } else if (data.event === 'failed') {
+                    planData.steps[j].status = 'failed';
+                  }
+                  break;
+                }
+              }
+              break;
+            }
+          }
+        })));
+
+        // 5d. CopilotPlanContinueReview — clear review data from plan message
+        // when the user completes a review step.
+        this._topicHandles.push(topic.subscribe('CopilotPlanContinueReview', lang.hitch(this, function(data) {
+          if (!data || !data.plan) { return; }
+          var planId = data.plan.plan_id;
+          if (!planId) { return; }
+          var messages = this.chatStore.query();
+          for (var i = 0; i < messages.length; i++) {
+            var msg = messages[i];
+            var planData = msg.planData || msg.plan;
+            if (planData && planData.plan_id === planId) {
+              delete planData._activeReviewData;
+              delete planData._activeReviewStepId;
+              break;
+            }
+          }
+        })));
+
         // 6. CopilotPlanEdited — user edited plan steps (non-streaming)
         this._topicHandles.push(topic.subscribe('CopilotPlanEdited', lang.hitch(this, function(data) {
           if (!data || !data.plan) { return; }

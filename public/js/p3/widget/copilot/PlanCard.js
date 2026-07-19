@@ -68,8 +68,15 @@ define([
       this._completedResults = params.completedResults || {};
       this._stepNodes = {};
       this._topicHandles = [];
-      this._reviewData = null;
-      this._reviewStepId = null;
+
+      // Restore review state from plan data if it was attached by
+      // CopilotInput's CopilotPlanReviewReady subscriber (survives
+      // showMessages re-renders that destroy and recreate PlanCard).
+      this._reviewData = this.plan._activeReviewData || null;
+      this._reviewStepId = this.plan._activeReviewStepId || null;
+      if (this._reviewData) {
+        this._paused = true;
+      }
 
       // Infer initial mode from persisted plan/step statuses.
       // On page reload, steps may already be completed/failed/skipped.
@@ -605,6 +612,13 @@ define([
     },
 
     _executeNextPendingStep: function () {
+      // Don't submit if paused (waiting for review)
+      if (this._paused) return;
+
+      // Don't submit if a step is already running
+      var hasRunning = this.plan.steps.some(function (s) { return s.status === 'running'; });
+      if (hasRunning) return;
+
       var nextStep = null;
       var nextIndex = -1;
 
