@@ -471,6 +471,17 @@ define([
       switch (data.event) {
         case 'started':
           step.status = 'running';
+          // Ensure the PlanTracker is activated on first step execution.
+          // Covers cases where execution starts without _approvePlan
+          // (e.g. backend auto-execution or session restoration).
+          if (this._mode !== 'executing') {
+            topic.publish('CopilotPlanTrackerActivate', {
+              plan: this.plan,
+              sessionId: this.sessionId,
+              planCardNode: this.domNode,
+              completedResults: this._completedResults
+            });
+          }
           this._mode = 'executing';
           this.plan.status = 'executing';
           break;

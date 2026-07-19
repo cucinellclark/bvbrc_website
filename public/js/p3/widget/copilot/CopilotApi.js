@@ -786,6 +786,18 @@ define([
                                     }
                                     break;
 
+                                case 'plan_review_ready':
+                                    // Route through CopilotSSEEventHandler which
+                                    // publishes CopilotPlanReviewReady topic for
+                                    // PlanCard to render the review panel.
+                                    if (onStatusMessage) {
+                                        var reviewResult = eventHandler.handleEvent(currentEvent, parsed);
+                                        if (reviewResult) {
+                                            onStatusMessage(reviewResult);
+                                        }
+                                    }
+                                    break;
+
                                 default:
                                     console.warn('Unknown event type:', currentEvent, parsed);
                             }

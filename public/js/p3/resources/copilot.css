@@ -340,6 +340,7 @@
 .copilot-panel-container {
     display: flex;
     flex-direction: column;
+    overflow: hidden;
 }
 
 /* Main Result Container */
