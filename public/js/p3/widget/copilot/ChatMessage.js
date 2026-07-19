@@ -450,6 +450,16 @@ define([
      *   3. User/Assistant messages (standard display)
      */
     renderMessage: function() {
+      // Hide auto-generated plan action user messages ("Execute plan step: ...",
+      // "Execute approved plan: ...", etc.). These are system-triggered, not
+      // user-typed, and clutter the chat. The plan card shows step progress.
+      if (this.message && this.message.role === 'user') {
+        var content = (typeof this.message.content === 'string') ? this.message.content : '';
+        if (content.match(/^(Execute plan step:|Execute approved plan:|Skip step and continue|Continue after review)/)) {
+          return;  // Don't render these auto-generated messages
+        }
+      }
+
       // Omit empty assistant messages (common during planning/clarification flows).
       // We only skip if there's no visible content and no widget/tool UI to render.
       if (this.message && this.message.role === 'assistant') {

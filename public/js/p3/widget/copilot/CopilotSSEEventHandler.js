@@ -474,12 +474,14 @@ define([
         prompt: data.prompt || 'Review the results before continuing.'
       });
 
-      return {
-        role: 'assistant',
-        type: 'plan_review_ready',
-        content: data.prompt || 'Please review the results before continuing.',
-        should_remove: false
-      };
+      // The PlanCard handles the review UI via the CopilotPlanReviewReady
+      // topic (renders an inline review panel). No separate assistant
+      // message is needed -- returning a removable status message to
+      // avoid showing redundant "Review checkpoint: ..." text.
+      return this.updateStatusMessage(
+        'Review step ready -- see plan card above.',
+        'plan_review_ready'
+      );
     },
 
     /**
