@@ -618,6 +618,26 @@ define([
         'class': 'plan-review-panel'
       }, parentNode);
 
+      // Group management review type -- delegate to PlanGroupManager widget
+      if (reviewConfig.review_type === 'group_management') {
+        require(['p3/widget/copilot/PlanGroupManager'], function (PlanGroupManager) {
+          var groupManager = new PlanGroupManager({
+            reviewConfig: reviewConfig,
+            sourceData: sourceData,
+            structuredData: structuredData,
+            onComplete: function (selections) {
+              self._submitReviewSelections(selections);
+            },
+            onSkip: function () {
+              self._skipReviewStep();
+            }
+          });
+          groupManager.placeAt(panel);
+          groupManager.startup();
+        });
+        return;
+      }
+
       // Review prompt
       domConstruct.create('div', {
         'class': 'plan-review-prompt',
