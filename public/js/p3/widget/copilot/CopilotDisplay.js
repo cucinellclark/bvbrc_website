@@ -33,9 +33,10 @@ define([
   './DataExplorerAdapter',
   './SessionFilesExplorerAdapter',
   './WorkflowsExplorerAdapter',
-  './WorkflowEngine'
+  './WorkflowEngine',
+  './PlanTracker'
 ], function (
-  declare, ContentPane, domConstruct, on, topic, lang, domClass, domStyle, request, markdownit, linkAttributes, ChatMessage, SuggestedQuestions, WorkspaceExplorerAdapter, JobsExplorerAdapter, DataExplorerAdapter, SessionFilesExplorerAdapter, WorkflowsExplorerAdapter, WorkflowEngine
+  declare, ContentPane, domConstruct, on, topic, lang, domClass, domStyle, request, markdownit, linkAttributes, ChatMessage, SuggestedQuestions, WorkspaceExplorerAdapter, JobsExplorerAdapter, DataExplorerAdapter, SessionFilesExplorerAdapter, WorkflowsExplorerAdapter, WorkflowEngine, PlanTracker
 ) {
 
   /**
@@ -170,6 +171,11 @@ define([
           class: 'copilot-panel-container',
           style: 'height: 100%;'
         }, this.containerNode);
+
+        // Create sticky plan tracker (hidden by default, shown during plan execution)
+        this._planTracker = new PlanTracker({});
+        this._planTracker.placeAt(this.panelContainer);
+        this._planTracker.startup();
 
         // Create scrollable container for messages
         this.resultContainer = domConstruct.create('div', {

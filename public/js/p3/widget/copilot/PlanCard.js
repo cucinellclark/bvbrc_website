@@ -82,6 +82,10 @@ define([
       // Subscribe to review-ready events
       var reviewHandle = topic.subscribe('CopilotPlanReviewReady', lang.hitch(this, '_onReviewReady'));
       this._topicHandles.push(reviewHandle);
+
+      // Subscribe to plan exit events (from PlanTracker)
+      var exitHandle = topic.subscribe('CopilotPlanExit', lang.hitch(this, '_onPlanExit'));
+      this._topicHandles.push(exitHandle);
     },
 
     buildRendering: function () {
@@ -530,6 +534,14 @@ define([
       this._mode = 'executing';
       this._render();
 
+      // Activate the sticky plan tracker
+      topic.publish('CopilotPlanTrackerActivate', {
+        plan: this.plan,
+        sessionId: this.sessionId,
+        planCardNode: this.domNode,
+        completedResults: this._completedResults
+      });
+
       topic.publish('CopilotPlanApproved', {
         plan: this.plan,
         sessionId: this.sessionId
@@ -814,6 +826,33 @@ define([
 
       this._render();
       this._executeNextPendingStep();
+    },
+
+    /**
+     * Handle plan exit from the PlanTracker. The tracker has already
+     * marked remaining steps as skipped and set status to completed.
+     * We just need to sync our local state and re-render.
+     */
+    _onPlanExit: function (data) {
+      if (!data || !data.plan) return;
+      if (data.plan.plan_id !== this.plan.plan_id) return;
+
+      // Sync step statuses from the tracker's copy
+      var exitedSteps = data.plan.steps || [];
+      for (var i = 0; i < exitedSteps.length; i++) {
+        if (i < this.plan.steps.length) {
+          this.plan.steps[i].status = exitedSteps[i].status;
+        }
+      }
+      this.plan.status = 'completed';
+
+      // Clear any active review state
+      this._reviewData = null;
+      this._reviewStepId = null;
+      this._paused = false;
+      this._mode = 'display';
+
+      this._render();
     },
 
     // =========================================================================

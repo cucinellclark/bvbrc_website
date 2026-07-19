@@ -335,10 +335,18 @@
    CONTAINER STYLES
    ======================================== */
 
+/* Panel Container -- uses flex so PlanTracker takes natural height
+   and result-container fills the remaining space */
+.copilot-panel-container {
+    display: flex;
+    flex-direction: column;
+}
+
 /* Main Result Container */
 .copilot-result-container {
     width: 100%;
-    height: 100%;
+    flex: 1 1 0;
+    min-height: 0;             /* Allow flex child to shrink */
     overflow-y: auto;          /* Vertical scroll only */
     overflow-x: hidden;        /* Prevent horizontal scroll */
     padding: 10px;
@@ -375,7 +383,8 @@
 
 .copilot-files-container {
   width: 100%;
-  height: 100%;
+  flex: 1 1 0;
+  min-height: 0;
   overflow-y: auto;
   overflow-x: hidden;
   padding: 10px 16px 14px 16px;
@@ -384,7 +393,8 @@
 
 .copilot-workflows-container {
   width: 100%;
-  height: 100%;
+  flex: 1 1 0;
+  min-height: 0;
   overflow-y: auto;
   overflow-x: hidden;
   padding: 10px 16px 14px 16px;
@@ -393,7 +403,8 @@
 
 .copilot-workspace-container {
   width: 100%;
-  height: 100%;
+  flex: 1 1 0;
+  min-height: 0;
   overflow-y: auto;
   overflow-x: hidden;
   padding: 10px 16px 14px 16px;
@@ -402,7 +413,8 @@
 
 .copilot-jobs-container {
   width: 100%;
-  height: 100%;
+  flex: 1 1 0;
+  min-height: 0;
   overflow-y: auto;
   overflow-x: hidden;
   padding: 10px 16px 14px 16px;
@@ -411,7 +423,8 @@
 
 .copilot-data-container {
   width: 100%;
-  height: 100%;
+  flex: 1 1 0;
+  min-height: 0;
   overflow-y: auto;
   overflow-x: hidden;
   padding: 10px 16px 14px 16px;
@@ -3311,7 +3324,8 @@
 
 .copilot-images-container {
   width: 100%;
-  height: 100%;
+  flex: 1 1 0;
+  min-height: 0;
   overflow-y: auto;
   overflow-x: hidden;
   padding: 10px 16px 14px 16px;
@@ -4382,4 +4396,207 @@ a.workspace-path-chip:hover {
   color: #6b7280;
   font-size: 12px;
   font-style: italic;
+}
+
+/* ============================================================
+   PlanTracker -- Sticky progress bar during plan execution
+   ============================================================ */
+
+.plan-tracker {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 6px 12px;
+  background: linear-gradient(135deg, #f0f4ff 0%, #e8eeff 100%);
+  border-bottom: 1px solid #c7d2fe;
+  font-size: 12px;
+  position: sticky;
+  top: 0;
+  z-index: 10;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.06);
+  flex-shrink: 0;
+}
+
+/* Left section: title + progress */
+.plan-tracker-left {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-shrink: 0;
+}
+
+.plan-tracker-title {
+  font-weight: 600;
+  color: #1e3a5f;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 180px;
+}
+
+.plan-tracker-progress {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: #2563eb;
+  color: #fff;
+  font-size: 10px;
+  font-weight: 600;
+  padding: 1px 6px;
+  border-radius: 8px;
+  min-width: 28px;
+}
+
+/* Center section: dots + step label */
+.plan-tracker-center {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+}
+
+.plan-tracker-dots {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.plan-tracker-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  display: inline-block;
+  cursor: pointer;
+  transition: transform 0.15s;
+  border: 1.5px solid transparent;
+}
+
+.plan-tracker-dot:hover {
+  transform: scale(1.3);
+}
+
+.plan-tracker-dot-pending {
+  background: #d1d5db;
+  border-color: #9ca3af;
+}
+
+.plan-tracker-dot-running {
+  background: #3b82f6;
+  border-color: #2563eb;
+  animation: plan-tracker-pulse 1.2s ease-in-out infinite;
+}
+
+.plan-tracker-dot-completed {
+  background: #22c55e;
+  border-color: #16a34a;
+}
+
+.plan-tracker-dot-failed {
+  background: #ef4444;
+  border-color: #dc2626;
+}
+
+.plan-tracker-dot-skipped {
+  background: #9ca3af;
+  border-color: #6b7280;
+}
+
+@keyframes plan-tracker-pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.5; }
+}
+
+.plan-tracker-step-label {
+  font-size: 11px;
+  color: #4b5563;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 300px;
+}
+
+/* Right section: buttons */
+.plan-tracker-right {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  flex-shrink: 0;
+}
+
+.plan-tracker-btn {
+  padding: 3px 8px;
+  border-radius: 4px;
+  font-size: 11px;
+  font-weight: 500;
+  cursor: pointer;
+  border: 1px solid #d1d5db;
+  background: #fff;
+  color: #374151;
+  transition: background 0.15s;
+  white-space: nowrap;
+}
+
+.plan-tracker-btn:hover {
+  background: #f3f4f6;
+}
+
+.plan-tracker-btn-execute {
+  background: #2563eb;
+  color: #fff;
+  border-color: #2563eb;
+}
+
+.plan-tracker-btn-execute:hover {
+  background: #1d4ed8;
+}
+
+.plan-tracker-btn-review {
+  background: #0ea5e9;
+  color: #fff;
+  border-color: #0ea5e9;
+}
+
+.plan-tracker-btn-review:hover {
+  background: #0284c7;
+}
+
+.plan-tracker-btn-view {
+  background: transparent;
+  color: #2563eb;
+  border-color: transparent;
+  font-size: 11px;
+}
+
+.plan-tracker-btn-view:hover {
+  background: rgba(37, 99, 235, 0.08);
+}
+
+.plan-tracker-btn-exit {
+  background: transparent;
+  color: #9ca3af;
+  border: none;
+  font-size: 14px;
+  padding: 2px 4px;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.plan-tracker-btn-exit:hover {
+  color: #ef4444;
+}
+
+.plan-tracker-status-text {
+  font-size: 11px;
+  font-weight: 500;
+  padding: 2px 6px;
+}
+
+.plan-tracker-status-running {
+  color: #2563eb;
+}
+
+.plan-tracker-status-done {
+  color: #16a34a;
 }
