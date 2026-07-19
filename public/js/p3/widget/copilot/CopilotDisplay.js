@@ -1263,6 +1263,10 @@ define([
       this.sessionId = sessionId;
       this._contextEntriesByCategory = null;
       this._contextHiddenIdsByCategory = {};
+
+      // Deactivate the plan tracker when switching sessions or starting
+      // a new chat — it belongs to the previous session's plan.
+      topic.publish('CopilotPlanTrackerDeactivate');
     },
 
     /**
