@@ -8,6 +8,9 @@
  *   - Workspace folder display
  *   - Save Group & Continue / Skip buttons
  *
+ * Uses the source data step's query_used (RQL) to build the viewer link
+ * and to fetch IDs when creating the group.
+ *
  * The widget creates groups directly via WorkspaceManager, then passes the
  * resulting group path back as review_selections for downstream plan steps.
  */
@@ -19,10 +22,11 @@ define([
   'dojo/dom-construct',
   'dojo/dom-class',
   'dojo/on',
+  'dojo/request',
   '../../WorkspaceManager'
 ], function (
   declare, lang, Deferred, _WidgetBase,
-  domConstruct, domClass, on, WorkspaceManager
+  domConstruct, domClass, on, request, WorkspaceManager
 ) {
 
   // Map group_type to the BV-BRC list viewer path
@@ -36,7 +40,7 @@ define([
     // --- Constructor parameters ---
     reviewConfig: null,     // { review_type, group_type, group_action, suggested_group_name, id_field, ... }
     sourceData: null,       // { answer, structured_data, status }
-    structuredData: null,   // { record_ids, record_count, collection }
+    structuredData: null,   // { record_count, collection, query_used }
     onComplete: null,       // function(selections) -- called when user saves group
     onSkip: null,           // function() -- called when user skips
 
@@ -59,14 +63,20 @@ define([
     // ---------------------------------------------------------------
 
     _buildUI: function () {
-      var self = this;
       var rc = this.reviewConfig || {};
       var sd = this.structuredData || {};
-      var ids = sd.record_ids || [];
       var count = sd.record_count;
+      var queryUsed = sd.query_used || '';
+      var collection = sd.collection || '';
       var groupType = rc.group_type || 'genome_group';
       var idField = rc.id_field || 'genome_id';
       var itemLabel = groupType === 'feature_group' ? 'features' : 'genomes';
+
+      // Store for use in _onSave
+      this._queryUsed = queryUsed;
+      this._collection = collection || (groupType === 'feature_group' ? 'genome_feature' : 'genome');
+      this._idField = idField;
+      this._groupType = groupType;
 
       // 1. Review prompt
       domConstruct.create('div', {
@@ -75,7 +85,7 @@ define([
       }, this.domNode);
 
       // 2. Record count badge
-      var displayCount = (count !== undefined && count !== null) ? count : ids.length;
+      var displayCount = (count !== undefined && count !== null) ? count : 0;
       if (displayCount) {
         domConstruct.create('div', {
           'class': 'plan-group-count-badge',
@@ -84,22 +94,21 @@ define([
       }
 
       // 3. View link -- opens the genome/feature list in BV-BRC viewer
-      if (ids.length > 0) {
+      if (queryUsed) {
         var viewerPath = VIEWER_PATHS[groupType] || VIEWER_PATHS.genome_group;
-        var rqlQuery = 'in(' + idField + ',(' + ids.join(',') + '))';
-        var viewUrl = 'https://www.bv-brc.org' + viewerPath + '#' + encodeURIComponent(rqlQuery);
+        var viewUrl = 'https://www.bv-brc.org' + viewerPath + '#' + encodeURIComponent(queryUsed);
 
         var viewLinkDiv = domConstruct.create('div', {
           'class': 'plan-group-view-link-container'
         }, this.domNode);
 
+        var viewLabel = groupType === 'feature_group' ? 'Feature' : 'Genome';
         domConstruct.create('a', {
           'class': 'plan-group-view-link',
           href: viewUrl,
           target: '_blank',
           rel: 'noopener noreferrer',
-          innerHTML: 'View ' + displayCount + ' ' + itemLabel + ' in ' +
-            (groupType === 'feature_group' ? 'Feature' : 'Genome') + ' List'
+          innerHTML: 'View ' + (displayCount || '') + ' ' + itemLabel + ' in ' + viewLabel + ' List'
         }, viewLinkDiv);
 
         domConstruct.create('span', {
@@ -235,18 +244,6 @@ define([
     // ---------------------------------------------------------------
 
     _onSave: function () {
-      var rc = this.reviewConfig || {};
-      var sd = this.structuredData || {};
-      var groupType = rc.group_type || 'genome_group';
-      var idField = rc.id_field || 'genome_id';
-      var allIds = sd.record_ids || [];
-
-      if (allIds.length === 0) {
-        this._showActionError('No items available to save.');
-        return;
-      }
-
-      var self = this;
       var name = this._groupNameInput ? this._groupNameInput.value.trim() : '';
 
       if (!name) {
@@ -266,12 +263,73 @@ define([
         return;
       }
 
+      if (!this._queryUsed) {
+        this._showActionError('No query available to fetch genomes.');
+        return;
+      }
+
       this._setLoading(true);
       this._hideActionError();
+      this._fetchIdsThenCreateGroup(name, folderPath);
+    },
+
+    /**
+     * Fetch all IDs matching the original query, then create the group.
+     */
+    _fetchIdsThenCreateGroup: function (name, folderPath) {
+      var self = this;
+      var dataApiUrl = window.App.dataAPI || window.App.dataServiceURL;
+      if (!dataApiUrl) {
+        this._setLoading(false);
+        this._showActionError('Data API not available.');
+        return;
+      }
+
+      var idField = this._idField;
+      var collection = this._collection;
+      var rqlQuery = this._queryUsed + '&select(' + idField + ')&limit(25000)';
+
+      request.post(dataApiUrl + '/' + collection, {
+        data: rqlQuery,
+        headers: {
+          'Accept': 'application/json',
+          'Content-Type': 'application/rqlquery+x-www-form-urlencoded',
+          'Authorization': (window.App.authorizationToken || '')
+        },
+        handleAs: 'json'
+      }).then(function (results) {
+        if (self._destroyed) return;
+        var ids = [];
+        if (Array.isArray(results)) {
+          results.forEach(function (rec) {
+            var id = rec[idField];
+            if (id && ids.indexOf(String(id)) === -1) {
+              ids.push(String(id));
+            }
+          });
+        }
+        if (ids.length === 0) {
+          self._setLoading(false);
+          self._showActionError('No IDs found from the query. Try a different search.');
+          return;
+        }
+        self._createGroup(name, folderPath, ids);
+      }, function (err) {
+        if (self._destroyed) return;
+        self._setLoading(false);
+        var errMsg = (err && err.message) ? err.message : 'Failed to fetch genome IDs.';
+        self._showActionError(errMsg);
+      });
+    },
+
+    _createGroup: function (name, folderPath, ids) {
+      var self = this;
+      var groupType = this._groupType;
+      var idField = this._idField;
 
       Deferred.when(
-        WorkspaceManager.createGroup(name, groupType, folderPath, idField, allIds),
-        function (result) {
+        WorkspaceManager.createGroup(name, groupType, folderPath, idField, ids),
+        function () {
           if (self._destroyed) return;
           self._setLoading(false);
           self._disableControls();
@@ -282,8 +340,7 @@ define([
               group_path: folderPath + '/' + name,
               group_type: groupType,
               group_action: 'create',
-              selected_ids: allIds,
-              record_count: allIds.length,
+              record_count: ids.length,
               id_field: idField
             });
           }
