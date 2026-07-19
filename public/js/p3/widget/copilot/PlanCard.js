@@ -70,6 +70,33 @@ define([
       this._topicHandles = [];
       this._reviewData = null;
       this._reviewStepId = null;
+
+      // Infer initial mode from persisted plan/step statuses.
+      // On page reload, steps may already be completed/failed/skipped.
+      var planStatus = this.plan.status || 'draft';
+      if (planStatus === 'completed') {
+        this._mode = 'display';
+      } else if (planStatus === 'executing' || planStatus === 'approved') {
+        // Plan was mid-execution when page was reloaded.
+        // Check if any steps are still pending/running.
+        var hasActive = (this.plan.steps || []).some(function (s) {
+          return s.status === 'pending' || s.status === 'running';
+        });
+        // If a step was 'running' at persist time, it was interrupted by
+        // the reload -- revert it to 'pending' so it can be re-executed.
+        (this.plan.steps || []).forEach(function (s) {
+          if (s.status === 'running') {
+            s.status = 'pending';
+          }
+        });
+        if (hasActive) {
+          this._mode = 'executing';
+        } else {
+          // All steps finished but plan status wasn't updated -- fix it
+          this.plan.status = 'completed';
+          this._mode = 'display';
+        }
+      }
     },
 
     postCreate: function () {
@@ -86,6 +113,21 @@ define([
       // Subscribe to plan exit events (from PlanTracker)
       var exitHandle = topic.subscribe('CopilotPlanExit', lang.hitch(this, '_onPlanExit'));
       this._topicHandles.push(exitHandle);
+
+      // If the plan was mid-execution when the page was reloaded,
+      // re-activate the sticky tracker so the user can see progress
+      // and resume execution.
+      if (this._mode === 'executing') {
+        var self = this;
+        setTimeout(function () {
+          topic.publish('CopilotPlanTrackerActivate', {
+            plan: self.plan,
+            sessionId: self.sessionId,
+            planCardNode: self.domNode,
+            completedResults: self._completedResults
+          });
+        }, 500);  // Small delay to let CopilotDisplay finish mounting
+      }
     },
 
     buildRendering: function () {
@@ -533,6 +575,9 @@ define([
         this._mode = 'display';
       }
 
+      // Persist step status to MongoDB so progress survives page reload
+      this._persistPlanState();
+
       this._render();
     },
 
@@ -816,6 +861,9 @@ define([
       this._reviewStepId = null;
       this._paused = false;
 
+      // Persist review completion to MongoDB
+      this._persistPlanState();
+
       topic.publish('CopilotPlanContinueReview', {
         plan: this.plan,
         currentStepIndex: reviewData.step_index,
@@ -834,6 +882,9 @@ define([
       this._reviewData = null;
       this._reviewStepId = null;
       this._paused = false;
+
+      // Persist skip to MongoDB
+      this._persistPlanState();
 
       this._render();
       this._executeNextPendingStep();
@@ -863,6 +914,9 @@ define([
       this._paused = false;
       this._mode = 'display';
 
+      // Persist final state to MongoDB
+      this._persistPlanState();
+
       this._render();
     },
 
@@ -879,7 +933,48 @@ define([
       return null;
     },
 
+    /**
+     * Persist current plan state (step statuses, plan status) to MongoDB
+     * via the editPlan API. Called after step status changes so that
+     * progress survives page reloads.
+     *
+     * Debounced: rapid successive calls (e.g. step started + completed
+     * in quick succession) are collapsed into a single API call.
+     */
+    _persistPlanState: function () {
+      if (!this.copilotApi || !this.plan || !this.plan.plan_id) {
+        return;
+      }
+
+      // Debounce: wait 500ms for additional changes before persisting
+      if (this._persistTimeout) {
+        clearTimeout(this._persistTimeout);
+      }
+
+      var self = this;
+      this._persistTimeout = setTimeout(function () {
+        self._persistTimeout = null;
+        if (!self.copilotApi || !self.plan) return;
+
+        self.copilotApi.editPlan(
+          self.plan.plan_id,
+          self.plan,
+          self.sessionId
+        ).then(
+          function () {
+            // Silent success -- no need to notify user
+          },
+          function (err) {
+            console.warn('[PlanCard] Failed to persist plan state:', err);
+          }
+        );
+      }, 500);
+    },
+
     destroy: function () {
+      if (this._persistTimeout) {
+        clearTimeout(this._persistTimeout);
+      }
       this._topicHandles.forEach(function (h) {
         h.remove();
       });

@@ -2930,7 +2930,8 @@ define([
 
         var planCard = new PlanCard({
           plan: planData,
-          sessionId: this.message.session_id || null,
+          copilotApi: this.copilotApi || null,
+          sessionId: this.message.session_id || this.sessionId || null,
           completedResults: {}
         });
 
