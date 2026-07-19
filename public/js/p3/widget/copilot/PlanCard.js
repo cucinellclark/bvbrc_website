@@ -678,11 +678,19 @@ define([
       this._reviewData = data;
       this._reviewStepId = data.step_id;
 
+      // Store on the plan object so _persistPlanState saves it to MongoDB
+      // and it survives page reloads / session switches.
+      this.plan._activeReviewData = data;
+      this.plan._activeReviewStepId = data.step_id;
+
       // Mark the review step as running
       var step = this._findStep(data.step_id);
       if (step) {
         step.status = 'running';
       }
+
+      // Persist so review state survives leaving and returning to this chat
+      this._persistPlanState();
 
       this._render();
     },
@@ -875,6 +883,10 @@ define([
       this._reviewStepId = null;
       this._paused = false;
 
+      // Clear persisted review data from plan object
+      delete this.plan._activeReviewData;
+      delete this.plan._activeReviewStepId;
+
       // Persist review completion to MongoDB
       this._persistPlanState();
 
@@ -896,6 +908,10 @@ define([
       this._reviewData = null;
       this._reviewStepId = null;
       this._paused = false;
+
+      // Clear persisted review data from plan object
+      delete this.plan._activeReviewData;
+      delete this.plan._activeReviewStepId;
 
       // Persist skip to MongoDB
       this._persistPlanState();
