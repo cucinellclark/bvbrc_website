@@ -816,7 +816,7 @@ define([
           }).join('\n');
 
           this._submitPlanAction(
-            'Submitted clarification responses.',
+            data.originalQuery || 'Submitted clarification responses.',
             data.sessionId,
             {
               plan_action: 'answer_questions',
