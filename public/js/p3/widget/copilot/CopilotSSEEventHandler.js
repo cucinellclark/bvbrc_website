@@ -501,6 +501,61 @@ define([
         type: 'plan_step_failed',
         should_remove: true
       };
+    },
+
+    /**
+     * Formats 'plan_workflow_submitted' event.
+     * A plan step submitted a long-running workflow to GoWe.
+     * Pauses plan execution until the workflow completes.
+     */
+    format_plan_workflow_submitted: function(data) {
+      topic.publish('CopilotPlanWorkflowSubmitted', {
+        plan_id: data.plan_id,
+        step_id: data.step_id,
+        step_index: data.step_index,
+        workflow_id: data.workflow_id,
+        submission_id: data.submission_id,
+        result_summary: data.result_summary || ''
+      });
+
+      return {
+        role: 'status',
+        type: 'plan_workflow_submitted',
+        content: 'Workflow submitted. Waiting for it to complete...',
+        should_remove: false
+      };
+    },
+
+    /**
+     * Formats 'workflow_complete' event.
+     * A watched workflow reached a terminal state (completed/failed/cancelled).
+     * Signals the PlanCard to allow the user to resume plan execution.
+     */
+    format_workflow_complete: function(data) {
+      topic.publish('CopilotWorkflowComplete', {
+        workflow_id: data.workflow_id,
+        workflow_name: data.workflow_name || '',
+        status: data.status,
+        output_paths: data.output_paths || [],
+        steps: data.steps || [],
+        message_id: data.message_id || '',
+        plan_id: data.plan_id || null,
+        step_id: data.step_id || null,
+        step_index: data.step_index
+      });
+
+      var statusText = data.status === 'completed' || data.status === 'succeeded'
+        ? 'Workflow completed successfully.'
+        : data.status === 'failed'
+          ? 'Workflow failed.'
+          : 'Workflow ' + (data.status || 'finished') + '.';
+
+      return {
+        role: 'status',
+        type: 'workflow_complete',
+        content: statusText,
+        should_remove: false
+      };
     }
 
   });

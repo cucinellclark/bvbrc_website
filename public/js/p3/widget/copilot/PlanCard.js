@@ -60,6 +60,7 @@ define([
     _topicHandles: null,
     _reviewData: null,        // Active review step data (from plan_review_ready)
     _reviewStepId: null,      // step_id of the active review step
+    _waitingForWorkflow: null, // {submission_id, workflow_id, step_id, step_index} when paused for workflow
 
     constructor: function (params) {
       this.plan = params.plan || {};
@@ -75,6 +76,12 @@ define([
       this._reviewData = this.plan._activeReviewData || null;
       this._reviewStepId = this.plan._activeReviewStepId || null;
       if (this._reviewData) {
+        this._paused = true;
+      }
+
+      // Restore workflow waiting state from persisted plan data.
+      if (this.plan._waitingForWorkflow) {
+        this._waitingForWorkflow = this.plan._waitingForWorkflow;
         this._paused = true;
       }
 
@@ -120,6 +127,14 @@ define([
       // Subscribe to plan exit events (from PlanTracker)
       var exitHandle = topic.subscribe('CopilotPlanExit', lang.hitch(this, '_onPlanExit'));
       this._topicHandles.push(exitHandle);
+
+      // Subscribe to workflow submitted events (pauses plan for long-running workflows)
+      var wfSubHandle = topic.subscribe('CopilotPlanWorkflowSubmitted', lang.hitch(this, '_onWorkflowSubmitted'));
+      this._topicHandles.push(wfSubHandle);
+
+      // Subscribe to workflow completion events (resumes paused plan)
+      var wfCompleteHandle = topic.subscribe('CopilotWorkflowComplete', lang.hitch(this, '_onWorkflowComplete'));
+      this._topicHandles.push(wfCompleteHandle);
 
       // If the plan was mid-execution when the page was reloaded,
       // re-activate the sticky tracker so the user can see progress
@@ -180,7 +195,13 @@ define([
         (plan.steps || []).forEach(function (s) {
           if (s.status === 'completed' || s.status === 'skipped') completedCount++;
         });
-        statusText = 'Executing (' + completedCount + '/' + plan.steps.length + ')';
+        if (this._waitingForWorkflow) {
+          statusText = 'Waiting for workflow (' + completedCount + '/' + plan.steps.length + ')';
+        } else if (this._workflowCompleteData) {
+          statusText = 'Workflow done (' + completedCount + '/' + plan.steps.length + ')';
+        } else {
+          statusText = 'Executing (' + completedCount + '/' + plan.steps.length + ')';
+        }
       }
       domConstruct.create('span', {
         'class': 'plan-card-status plan-card-status-' + (plan.status || 'draft'),
@@ -208,7 +229,34 @@ define([
 
       if (this._mode === 'executing') {
         // Executing mode buttons
-        if (!this._paused) {
+        if (this._waitingForWorkflow) {
+          // Waiting for a long-running workflow to complete
+          domConstruct.create('span', {
+            'class': 'plan-card-workflow-waiting',
+            innerHTML: 'Workflow running — waiting for completion...'
+          }, actions);
+        } else if (this._workflowCompleteData) {
+          // Workflow finished — show Continue button
+          var wfStatus = this._workflowCompleteData.status || 'completed';
+          var wfLabel = (wfStatus === 'completed' || wfStatus === 'succeeded')
+            ? 'Workflow completed'
+            : wfStatus === 'failed' ? 'Workflow failed' : 'Workflow ' + wfStatus;
+
+          domConstruct.create('span', {
+            'class': 'plan-card-workflow-done plan-card-workflow-' + wfStatus,
+            innerHTML: wfLabel + '.'
+          }, actions);
+
+          var continueBtn = domConstruct.create('button', {
+            'class': 'plan-card-btn plan-card-btn-primary',
+            innerHTML: 'Continue Plan'
+          }, actions);
+          on(continueBtn, 'click', function () {
+            self._paused = false;
+            self._workflowCompleteData = null;
+            self._executeNextPendingStep();
+          });
+        } else if (!this._paused) {
           var pauseBtn = domConstruct.create('button', {
             'class': 'plan-card-btn plan-card-btn-secondary',
             innerHTML: 'Pause'
@@ -938,15 +986,77 @@ define([
       }
       this.plan.status = 'completed';
 
-      // Clear any active review state
+      // Clear any active review/workflow state
       this._reviewData = null;
       this._reviewStepId = null;
+      this._waitingForWorkflow = null;
+      this._workflowCompleteData = null;
+      delete this.plan._waitingForWorkflow;
       this._paused = false;
       this._mode = 'display';
 
       // Persist final state to MongoDB
       this._persistPlanState();
 
+      this._render();
+    },
+
+    // =========================================================================
+    // Workflow waiting (pause / resume for long-running workflows)
+    // =========================================================================
+
+    /**
+     * Called when a plan step submits a long-running workflow.
+     * Pauses plan execution and shows a "waiting" indicator.
+     */
+    _onWorkflowSubmitted: function (data) {
+      if (!data || !data.plan_id) return;
+      if (data.plan_id !== (this.plan.plan_id || this.plan.plan_name)) return;
+
+      console.log('[PlanCard] Workflow submitted, pausing plan', data);
+
+      this._waitingForWorkflow = {
+        submission_id: data.submission_id,
+        workflow_id: data.workflow_id,
+        step_id: data.step_id,
+        step_index: data.step_index
+      };
+      this._paused = true;
+
+      // Persist the waiting state so it survives page reload
+      this.plan._waitingForWorkflow = this._waitingForWorkflow;
+      this._persistPlanState();
+
+      this._render();
+    },
+
+    /**
+     * Called when a watched workflow reaches a terminal state.
+     * Unpauses the plan and shows a "Continue Plan" button.
+     */
+    _onWorkflowComplete: function (data) {
+      if (!data) return;
+
+      // Match by workflow_id or submission_id
+      if (!this._waitingForWorkflow) return;
+      var waiting = this._waitingForWorkflow;
+      var isMatch = (data.workflow_id && data.workflow_id === waiting.workflow_id) ||
+                    (data.submission_id && data.submission_id === waiting.submission_id);
+      if (!isMatch) return;
+
+      console.log('[PlanCard] Workflow completed, allowing plan to resume', data);
+
+      // Store the workflow result for the step
+      if (waiting.step_id) {
+        this._completedResults[waiting.step_id] = data;
+      }
+
+      // Clear waiting state but keep paused — let the user click "Continue"
+      this._waitingForWorkflow = null;
+      this._workflowCompleteData = data;
+      delete this.plan._waitingForWorkflow;
+
+      this._persistPlanState();
       this._render();
     },
 

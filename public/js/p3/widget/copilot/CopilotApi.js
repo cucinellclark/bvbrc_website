@@ -798,6 +798,32 @@ define([
                                     }
                                     break;
 
+                                case 'plan_workflow_submitted':
+                                    // A plan step submitted a long-running workflow.
+                                    // Route through CopilotSSEEventHandler which
+                                    // publishes CopilotPlanWorkflowSubmitted topic
+                                    // for PlanCard to pause and show waiting state.
+                                    if (onStatusMessage) {
+                                        var wfSubResult = eventHandler.handleEvent(currentEvent, parsed);
+                                        if (wfSubResult) {
+                                            onStatusMessage(wfSubResult);
+                                        }
+                                    }
+                                    break;
+
+                                case 'workflow_complete':
+                                    // A watched workflow reached a terminal state.
+                                    // Route through CopilotSSEEventHandler which
+                                    // publishes CopilotWorkflowComplete topic for
+                                    // PlanCard to show a "Continue Plan" button.
+                                    if (onStatusMessage) {
+                                        var wfCompResult = eventHandler.handleEvent(currentEvent, parsed);
+                                        if (wfCompResult) {
+                                            onStatusMessage(wfCompResult);
+                                        }
+                                    }
+                                    break;
+
                                 default:
                                     console.warn('Unknown event type:', currentEvent, parsed);
                             }
