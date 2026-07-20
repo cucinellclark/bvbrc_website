@@ -476,7 +476,7 @@ define([
             items.forEach(function (item) {
               var itemType = item[1] || '';
               var itemName = item[0] || '';
-              var itemPath = item[2] || (defaultPath + '/' + itemName);
+              var itemPath = item[2] ? (item[2] + itemName) : (defaultPath + '/' + itemName);
               if (itemType === groupType) {
                 groups.push({ name: itemName, path: itemPath });
               }
