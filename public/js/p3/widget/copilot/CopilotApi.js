@@ -1876,6 +1876,24 @@ define([
                 },
                 handleAs: 'json'
             });
+        },
+
+        /**
+         * Check the status of a workflow watch (for polling during plan pause).
+         * Returns the watch record from MongoDB with current GoWe state.
+         *
+         * @param {string} submissionId - GoWe submission ID
+         * @returns {Promise} Resolves with {status, gowe_state, completed_at, ...}
+         */
+        checkWorkflowWatchStatus: function(submissionId) {
+            return request(this.apiUrlBase + '/workflow-watch/' + encodeURIComponent(submissionId) + '/status', {
+                method: 'GET',
+                headers: {
+                    'Content-Type': 'application/json',
+                    Authorization: (window.App.authorizationToken || '')
+                },
+                handleAs: 'json'
+            });
         }
     });
 });

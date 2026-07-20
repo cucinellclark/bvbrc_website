@@ -61,6 +61,7 @@ define([
     _reviewData: null,        // Active review step data (from plan_review_ready)
     _reviewStepId: null,      // step_id of the active review step
     _waitingForWorkflow: null, // {submission_id, workflow_id, step_id, step_index} when paused for workflow
+    _workflowPollInterval: null, // setInterval handle for polling workflow status
 
     constructor: function (params) {
       this.plan = params.plan || {};
@@ -80,10 +81,12 @@ define([
       }
 
       // Restore workflow waiting state from persisted plan data.
+      // Polling will be started in postCreate after topics are subscribed.
       if (this.plan._waitingForWorkflow) {
         this._waitingForWorkflow = this.plan._waitingForWorkflow;
         this._paused = true;
       }
+      this._workflowPollInterval = null;
 
       // Infer initial mode from persisted plan/step statuses.
       // On page reload, steps may already be completed/failed/skipped.
@@ -149,6 +152,12 @@ define([
             completedResults: self._completedResults
           });
         }, 500);  // Small delay to let CopilotDisplay finish mounting
+      }
+
+      // If we restored a _waitingForWorkflow state from a page reload,
+      // start polling for completion now that everything is set up.
+      if (this._waitingForWorkflow) {
+        this._startWorkflowPoll();
       }
     },
 
@@ -989,6 +998,7 @@ define([
       // Clear any active review/workflow state
       this._reviewData = null;
       this._reviewStepId = null;
+      this._stopWorkflowPoll();
       this._waitingForWorkflow = null;
       this._workflowCompleteData = null;
       delete this.plan._waitingForWorkflow;
@@ -1027,6 +1037,9 @@ define([
       this.plan._waitingForWorkflow = this._waitingForWorkflow;
       this._persistPlanState();
 
+      // Start polling for workflow completion
+      this._startWorkflowPoll();
+
       this._render();
     },
 
@@ -1046,6 +1059,9 @@ define([
 
       console.log('[PlanCard] Workflow completed, allowing plan to resume', data);
 
+      // Stop polling
+      this._stopWorkflowPoll();
+
       // Store the workflow result for the step
       if (waiting.step_id) {
         this._completedResults[waiting.step_id] = data;
@@ -1058,6 +1074,68 @@ define([
 
       this._persistPlanState();
       this._render();
+    },
+
+    /**
+     * Start polling the gateway for workflow watch status.
+     * Called when entering _waitingForWorkflow state.
+     */
+    _startWorkflowPoll: function () {
+      this._stopWorkflowPoll();  // Clear any existing interval
+
+      if (!this._waitingForWorkflow || !this._waitingForWorkflow.submission_id) {
+        return;
+      }
+      if (!this.copilotApi) {
+        console.warn('[PlanCard] No copilotApi — cannot poll for workflow status');
+        return;
+      }
+
+      var self = this;
+      var submissionId = this._waitingForWorkflow.submission_id;
+      var pollIntervalMs = 30000;  // 30 seconds
+
+      console.log('[PlanCard] Starting workflow status poll', { submissionId, pollIntervalMs });
+
+      this._workflowPollInterval = setInterval(function () {
+        if (!self._waitingForWorkflow) {
+          self._stopWorkflowPoll();
+          return;
+        }
+
+        self.copilotApi.checkWorkflowWatchStatus(submissionId).then(function (watch) {
+          if (!watch || !watch.status) return;
+
+          // Terminal states: watch.status is "completed" or "failed"
+          if (watch.status === 'completed' || watch.status === 'failed') {
+            console.log('[PlanCard] Workflow poll detected completion', watch);
+
+            // Synthesize a workflow_complete event for _onWorkflowComplete
+            self._onWorkflowComplete({
+              workflow_id: watch.workflow_id || '',
+              submission_id: watch.submission_id || submissionId,
+              status: watch.gowe_state ? watch.gowe_state.toLowerCase() : watch.status,
+              completed_at: watch.completed_at,
+              plan_id: watch.plan_id || null,
+              step_id: watch.step_id || null,
+              step_index: watch.step_index
+            });
+          }
+        }).catch(function (err) {
+          // Don't stop polling on transient errors
+          console.warn('[PlanCard] Workflow poll error (will retry)', err);
+        });
+      }, pollIntervalMs);
+    },
+
+    /**
+     * Stop the workflow status polling interval.
+     */
+    _stopWorkflowPoll: function () {
+      if (this._workflowPollInterval) {
+        clearInterval(this._workflowPollInterval);
+        this._workflowPollInterval = null;
+      }
     },
 
     // =========================================================================
@@ -1112,6 +1190,7 @@ define([
     },
 
     destroy: function () {
+      this._stopWorkflowPoll();
       if (this._persistTimeout) {
         clearTimeout(this._persistTimeout);
       }
