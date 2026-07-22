@@ -100,7 +100,6 @@ define([
       if (queryUsed) {
         var viewerPath = VIEWER_PATHS[groupType] || VIEWER_PATHS.genome_group;
         var viewUrl = 'https://www.bv-brc.org' + viewerPath + '?' + queryUsed;
-
         var viewLinkDiv = domConstruct.create('div', {
           'class': 'plan-group-view-link-container'
         }, this.domNode);
@@ -369,14 +368,15 @@ define([
 
       var idField = this._idField;
       var collection = this._collection;
-      var rqlQuery = this._queryUsed + '&select(' + idField + ')&limit(25000)';
-
-      request.post(dataApiUrl + '/' + collection, {
+      var rawQuery = this._queryUsed + '&select(' + idField + ')&limit(25000)';
+      var rqlQuery = rawQuery.replace(/ /g, '%20');
+      request.post(dataApiUrl + '/' + collection + '/', {
         data: rqlQuery,
         headers: {
-          'Accept': 'application/json',
-          'Content-Type': 'application/rqlquery+x-www-form-urlencoded',
-          'Authorization': (window.App.authorizationToken || '')
+          accept: 'application/json',
+          'content-type': 'application/rqlquery+x-www-form-urlencoded',
+          'X-Requested-With': null,
+          Authorization: (window.App.authorizationToken || '')
         },
         handleAs: 'json'
       }).then(function (results) {
