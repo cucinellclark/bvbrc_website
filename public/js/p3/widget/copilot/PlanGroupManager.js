@@ -99,7 +99,7 @@ define([
       // 3. View link -- opens the genome/feature list in BV-BRC viewer
       if (queryUsed) {
         var viewerPath = VIEWER_PATHS[groupType] || VIEWER_PATHS.genome_group;
-        var viewUrl = 'https://www.bv-brc.org' + viewerPath + '#' + encodeURIComponent(queryUsed);
+        var viewUrl = 'https://www.bv-brc.org' + viewerPath + '?' + queryUsed;
 
         var viewLinkDiv = domConstruct.create('div', {
           'class': 'plan-group-view-link-container'
