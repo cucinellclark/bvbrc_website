@@ -360,7 +360,7 @@ define([
      */
     _fetchIdsThenCreateGroup: function (name, folderPath) {
       var self = this;
-      var dataApiUrl = window.App.dataAPI || window.App.dataServiceURL;
+      var dataApiUrl = (window.App.dataAPI || window.App.dataServiceURL || '').replace(/\/+$/, '');
       if (!dataApiUrl) {
         this._setLoading(false);
         this._showActionError('Data API not available.');
