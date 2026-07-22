@@ -19,10 +19,11 @@ define([
   'dojo/dom-attr',
   'dojo/on',
   'dojo/topic',
-  'dojo/query'
+  'dojo/query',
+  'p3/widget/copilot/PlanResultSanitizer'
 ], function (
   declare, lang, array, _WidgetBase,
-  domConstruct, domClass, domAttr, on, topic, dojoQuery
+  domConstruct, domClass, domAttr, on, topic, dojoQuery, PlanResultSanitizer
 ) {
 
   // Agent badge colors
@@ -67,7 +68,9 @@ define([
       this.plan = params.plan || {};
       this.copilotApi = params.copilotApi || null;
       this.sessionId = params.sessionId || null;
-      this._completedResults = params.completedResults || {};
+      this._completedResults = PlanResultSanitizer.sanitizeCompletedResults(
+        params.completedResults || {}
+      );
       this._stepNodes = {};
       this._topicHandles = [];
 
@@ -149,7 +152,7 @@ define([
             plan: self.plan,
             sessionId: self.sessionId,
             planCardNode: self.domNode,
-            completedResults: self._completedResults
+            completedResults: self._completedResultsForPublish()
           });
         }, 500);  // Small delay to let CopilotDisplay finish mounting
       }
@@ -601,7 +604,7 @@ define([
               plan: this.plan,
               sessionId: this.sessionId,
               planCardNode: this.domNode,
-              completedResults: this._completedResults
+              completedResults: this._completedResultsForPublish()
             });
           }
           this._mode = 'executing';
@@ -612,11 +615,11 @@ define([
           step.status = 'completed';
           step.result_summary = data.result_summary || '';
           if (data.agent_result) {
-            var resultData = data.agent_result;
-            if (data.structured_data) {
-              resultData.structured_data = data.structured_data;
-            }
-            this._completedResults[data.step_id] = resultData;
+            this._storeCompletedResult(
+              data.step_id,
+              data.agent_result,
+              data.structured_data
+            );
           }
           // Auto-advance to next step if not paused
           if (!this._paused) {
@@ -675,7 +678,7 @@ define([
         plan: this.plan,
         sessionId: this.sessionId,
         planCardNode: this.domNode,
-        completedResults: this._completedResults
+        completedResults: this._completedResultsForPublish()
       });
 
       topic.publish('CopilotPlanApproved', {
@@ -714,7 +717,7 @@ define([
       topic.publish('CopilotPlanExecuteNext', {
         plan: this.plan,
         currentStepIndex: nextIndex,
-        completedResults: this._completedResults,
+        completedResults: this._completedResultsForPublish(),
         sessionId: this.sessionId
       });
     },
@@ -726,7 +729,7 @@ define([
       topic.publish('CopilotPlanExecuteNext', {
         plan: this.plan,
         currentStepIndex: idx,
-        completedResults: this._completedResults,
+        completedResults: this._completedResultsForPublish(),
         sessionId: this.sessionId
       });
     },
@@ -735,7 +738,7 @@ define([
       topic.publish('CopilotPlanSkipStep', {
         plan: this.plan,
         stepId: step.step_id,
-        completedResults: this._completedResults,
+        completedResults: this._completedResultsForPublish(),
         sessionId: this.sessionId
       });
     },
@@ -944,11 +947,11 @@ define([
       }
 
       // Store selections as this step's result
-      this._completedResults[this._reviewStepId] = {
+      this._storeCompletedResult(this._reviewStepId, {
         answer: 'Review completed',
         status: 'completed',
         structured_data: selections
-      };
+      });
 
       // Clear review state
       var reviewData = this._reviewData;
@@ -966,7 +969,7 @@ define([
       topic.publish('CopilotPlanContinueReview', {
         plan: this.plan,
         currentStepIndex: reviewData.step_index,
-        completedResults: this._completedResults,
+        completedResults: this._completedResultsForPublish(),
         reviewSelections: selections,
         sessionId: this.sessionId
       });
@@ -1080,7 +1083,7 @@ define([
 
       // Store the workflow result for the step
       if (waiting.step_id) {
-        this._completedResults[waiting.step_id] = data;
+        this._storeCompletedResult(waiting.step_id, data);
       }
 
       // Clear waiting state but keep paused — let the user click "Continue"
@@ -1258,7 +1261,7 @@ define([
       topic.publish('CopilotPlanEditResubmit', {
         plan: this.plan,
         currentStepIndex: idx,
-        completedResults: this._completedResults,
+        completedResults: this._completedResultsForPublish(),
         sessionId: this.sessionId,
         editedDescription: newDescription
       });
@@ -1267,6 +1270,18 @@ define([
     // =========================================================================
     // Helpers
     // =========================================================================
+
+    _storeCompletedResult: function (stepId, result, structuredDataOverride) {
+      if (!stepId) return;
+      this._completedResults[stepId] = PlanResultSanitizer.sanitizeResult(
+        result,
+        structuredDataOverride
+      );
+    },
+
+    _completedResultsForPublish: function () {
+      return PlanResultSanitizer.sanitizeCompletedResults(this._completedResults);
+    },
 
     _findStep: function (stepId) {
       for (var i = 0; i < this.plan.steps.length; i++) {

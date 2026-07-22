@@ -23,10 +23,11 @@ define([
   'dojo/dom-class',
   'dojo/dom-style',
   'dojo/on',
-  'dojo/topic'
+  'dojo/topic',
+  'p3/widget/copilot/PlanResultSanitizer'
 ], function (
   declare, lang, _WidgetBase,
-  domConstruct, domClass, domStyle, on, topic
+  domConstruct, domClass, domStyle, on, topic, PlanResultSanitizer
 ) {
 
   // Compact status indicators
@@ -92,7 +93,9 @@ define([
       this._plan = data.plan;
       this._sessionId = data.sessionId || null;
       this._planCardNode = data.planCardNode || null;
-      this._completedResults = data.completedResults || {};
+      this._completedResults = PlanResultSanitizer.sanitizeCompletedResults(
+        data.completedResults || {}
+      );
       this._active = true;
       this._paused = false;
 
@@ -132,11 +135,10 @@ define([
               steps[i].status = 'completed';
               steps[i].result_summary = data.result_summary || '';
               if (data.agent_result) {
-                var resultData = data.agent_result;
-                if (data.structured_data) {
-                  resultData.structured_data = data.structured_data;
-                }
-                this._completedResults[data.step_id] = resultData;
+                this._completedResults[data.step_id] = PlanResultSanitizer.sanitizeResult(
+                  data.agent_result,
+                  data.structured_data
+                );
               }
               break;
             case 'failed':
@@ -358,7 +360,9 @@ define([
         topic.publish('CopilotPlanExecuteNext', {
           plan: this._plan,
           currentStepIndex: nextIndex,
-          completedResults: this._completedResults,
+          completedResults: PlanResultSanitizer.sanitizeCompletedResults(
+            this._completedResults
+          ),
           sessionId: this._sessionId
         });
       }
