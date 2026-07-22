@@ -97,6 +97,9 @@ define([
       }
 
       // 3. View link -- opens the genome/feature list in BV-BRC viewer
+      // Uses window.open() via onclick instead of href to prevent the browser
+      // from percent-encoding spaces in RQL values (e.g. "Bos taurus" -> "Bos%20taurus"),
+      // which breaks BV-BRC's RQL parser.
       if (queryUsed) {
         var viewerPath = VIEWER_PATHS[groupType] || VIEWER_PATHS.genome_group;
         var viewUrl = 'https://www.bv-brc.org' + viewerPath + '?' + queryUsed;
@@ -105,13 +108,16 @@ define([
         }, this.domNode);
 
         var viewLabel = groupType === 'feature_group' ? 'Feature' : 'Genome';
-        domConstruct.create('a', {
+        var viewLink = domConstruct.create('a', {
           'class': 'plan-group-view-link',
-          href: viewUrl,
-          target: '_blank',
-          rel: 'noopener noreferrer',
+          href: 'javascript:void(0)',
           innerHTML: 'View ' + (displayCount || '') + ' ' + itemLabel + ' in ' + viewLabel + ' List'
         }, viewLinkDiv);
+
+        on(viewLink, 'click', function (e) {
+          e.preventDefault();
+          window.open(viewUrl, '_blank', 'noopener,noreferrer');
+        });
 
         domConstruct.create('span', {
           'class': 'plan-group-view-link-hint',
