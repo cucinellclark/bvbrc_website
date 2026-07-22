@@ -896,6 +896,29 @@ define([
           );
         })));
 
+        // 4b. CopilotPlanEditResubmit — user edited a step description and wants to re-execute it
+        this._topicHandles.push(topic.subscribe('CopilotPlanEditResubmit', lang.hitch(this, function(data) {
+          if (!data || !data.plan) { return; }
+          console.log('[CopilotInput] CopilotPlanEditResubmit received:', data);
+
+          var stepIndex = data.currentStepIndex || 0;
+          var editedDesc = data.editedDescription || '';
+          var stepLabel = editedDesc
+            ? editedDesc.substring(0, 80) + (editedDesc.length > 80 ? '...' : '')
+            : 'step ' + (stepIndex + 1);
+
+          this._submitPlanAction(
+            'Re-execute edited step: ' + stepLabel,
+            data.sessionId,
+            {
+              plan: data.plan,
+              plan_action: 'execute_next',
+              current_step_index: stepIndex,
+              completed_step_results: data.completedResults || {}
+            }
+          );
+        })));
+
         // 5. CopilotPlanContinueReview — user completed a review step
         this._topicHandles.push(topic.subscribe('CopilotPlanContinueReview', lang.hitch(this, function(data) {
           if (!data || !data.plan) { return; }

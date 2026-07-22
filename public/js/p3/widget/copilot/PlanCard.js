@@ -419,6 +419,22 @@ define([
           self._skipStep(step);
         });
       }
+
+      // "Edit & Resubmit" button for the last executed step
+      if (this._isLastExecutedStep(idx) && this._mode === 'executing') {
+        var editResubActions = domConstruct.create('div', {
+          'class': 'plan-step-edit-resubmit-actions'
+        }, stepNode);
+
+        var self = this;
+        var editResubBtn = domConstruct.create('button', {
+          'class': 'plan-card-btn plan-card-btn-small plan-card-btn-edit-resubmit',
+          innerHTML: '\u270E Edit & Resubmit'
+        }, editResubActions);
+        on(editResubBtn, 'click', function () {
+          self._showEditResubmit(step, idx, stepNode);
+        });
+      }
     },
 
     // =========================================================================
@@ -1139,6 +1155,116 @@ define([
     },
 
     // =========================================================================
+    // Edit & Resubmit
+    // =========================================================================
+
+    /**
+     * Check if the step at `idx` is the last completed or failed step
+     * (i.e., the most recently executed step).
+     */
+    _isLastExecutedStep: function (idx) {
+      var steps = this.plan.steps || [];
+      var lastExecutedIdx = -1;
+      for (var i = 0; i < steps.length; i++) {
+        if (steps[i].status === 'completed' || steps[i].status === 'failed') {
+          lastExecutedIdx = i;
+        }
+      }
+      return idx === lastExecutedIdx && lastExecutedIdx >= 0;
+    },
+
+    /**
+     * Show an inline editor below the step for editing its description
+     * and resubmitting.
+     */
+    _showEditResubmit: function (step, idx, stepNode) {
+      // Prevent opening multiple editors
+      if (this._editResubmitNode) {
+        domConstruct.destroy(this._editResubmitNode);
+        this._editResubmitNode = null;
+      }
+
+      var self = this;
+      var editor = domConstruct.create('div', {
+        'class': 'plan-step-edit-resubmit-editor'
+      }, stepNode);
+      this._editResubmitNode = editor;
+
+      domConstruct.create('label', {
+        'class': 'plan-step-edit-resubmit-label',
+        innerHTML: 'Edit the prompt for this step:'
+      }, editor);
+
+      var textarea = domConstruct.create('textarea', {
+        'class': 'plan-step-edit-resubmit-textarea',
+        value: step.description || '',
+        rows: 3
+      }, editor);
+
+      var btnRow = domConstruct.create('div', {
+        'class': 'plan-step-edit-resubmit-btns'
+      }, editor);
+
+      var submitBtn = domConstruct.create('button', {
+        'class': 'plan-card-btn plan-card-btn-small plan-card-btn-primary',
+        innerHTML: 'Resubmit'
+      }, btnRow);
+      on(submitBtn, 'click', function () {
+        var newDesc = textarea.value.trim();
+        if (!newDesc) return;
+        self._submitEditResubmit(step, idx, newDesc);
+      });
+
+      var cancelBtn = domConstruct.create('button', {
+        'class': 'plan-card-btn plan-card-btn-small plan-card-btn-secondary',
+        innerHTML: 'Cancel'
+      }, btnRow);
+      on(cancelBtn, 'click', function () {
+        domConstruct.destroy(editor);
+        self._editResubmitNode = null;
+      });
+
+      // Focus the textarea
+      setTimeout(function () { textarea.focus(); }, 50);
+    },
+
+    /**
+     * Submit the edited step: update description, reset status, and
+     * publish a topic so CopilotInput re-executes this step.
+     */
+    _submitEditResubmit: function (step, idx, newDescription) {
+      // Update the step in the plan
+      step.description = newDescription;
+      step.status = 'pending';
+      step.error_message = null;
+      step.result_summary = null;
+
+      // Remove completed result for this step so the agent re-executes it
+      delete this._completedResults[step.step_id];
+
+      // Clean up the editor
+      if (this._editResubmitNode) {
+        domConstruct.destroy(this._editResubmitNode);
+        this._editResubmitNode = null;
+      }
+
+      // Persist the updated plan to MongoDB
+      this._persistPlanState();
+
+      // Re-render to reflect the updated step
+      this._render();
+
+      // Publish topic to execute the step with the new description
+      topic.publish('CopilotPlanEditResubmit', {
+        plan: this.plan,
+        currentStepIndex: idx,
+        completedResults: this._completedResults,
+        sessionId: this.sessionId,
+        editedDescription: newDescription
+      });
+    },
+
+    // =========================================================================
     // Helpers
     // =========================================================================
 
@@ -1193,6 +1319,10 @@ define([
       this._stopWorkflowPoll();
       if (this._persistTimeout) {
         clearTimeout(this._persistTimeout);
+      }
+      if (this._editResubmitNode) {
+        domConstruct.destroy(this._editResubmitNode);
+        this._editResubmitNode = null;
       }
       this._topicHandles.forEach(function (h) {
         h.remove();

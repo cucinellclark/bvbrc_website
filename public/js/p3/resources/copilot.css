@@ -3850,6 +3850,67 @@ a.workspace-path-chip:hover {
   font-size: 11px;
 }
 
+/* Edit & Resubmit */
+.plan-step-edit-resubmit-actions {
+  width: 100%;
+  margin-left: 28px;
+  margin-top: 4px;
+}
+
+.plan-card-btn-edit-resubmit {
+  color: #2563eb;
+  background: transparent;
+  border: 1px solid #93c5fd;
+}
+
+.plan-card-btn-edit-resubmit:hover {
+  background: #eff6ff;
+  border-color: #2563eb;
+}
+
+.plan-step-edit-resubmit-editor {
+  width: 100%;
+  margin-left: 28px;
+  margin-top: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 10px;
+  background: #f8fafc;
+  border: 1px solid #cbd5e1;
+  border-radius: 6px;
+}
+
+.plan-step-edit-resubmit-label {
+  font-size: 12px;
+  font-weight: 500;
+  color: #475569;
+}
+
+.plan-step-edit-resubmit-textarea {
+  width: 100%;
+  min-height: 60px;
+  padding: 8px;
+  font-size: 13px;
+  font-family: inherit;
+  border: 1px solid #cbd5e1;
+  border-radius: 4px;
+  resize: vertical;
+  box-sizing: border-box;
+}
+
+.plan-step-edit-resubmit-textarea:focus {
+  outline: none;
+  border-color: #2563eb;
+  box-shadow: 0 0 0 2px rgba(37, 99, 235, 0.15);
+}
+
+.plan-step-edit-resubmit-btns {
+  display: flex;
+  gap: 6px;
+  justify-content: flex-end;
+}
+
 /* Edit mode */
 .plan-step-editable {
   cursor: grab;
