@@ -61,7 +61,10 @@ define([
     _topicHandles: null,
     _reviewData: null,        // Active review step data (from plan_review_ready)
     _reviewStepId: null,      // step_id of the active review step
-    _waitingForWorkflow: null, // {submission_id, workflow_id, step_id, step_index} when paused for workflow
+    _waitingForWorkflow: null, // DEPRECATED: single-workflow compat; use _waitingForWorkflows
+    _waitingForWorkflows: null, // {submission_id: {status: 'active'|'completed'|'failed'}} — batch support
+    _waitingStepId: null,     // step_id of the step that submitted workflow(s)
+    _waitingStepIndex: null,  // step_index of the step that submitted workflow(s)
     _workflowPollInterval: null, // setInterval handle for polling workflow status
 
     constructor: function (params) {
@@ -85,9 +88,24 @@ define([
 
       // Restore workflow waiting state from persisted plan data.
       // Polling will be started in postCreate after topics are subscribed.
-      if (this.plan._waitingForWorkflow) {
-        this._waitingForWorkflow = this.plan._waitingForWorkflow;
+      if (this.plan._waitingForWorkflows) {
+        // New batch format: {submission_id: {status: 'active'|'completed'|'failed'}}
+        this._waitingForWorkflows = this.plan._waitingForWorkflows;
+        this._waitingStepId = this.plan._waitingStepId || null;
+        this._waitingStepIndex = this.plan._waitingStepIndex != null ? this.plan._waitingStepIndex : null;
         this._paused = true;
+      } else if (this.plan._waitingForWorkflow) {
+        // Legacy single-workflow format — convert to new batch format
+        var legacyWf = this.plan._waitingForWorkflow;
+        if (legacyWf.submission_id) {
+          this._waitingForWorkflows = {};
+          this._waitingForWorkflows[legacyWf.submission_id] = { status: 'active' };
+          this._waitingStepId = legacyWf.step_id || null;
+          this._waitingStepIndex = legacyWf.step_index != null ? legacyWf.step_index : null;
+          this._paused = true;
+        }
+        // Also set legacy field for backward compat during transition
+        this._waitingForWorkflow = legacyWf;
       }
       this._workflowPollInterval = null;
 
@@ -157,9 +175,9 @@ define([
         }, 500);  // Small delay to let CopilotDisplay finish mounting
       }
 
-      // If we restored a _waitingForWorkflow state from a page reload,
+      // If we restored a workflow waiting state from a page reload,
       // start polling for completion now that everything is set up.
-      if (this._waitingForWorkflow) {
+      if (this._waitingForWorkflows) {
         this._startWorkflowPoll();
       }
     },
@@ -207,8 +225,15 @@ define([
         (plan.steps || []).forEach(function (s) {
           if (s.status === 'completed' || s.status === 'skipped') completedCount++;
         });
-        if (this._waitingForWorkflow) {
-          statusText = 'Waiting for workflow (' + completedCount + '/' + plan.steps.length + ')';
+        if (this._waitingForWorkflows) {
+          var totalWf = Object.keys(this._waitingForWorkflows).length;
+          var doneWf = 0;
+          for (var wid in this._waitingForWorkflows) {
+            if (this._waitingForWorkflows[wid].status !== 'active') doneWf++;
+          }
+          statusText = totalWf > 1
+            ? 'Waiting for workflows ' + doneWf + '/' + totalWf + ' (' + completedCount + '/' + plan.steps.length + ' steps)'
+            : 'Waiting for workflow (' + completedCount + '/' + plan.steps.length + ')';
         } else if (this._workflowCompleteData) {
           statusText = 'Workflow done (' + completedCount + '/' + plan.steps.length + ')';
         } else {
@@ -241,11 +266,19 @@ define([
 
       if (this._mode === 'executing') {
         // Executing mode buttons
-        if (this._waitingForWorkflow) {
-          // Waiting for a long-running workflow to complete
+        if (this._waitingForWorkflows) {
+          // Waiting for one or more long-running workflows to complete
+          var batchTotal = Object.keys(this._waitingForWorkflows).length;
+          var batchDone = 0;
+          for (var bwid in this._waitingForWorkflows) {
+            if (this._waitingForWorkflows[bwid].status !== 'active') batchDone++;
+          }
+          var waitingMsg = batchTotal > 1
+            ? batchDone + '/' + batchTotal + ' workflows complete — waiting for remaining...'
+            : 'Workflow running — waiting for completion...';
           domConstruct.create('span', {
             'class': 'plan-card-workflow-waiting',
-            innerHTML: 'Workflow running — waiting for completion...'
+            innerHTML: waitingMsg
           }, actions);
         } else if (this._workflowCompleteData) {
           // Workflow finished — show Continue button
@@ -1019,8 +1052,14 @@ define([
       this._reviewStepId = null;
       this._stopWorkflowPoll();
       this._waitingForWorkflow = null;
+      this._waitingForWorkflows = null;
+      this._waitingStepId = null;
+      this._waitingStepIndex = null;
       this._workflowCompleteData = null;
       delete this.plan._waitingForWorkflow;
+      delete this.plan._waitingForWorkflows;
+      delete this.plan._waitingStepId;
+      delete this.plan._waitingStepIndex;
       this._paused = false;
       this._mode = 'display';
 
@@ -1042,17 +1081,35 @@ define([
       if (!data || !data.plan_id) return;
       if (data.plan_id !== (this.plan.plan_id || this.plan.plan_name)) return;
 
-      console.log('[PlanCard] Workflow submitted, pausing plan', data);
+      var submissionIds = data.submission_ids || (data.submission_id ? [data.submission_id] : []);
+      if (submissionIds.length === 0) return;
 
+      console.log('[PlanCard] Workflow(s) submitted, pausing plan', {
+        count: submissionIds.length,
+        submission_ids: submissionIds
+      });
+
+      // Build the batch tracking map
+      this._waitingForWorkflows = {};
+      for (var i = 0; i < submissionIds.length; i++) {
+        this._waitingForWorkflows[submissionIds[i]] = { status: 'active' };
+      }
+      this._waitingStepId = data.step_id;
+      this._waitingStepIndex = data.step_index;
+      this._paused = true;
+
+      // Also set legacy field for backward compat
       this._waitingForWorkflow = {
-        submission_id: data.submission_id,
+        submission_id: submissionIds[0],
         workflow_id: data.workflow_id,
         step_id: data.step_id,
         step_index: data.step_index
       };
-      this._paused = true;
 
       // Persist the waiting state so it survives page reload
+      this.plan._waitingForWorkflows = this._waitingForWorkflows;
+      this.plan._waitingStepId = this._waitingStepId;
+      this.plan._waitingStepIndex = this._waitingStepIndex;
       this.plan._waitingForWorkflow = this._waitingForWorkflow;
       this._persistPlanState();
 
@@ -1067,29 +1124,56 @@ define([
      * Unpauses the plan and shows a "Continue Plan" button.
      */
     _onWorkflowComplete: function (data) {
-      if (!data) return;
+      if (!data || !this._waitingForWorkflows) return;
 
-      // Match by workflow_id or submission_id
-      if (!this._waitingForWorkflow) return;
-      var waiting = this._waitingForWorkflow;
-      var isMatch = (data.workflow_id && data.workflow_id === waiting.workflow_id) ||
-                    (data.submission_id && data.submission_id === waiting.submission_id);
-      if (!isMatch) return;
+      // Match by submission_id against our tracked set
+      var matchId = null;
+      if (data.submission_id && this._waitingForWorkflows[data.submission_id]) {
+        matchId = data.submission_id;
+      }
+      if (!matchId) return;
 
-      console.log('[PlanCard] Workflow completed, allowing plan to resume', data);
+      var completedStatus = (data.status === 'failed') ? 'failed' : 'completed';
+      this._waitingForWorkflows[matchId].status = completedStatus;
 
-      // Stop polling
-      this._stopWorkflowPoll();
+      console.log('[PlanCard] Workflow completed: ' + matchId + ' (' + completedStatus + ')');
 
-      // Store the workflow result for the step
-      if (waiting.step_id) {
-        this._storeCompletedResult(waiting.step_id, data);
+      // Check if all workflows are done
+      var allDone = true;
+      var totalCount = 0;
+      var doneCount = 0;
+      for (var sid in this._waitingForWorkflows) {
+        totalCount++;
+        if (this._waitingForWorkflows[sid].status === 'active') {
+          allDone = false;
+        } else {
+          doneCount++;
+        }
       }
 
-      // Clear waiting state but keep paused — let the user click "Continue"
-      this._waitingForWorkflow = null;
-      this._workflowCompleteData = data;
-      delete this.plan._waitingForWorkflow;
+      console.log('[PlanCard] Batch progress: ' + doneCount + '/' + totalCount);
+
+      if (allDone) {
+        // All workflows finished — stop polling, show Continue button
+        this._stopWorkflowPoll();
+
+        // Store the workflow result for the step
+        if (this._waitingStepId) {
+          this._storeCompletedResult(this._waitingStepId, data);
+        }
+
+        // Clear waiting state but keep paused — let the user click "Continue"
+        this._workflowCompleteData = data;
+        this._waitingForWorkflows = null;
+        this._waitingForWorkflow = null;
+        delete this.plan._waitingForWorkflows;
+        delete this.plan._waitingStepId;
+        delete this.plan._waitingStepIndex;
+        delete this.plan._waitingForWorkflow;
+      } else {
+        // Persist intermediate progress
+        this.plan._waitingForWorkflows = this._waitingForWorkflows;
+      }
 
       this._persistPlanState();
       this._render();
@@ -1102,7 +1186,7 @@ define([
     _startWorkflowPoll: function () {
       this._stopWorkflowPoll();  // Clear any existing interval
 
-      if (!this._waitingForWorkflow || !this._waitingForWorkflow.submission_id) {
+      if (!this._waitingForWorkflows) {
         return;
       }
       if (!this.copilotApi) {
@@ -1111,38 +1195,49 @@ define([
       }
 
       var self = this;
-      var submissionId = this._waitingForWorkflow.submission_id;
       var pollIntervalMs = 30000;  // 30 seconds
+      var activeIds = Object.keys(this._waitingForWorkflows);
 
-      console.log('[PlanCard] Starting workflow status poll', { submissionId, pollIntervalMs });
+      console.log('[PlanCard] Starting workflow status poll', {
+        count: activeIds.length,
+        pollIntervalMs: pollIntervalMs
+      });
 
       this._workflowPollInterval = setInterval(function () {
-        if (!self._waitingForWorkflow) {
+        if (!self._waitingForWorkflows) {
           self._stopWorkflowPoll();
           return;
         }
 
-        self.copilotApi.checkWorkflowWatchStatus(submissionId).then(function (watch) {
-          if (!watch || !watch.status) return;
+        // Poll each still-active submission
+        Object.keys(self._waitingForWorkflows).forEach(function (subId) {
+          if (self._waitingForWorkflows[subId].status !== 'active') return;
 
-          // Terminal states: watch.status is "completed" or "failed"
-          if (watch.status === 'completed' || watch.status === 'failed') {
-            console.log('[PlanCard] Workflow poll detected completion', watch);
+          self.copilotApi.checkWorkflowWatchStatus(subId).then(function (watch) {
+            if (!watch || !watch.status) return;
 
-            // Synthesize a workflow_complete event for _onWorkflowComplete
-            self._onWorkflowComplete({
-              workflow_id: watch.workflow_id || '',
-              submission_id: watch.submission_id || submissionId,
-              status: watch.gowe_state ? watch.gowe_state.toLowerCase() : watch.status,
-              completed_at: watch.completed_at,
-              plan_id: watch.plan_id || null,
-              step_id: watch.step_id || null,
-              step_index: watch.step_index
-            });
-          }
-        }).catch(function (err) {
-          // Don't stop polling on transient errors
-          console.warn('[PlanCard] Workflow poll error (will retry)', err);
+            // Terminal states: watch.status is "completed" or "failed"
+            if (watch.status === 'completed' || watch.status === 'failed') {
+              console.log('[PlanCard] Workflow poll detected completion', {
+                submission_id: subId,
+                status: watch.status
+              });
+
+              // Synthesize a workflow_complete event for _onWorkflowComplete
+              self._onWorkflowComplete({
+                workflow_id: watch.workflow_id || '',
+                submission_id: watch.submission_id || subId,
+                status: watch.gowe_state ? watch.gowe_state.toLowerCase() : watch.status,
+                completed_at: watch.completed_at,
+                plan_id: watch.plan_id || null,
+                step_id: watch.step_id || null,
+                step_index: watch.step_index
+              });
+            }
+          }).catch(function (err) {
+            // Don't stop polling on transient errors
+            console.warn('[PlanCard] Workflow poll error for ' + subId + ' (will retry)', err);
+          });
         });
       }, pollIntervalMs);
     },

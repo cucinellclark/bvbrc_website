@@ -509,19 +509,25 @@ define([
      * Pauses plan execution until the workflow completes.
      */
     format_plan_workflow_submitted: function(data) {
+      var submissionIds = data.submission_ids || (data.submission_id ? [data.submission_id] : []);
+      var count = submissionIds.length;
+
       topic.publish('CopilotPlanWorkflowSubmitted', {
         plan_id: data.plan_id,
         step_id: data.step_id,
         step_index: data.step_index,
         workflow_id: data.workflow_id,
         submission_id: data.submission_id,
+        submission_ids: submissionIds,
         result_summary: data.result_summary || ''
       });
 
       return {
         role: 'status',
         type: 'plan_workflow_submitted',
-        content: 'Workflow submitted. Waiting for it to complete...',
+        content: count > 1
+          ? count + ' workflows submitted. Waiting for them to complete...'
+          : 'Workflow submitted. Waiting for it to complete...',
         should_remove: false
       };
     },

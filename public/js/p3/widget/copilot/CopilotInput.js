@@ -494,7 +494,9 @@ define([
             }
 
             if (assistantMessageCreated && hasTextChunk) {
-              assistantMessage.content += chunk;
+              if (!(chunk.length > 1 && assistantMessage.content.length >= chunk.length && assistantMessage.content.endsWith(chunk))) {
+                assistantMessage.content += chunk;
+              }
             }
 
             if (assistantMessageCreated) {
@@ -1996,7 +1998,10 @@ define([
                   this._applyToolMetadataToAssistantMessage(assistantMessage, toolMetadata);
               }
 
-              assistantMessage.content += chunk;
+              // Guard against duplicate chunks
+              if (!(chunk.length > 1 && assistantMessage.content.length >= chunk.length && assistantMessage.content.endsWith(chunk))) {
+                  assistantMessage.content += chunk;
+              }
               this.displayWidget.showMessages(this.chatStore.query());
           },
           () => {
@@ -2178,9 +2183,11 @@ define([
               if (assistantMessageCreated && toolMetadata) {
                   this._applyToolMetadataToAssistantMessage(assistantMessage, toolMetadata);
               }
-              // Append content to assistant message
+              // Append content to assistant message (guard against duplicate chunks)
               if (assistantMessageCreated && hasTextChunk) {
-                  assistantMessage.content += chunk;
+                  if (!(chunk.length > 1 && assistantMessage.content.length >= chunk.length && assistantMessage.content.endsWith(chunk))) {
+                      assistantMessage.content += chunk;
+                  }
               }
               if (assistantMessageCreated) {
                   this.displayWidget.showMessages(this.chatStore.query());
@@ -2367,9 +2374,11 @@ define([
               if (assistantMessageCreated && toolMetadata) {
                   this._applyToolMetadataToAssistantMessage(assistantMessage, toolMetadata);
               }
-              // Append content to assistant message
+              // Append content to assistant message (guard against duplicate chunks)
               if (assistantMessageCreated && hasTextChunk) {
-                  assistantMessage.content += chunk;
+                  if (!(chunk.length > 1 && assistantMessage.content.length >= chunk.length && assistantMessage.content.endsWith(chunk))) {
+                      assistantMessage.content += chunk;
+                  }
               }
               if (assistantMessageCreated) {
                   this.displayWidget.showMessages(this.chatStore.query());
@@ -2554,9 +2563,11 @@ define([
                 if (assistantMessageCreated && toolMetadata) {
                     this._applyToolMetadataToAssistantMessage(assistantMessage, toolMetadata);
                 }
-                // Append content to assistant message
+                // Append content to assistant message (guard against duplicate chunks)
                 if (assistantMessageCreated && hasTextChunk) {
-                    assistantMessage.content += chunk;
+                    if (!(chunk.length > 1 && assistantMessage.content.length >= chunk.length && assistantMessage.content.endsWith(chunk))) {
+                        assistantMessage.content += chunk;
+                    }
                 }
                 if (assistantMessageCreated) {
                     this.displayWidget.showMessages(this.chatStore.query());
@@ -2707,8 +2718,10 @@ define([
               if (toolMetadata) {
                   this._applyToolMetadataToAssistantMessage(assistantMessage, toolMetadata);
               }
-              // Append content to assistant message
-              assistantMessage.content += chunk;
+              // Append content to assistant message (guard against duplicate chunks)
+              if (!(chunk.length > 1 && assistantMessage.content.length >= chunk.length && assistantMessage.content.endsWith(chunk))) {
+                  assistantMessage.content += chunk;
+              }
               this.displayWidget.showMessages(this.chatStore.query());
           },
           () => {
