@@ -441,7 +441,11 @@ define([
 
             on(this.editTitleButton, 'click', lang.hitch(this, function() {
                 if (this.titleWidget) {
-                    this.titleWidget.startEditing();
+                    if (this.titleWidget.isEditing) {
+                        this.titleWidget.saveTitleEditor();
+                    } else {
+                        this.titleWidget.startEditing();
+                    }
                 }
             }));
         },
