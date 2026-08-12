@@ -85,22 +85,13 @@ define([
 
     /**
      * Activate the tracker for a plan.
-     * @param {Object} data - { plan, sessionId, planCardNode }
+     * DISABLED — the PlanTracker bar has been removed from the UI.
+     * The PlanCard inline review panel and chat action block now
+     * handle all plan interaction points directly.
      */
-    _onActivate: function (data) {
-      if (!data || !data.plan) return;
-
-      this._plan = data.plan;
-      this._sessionId = data.sessionId || null;
-      this._planCardNode = data.planCardNode || null;
-      this._completedResults = PlanResultSanitizer.sanitizeCompletedResults(
-        data.completedResults || {}
-      );
-      this._active = true;
-      this._paused = false;
-
-      domStyle.set(this.domNode, 'display', '');
-      this._render();
+    _onActivate: function (/* data */) {
+      // No-op: tracker bar is disabled.
+      return;
     },
 
     _onDeactivate: function () {
