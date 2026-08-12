@@ -3845,6 +3845,17 @@ a.workspace-path-chip:hover {
   color: #4b5563;
 }
 
+.plan-card-btn-danger {
+  background: #fff;
+  color: #dc2626;
+  border-color: #fca5a5;
+}
+
+.plan-card-btn-danger:hover {
+  background: #fef2f2;
+  border-color: #dc2626;
+}
+
 .plan-card-btn-small {
   padding: 2px 8px;
   font-size: 11px;
@@ -4218,6 +4229,28 @@ a.workspace-path-chip:hover {
   display: flex;
   gap: 8px;
   margin-top: 12px;
+}
+
+/* ============================================================
+   Plan Action Block — inline chat action block for plan approval
+   ============================================================ */
+
+.plan-action-block {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  margin-top: 8px;
+  padding: 10px 12px;
+  border: 1px solid #d1d5db;
+  border-radius: 8px;
+  background: #f9fafb;
+  max-width: 500px;
+}
+
+.plan-action-block-completed {
+  font-size: 13px;
+  font-weight: 500;
+  color: #166534;
 }
 
 /* ============================================================

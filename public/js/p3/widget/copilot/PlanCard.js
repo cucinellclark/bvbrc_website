@@ -331,34 +331,9 @@ define([
         });
 
       } else {
-        // Display mode buttons
-        var editBtn = domConstruct.create('button', {
-          'class': 'plan-card-btn plan-card-btn-secondary',
-          innerHTML: 'Edit Plan'
-        }, actions);
-        on(editBtn, 'click', function () {
-          self._mode = 'edit';
-          self._render();
-        });
-
-        var approveBtn = domConstruct.create('button', {
-          'class': 'plan-card-btn plan-card-btn-primary',
-          innerHTML: 'Approve & Execute'
-        }, actions);
-        on(approveBtn, 'click', function () {
-          self._approvePlan();
-        });
-
-        var regenBtn = domConstruct.create('button', {
-          'class': 'plan-card-btn plan-card-btn-secondary',
-          innerHTML: 'Regenerate'
-        }, actions);
-        on(regenBtn, 'click', function () {
-          topic.publish('CopilotPlanRegenerate', {
-            plan: self.plan,
-            sessionId: self.sessionId
-          });
-        });
+        // Draft display mode — action buttons are rendered externally
+        // as an inline chat action block by ChatMessage.renderPlanCard().
+        // No buttons needed here.
       }
     },
 
@@ -942,12 +917,12 @@ define([
         'class': 'plan-review-actions'
       }, panel);
 
-      var continueBtn = domConstruct.create('button', {
+      var acceptBtn = domConstruct.create('button', {
         'class': 'plan-card-btn plan-card-btn-primary',
-        innerHTML: 'Continue with Results'
+        innerHTML: 'Accept'
       }, reviewActions);
 
-      on(continueBtn, 'click', function () {
+      on(acceptBtn, 'click', function () {
         var selections = {
           selected_ids: structuredData.record_ids || [],
           record_count: structuredData.record_count
@@ -964,11 +939,20 @@ define([
 
       var skipBtn = domConstruct.create('button', {
         'class': 'plan-card-btn plan-card-btn-secondary',
-        innerHTML: 'Skip Review'
+        innerHTML: 'Skip'
       }, reviewActions);
 
       on(skipBtn, 'click', function () {
         self._skipReviewStep();
+      });
+
+      var cancelBtn = domConstruct.create('button', {
+        'class': 'plan-card-btn plan-card-btn-danger',
+        innerHTML: 'Cancel Plan'
+      }, reviewActions);
+
+      on(cancelBtn, 'click', function () {
+        self._cancelPlan();
       });
     },
 
@@ -1027,6 +1011,51 @@ define([
 
       this._render();
       this._executeNextPendingStep();
+    },
+
+    /**
+     * Cancel the entire plan. Marks all pending/running steps as skipped,
+     * sets plan status to completed, clears all active state, and
+     * publishes CopilotPlanExit so the PlanTracker deactivates.
+     */
+    _cancelPlan: function () {
+      // Mark all remaining pending/running steps as skipped
+      var steps = this.plan.steps || [];
+      steps.forEach(function (step) {
+        if (step.status === 'pending' || step.status === 'running') {
+          step.status = 'skipped';
+        }
+      });
+      this.plan.status = 'completed';
+
+      // Clear all active state
+      this._reviewData = null;
+      this._reviewStepId = null;
+      this._stopWorkflowPoll();
+      this._waitingForWorkflow = null;
+      this._waitingForWorkflows = null;
+      this._waitingStepId = null;
+      this._waitingStepIndex = null;
+      this._workflowCompleteData = null;
+      delete this.plan._activeReviewData;
+      delete this.plan._activeReviewStepId;
+      delete this.plan._waitingForWorkflow;
+      delete this.plan._waitingForWorkflows;
+      delete this.plan._waitingStepId;
+      delete this.plan._waitingStepIndex;
+      this._paused = false;
+      this._mode = 'display';
+
+      // Persist final state
+      this._persistPlanState();
+
+      // Publish exit event so PlanTracker deactivates
+      topic.publish('CopilotPlanExit', {
+        plan: this.plan,
+        sessionId: this.sessionId
+      });
+
+      this._render();
     },
 
     /**

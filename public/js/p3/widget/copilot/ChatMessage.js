@@ -2951,9 +2951,83 @@ define([
 
         planCard.placeAt(cardContainer);
         planCard.startup();
+
+        // Render inline chat action block for draft plans
+        this._renderPlanActionBlock(parentNode, planData, planCard);
       } catch (e) {
         console.error('[ChatMessage] Error rendering plan card:', e);
       }
+    },
+
+    /**
+     * Render an inline action block below the PlanCard for draft plans.
+     * Shows Approve & Execute, Edit Plan, and Regenerate buttons.
+     * After the user acts, the block updates to show the chosen action.
+     */
+    _renderPlanActionBlock: function (parentNode, planData, planCard) {
+      var self = this;
+      var planStatus = planData.status || 'draft';
+
+      var actionBlock = domConstruct.create('div', {
+        'class': 'plan-action-block'
+      }, parentNode);
+
+      if (planStatus !== 'draft') {
+        // Plan already acted on — show completed state
+        var completedLabel = planStatus === 'approved' || planStatus === 'executing' || planStatus === 'completed'
+          ? 'Plan approved'
+          : planStatus === 'failed'
+            ? 'Plan failed'
+            : 'Plan ' + planStatus;
+        domConstruct.create('span', {
+          'class': 'plan-action-block-completed',
+          innerHTML: '\u2705 ' + completedLabel
+        }, actionBlock);
+        return;
+      }
+
+      var approveBtn = domConstruct.create('button', {
+        'class': 'plan-card-btn plan-card-btn-primary',
+        innerHTML: 'Approve & Execute'
+      }, actionBlock);
+
+      var editBtn = domConstruct.create('button', {
+        'class': 'plan-card-btn plan-card-btn-secondary',
+        innerHTML: 'Edit Plan'
+      }, actionBlock);
+
+      var regenBtn = domConstruct.create('button', {
+        'class': 'plan-card-btn plan-card-btn-secondary',
+        innerHTML: 'Regenerate'
+      }, actionBlock);
+
+      // Replace the action block content with a completed state
+      function setCompleted(label) {
+        domConstruct.empty(actionBlock);
+        domConstruct.create('span', {
+          'class': 'plan-action-block-completed',
+          innerHTML: '\u2705 ' + label
+        }, actionBlock);
+      }
+
+      on(approveBtn, 'click', function () {
+        setCompleted('Plan approved');
+        planCard._approvePlan();
+      });
+
+      on(editBtn, 'click', function () {
+        setCompleted('Editing plan');
+        planCard._mode = 'edit';
+        planCard._render();
+      });
+
+      on(regenBtn, 'click', function () {
+        setCompleted('Regenerating plan');
+        topic.publish('CopilotPlanRegenerate', {
+          plan: planData,
+          sessionId: self.message.session_id || self.sessionId || null
+        });
+      });
     },
 
     /**
