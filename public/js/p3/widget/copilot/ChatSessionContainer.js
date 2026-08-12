@@ -431,45 +431,19 @@ define([
             });
             this.titleBarWrapper.addChild(this.titleWidget);
 
-            // Create tabs container on the right side
-            this.tabsContainer = domConstruct.create('div', {
-                class: 'copilot-panel-tabs',
-                style: 'display: flex; gap: 8px; margin-left: auto;'
+            // Edit title button on the right side
+            this.editTitleButton = domConstruct.create('button', {
+                type: 'button',
+                'class': 'chat-session-edit-title-btn',
+                innerHTML: '\u270E',
+                title: 'Edit session title'
             }, this.titleBarWrapper.containerNode);
 
-            this.messagesTabButton = domConstruct.create('button', {
-                type: 'button',
-                innerHTML: 'Messages',
-                class: 'copilot-panel-tab copilot-panel-tab-active'
-            }, this.tabsContainer);
-
-            this.imagesTabButton = domConstruct.create('button', {
-                type: 'button',
-                innerHTML: 'Images',
-                class: 'copilot-panel-tab',
-                style: 'display: none;'
-            }, this.tabsContainer);
-
-            this.gridsTabButton = domConstruct.create('button', {
-                type: 'button',
-                innerHTML: 'Grids',
-                class: 'copilot-panel-tab'
-            }, this.tabsContainer);
-
-            // Set up click handlers for tabs
-            on(this.messagesTabButton, 'click', lang.hitch(this, function() {
-                this._setActiveTab('messages');
+            on(this.editTitleButton, 'click', lang.hitch(this, function() {
+                if (this.titleWidget) {
+                    this.titleWidget.startEditing();
+                }
             }));
-
-            on(this.imagesTabButton, 'click', lang.hitch(this, function() {
-                this._setActiveTab('images');
-            }));
-
-            on(this.gridsTabButton, 'click', lang.hitch(this, function() {
-                this._setActiveTab('grids');
-            }));
-
-            this._updateImagesTabVisibility();
         },
 
         /**
@@ -503,10 +477,16 @@ define([
                 panel = 'messages';
             }
 
-            // Update tab button styles
-            domClass.toggle(this.messagesTabButton, 'copilot-panel-tab-active', panel === 'messages');
-            domClass.toggle(this.imagesTabButton, 'copilot-panel-tab-active', panel === 'images');
-            domClass.toggle(this.gridsTabButton, 'copilot-panel-tab-active', panel === 'grids');
+            // Update tab button styles (if tab buttons exist)
+            if (this.messagesTabButton) {
+                domClass.toggle(this.messagesTabButton, 'copilot-panel-tab-active', panel === 'messages');
+            }
+            if (this.imagesTabButton) {
+                domClass.toggle(this.imagesTabButton, 'copilot-panel-tab-active', panel === 'images');
+            }
+            if (this.gridsTabButton) {
+                domClass.toggle(this.gridsTabButton, 'copilot-panel-tab-active', panel === 'grids');
+            }
 
             // Update display widget
             if (this.displayWidget && this.displayWidget.setActivePanel) {
