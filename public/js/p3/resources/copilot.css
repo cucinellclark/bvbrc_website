@@ -2023,6 +2023,36 @@
   flex: 0 0 auto;
 }
 
+/* Scroll Card Action Buttons Container */
+.scrollCardActions {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  position: absolute;
+  top: 3px;
+  right: 3px;
+}
+
+/* Scroll Card Folder Button */
+.scrollCardFolder {
+  opacity: 0.7;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 14px;
+  cursor: pointer;
+  width: 25px;
+  height: 25px;
+  border-radius: 3px;
+  background-color: transparent;
+  color: #808080;
+  background-image: url("/public/icon_source/folder-open.svg");
+  background-repeat: no-repeat;
+  background-position: center;
+  background-size: 14px 14px;
+  padding: 0;
+}
+
 /* Scroll Card Delete Button */
 .scrollCardDelete {
   opacity: 0.7;
@@ -2031,7 +2061,7 @@
   justify-content: center;
   font-size: 14px;
   cursor: pointer;
-  width: 30px;
+  width: 25px;
   height: 25px;
   border-radius: 3px;
   background-color: transparent;
@@ -2040,9 +2070,6 @@
   background-repeat: no-repeat;
   background-position: center;
   background-size: 15px 15px;
-  position: absolute;
-  top: 3px;
-  right: 3px;
   padding: 0;
 }
 

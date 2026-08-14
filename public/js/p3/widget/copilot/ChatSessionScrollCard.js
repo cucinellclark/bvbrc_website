@@ -46,7 +46,10 @@ define([
         templateString: '<div class="chat-session-card" data-dojo-attach-point="containerNode">' +
         '<div class="session-title-container" style="display: flex; justify-content: space-between; align-items: center;">' +
             '<div class="session-title" data-dojo-attach-point="titleNode"></div>' +
-            '<div class="delete-button" data-dojo-attach-point="deleteButtonNode"></div>' +
+            '<div class="scrollCardActions">' +
+                '<div class="folder-button" data-dojo-attach-point="folderButtonNode"></div>' +
+                '<div class="delete-button" data-dojo-attach-point="deleteButtonNode"></div>' +
+            '</div>' +
         '</div>' +
         '<div class="session-date-container" style="display: flex; justify-content: space-between; align-items: center;">' +
             '<div class="session-date" data-dojo-attach-point="dateNode"></div>' +
@@ -85,8 +88,10 @@ define([
             // Apply CSS classes instead of inline styles
             this.containerNode.className += ' scrollCardContainer';
             this.deleteButtonNode.className += ' scrollCardDelete';
+            this.folderButtonNode.className += ' scrollCardFolder';
 
-            // Add tooltip to delete button
+            // Add tooltips
+            this.folderButtonNode.title = 'Open session folder in workspace';
             this.deleteButtonNode.title = 'Delete chat session';
 
             if (this.session) {
@@ -104,7 +109,7 @@ define([
 
                 // Click handler to load session messages
                 on(this.containerNode, 'click', lang.hitch(this, function(evt) {
-                    if (evt.target === this.deleteButtonNode) {
+                    if (evt.target === this.deleteButtonNode || evt.target === this.folderButtonNode) {
                         return;
                     }
 
@@ -161,6 +166,40 @@ define([
                 this.own(on(this.deleteButtonNode, 'click', lang.hitch(this, function(evt) {
                     evt.stopPropagation();
                     topic.publish('ChatSession:Delete', this.session.session_id);
+                })));
+
+                // Add hover effects for folder button
+                this.own(on(this.folderButtonNode, 'mouseenter', lang.hitch(this, function() {
+                    this.folderButtonNode.style.opacity = '1';
+                    this.folderButtonNode.style.backgroundColor = '#f0f0f0';
+                })));
+
+                this.own(on(this.folderButtonNode, 'mouseleave', lang.hitch(this, function() {
+                    this.folderButtonNode.style.opacity = '0.7';
+                    this.folderButtonNode.style.backgroundColor = 'transparent';
+                })));
+
+                this.own(on(this.folderButtonNode, 'mousedown', lang.hitch(this, function(evt) {
+                    evt.stopPropagation();
+                    this.folderButtonNode.style.backgroundColor = '#e0e0e0';
+                })));
+
+                this.own(on(this.folderButtonNode, 'mouseup', lang.hitch(this, function(evt) {
+                    evt.stopPropagation();
+                    this.folderButtonNode.style.backgroundColor = '#f0f0f0';
+                })));
+
+                // Add click handler for folder button - opens session workspace folder in new tab
+                this.own(on(this.folderButtonNode, 'click', lang.hitch(this, function(evt) {
+                    evt.stopPropagation();
+                    var userId = (window.App && window.App.user && window.App.user.id) ? window.App.user.id : null;
+                    if (!userId) {
+                        console.error('Cannot open session folder: user not logged in');
+                        return;
+                    }
+                    var sessionFolder = '/' + userId + '/home/.chats/' + this.session.session_id;
+                    var workspaceUrl = '/workspace' + sessionFolder;
+                    window.open(workspaceUrl, '_blank');
                 })));
 
                 // Container hover effects
