@@ -19,7 +19,8 @@ define([
     'dojo/on', // Event handling
     'dojo/topic', // Pub/sub messaging
     'dojo/_base/lang', // Language utilities
-    './CopilotApi' // API for chat operations
+    './CopilotApi', // API for chat operations
+    '../../WorkspaceManager' // Workspace manager for folder operations
 ], function (
     declare,
     _WidgetBase,
@@ -28,7 +29,8 @@ define([
     on,
     topic,
     lang,
-    CopilotAPI
+    CopilotAPI,
+    WorkspaceManager
 ) {
     /**
      * @class ChatSessionScrollCard
@@ -197,9 +199,30 @@ define([
                         console.error('Cannot open session folder: user not logged in');
                         return;
                     }
-                    var sessionFolder = '/' + userId + '/home/.chats/' + this.session.session_id;
+                    var chatsFolder = '/' + userId + '/home/.chats';
+                    var sessionFolder = chatsFolder + '/' + this.session.session_id;
                     var workspaceUrl = '/workspace' + sessionFolder;
-                    window.open(workspaceUrl, '_blank');
+
+                    // Ensure the .chats folder exists before opening
+                    WorkspaceManager.getObject(chatsFolder, true).then(
+                        function() {
+                            // .chats folder already exists - open directly
+                            window.open(workspaceUrl, '_blank');
+                        },
+                        function() {
+                            // .chats folder does not exist - create it, then open
+                            WorkspaceManager.createFolder(chatsFolder).then(
+                                function() {
+                                    window.open(workspaceUrl, '_blank');
+                                },
+                                function(err) {
+                                    console.error('Failed to create .chats folder:', err);
+                                    // Try opening anyway in case the error is benign
+                                    window.open(workspaceUrl, '_blank');
+                                }
+                            );
+                        }
+                    );
                 })));
 
                 // Container hover effects
