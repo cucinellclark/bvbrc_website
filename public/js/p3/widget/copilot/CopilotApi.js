@@ -1105,34 +1105,6 @@ define([
             });
         },
 
-        submitQueryWithImage: function(inputText, sessionId, systemPrompt, model, image) {
-            if (!this._checkLoggedIn()) return Promise.reject('Not logged in');
-            var _self = this;
-            console.log('query');
-            console.log('Session ID:', sessionId);
-            var data = {
-                query: inputText,
-                model: model,
-                session_id: sessionId,
-                user_id: _self.user_id,
-                image: image
-            };
-            console.log('submitting query to', this.apiUrlBase + '/chat-image');
-            return request.post(this.apiUrlBase + '/chat-image', {
-                data: JSON.stringify(data),
-                headers: {
-                    'Content-Type': 'application/json',
-                    Authorization: (window.App.authorizationToken || '')
-                },
-                handleAs: 'json'
-            }).then(function(response) {
-                return response;
-            }).catch(function(error) {
-                console.error('Error submitting query:', error);
-                throw error;
-            });
-        },
-
         /**
          * Retrieves all messages for a session
          * Implementation:
