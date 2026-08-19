@@ -1673,14 +1673,22 @@ define([
       };
 
       var allImages = [];
+      var imageAttachments = [];
       if (hasScreenshot) {
         allImages.push(screenshotImage);
+        imageAttachments.push({ type: 'image', source: 'screenshot', name: 'Page screenshot' });
       }
       if (hasUploadedImage) {
         allImages = allImages.concat(uploadedImagePayload.images);
+        (uploadedImagePayload.attachments || []).forEach(function(att) {
+          if (att && att.type === 'image') {
+            imageAttachments.push(att);
+          }
+        });
       }
       if (allImages.length > 0) {
         params.images = allImages;
+        params.image_attachments = imageAttachments;
       }
       if (hasUploadedFiles) {
         params.files = uploadedFilesPayload.files;
@@ -1796,7 +1804,7 @@ define([
       this.isSubmitting = true;
       this.submitButton.set('disabled', true);
       this._updateAbortButtonState();
-      this.displayWidget.showLoadingIndicator();
+      this.displayWidget.showLoadingIndicator('Taking screenshot...');
 
       var capturePromise = html2canvas(document.body, {
         onclone: function(clonedDoc) {

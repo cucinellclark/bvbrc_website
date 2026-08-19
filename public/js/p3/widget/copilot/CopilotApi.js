@@ -264,6 +264,9 @@ define([
 
             if (Array.isArray(params.images) && params.images.length > 0) {
                 data.images = params.images;
+                if (Array.isArray(params.image_attachments) && params.image_attachments.length > 0) {
+                    data.image_attachments = params.image_attachments;
+                }
             }
             if (Array.isArray(params.files) && params.files.length > 0) {
                 data.files = params.files;

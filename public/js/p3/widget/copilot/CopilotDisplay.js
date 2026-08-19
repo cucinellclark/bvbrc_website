@@ -1276,11 +1276,12 @@ define([
      * - Only adds loading indicator message without re-rendering existing messages
      * - Scrolls to bottom
      */
-    showLoadingIndicator: function() {
+    showLoadingIndicator: function(message) {
       this.hideLoadingIndicator();
+      var label = message || '...';
       this._loadingIndicator = domConstruct.create('div', {
         class: 'message assistant',
-        innerHTML: '<div style="font-size: 24px; animation: bounce 1s infinite;">...</div>'
+        innerHTML: '<div style="font-size: ' + (message ? '14' : '24') + 'px; animation: bounce 1s infinite;">' + label + '</div>'
       }, this.resultContainer);
       this.scrollToBottom();
     },
