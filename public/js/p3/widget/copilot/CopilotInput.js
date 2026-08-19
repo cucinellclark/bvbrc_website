@@ -37,14 +37,11 @@ define([
       statePrompt: null,
 
       // Widget styling
-      style: 'padding: 0 5px 5px 5px; border: 0; height: 20%;',
+      style: 'padding: 0 5px 5px 5px; border: 0; height: 20%; overflow: visible;',
 
       // Size constraints for the widget
       minSize: 40,
       maxSize: 200,
-
-      // Flag to track page content toggle state
-      pageContentEnabled: false,
 
       selectedWorkspaceItems: [],
       selectedJobs: [],
@@ -55,8 +52,11 @@ define([
       imageActionNode: null,
       imageActionMenuNode: null,
       imageActionOutsideClickHandle: null,
+      screenshotMenuItemNode: null,
       onImageAttachmentsChanged: null,
       _nextImageAttachmentId: 0,
+      _isCapturingScreenshot: false,
+      _attachMenuKeyHandle: null,
 
       /**
        * Constructor that initializes the widget with provided options
@@ -117,7 +117,7 @@ define([
           return;
         }
         this.textArea.set('value', value || '');
-        this._renderWorkspacePathTokenEditor();
+        this._renderAttachmentChips();
       },
 
       _focusWorkspacePathInTextarea: function(match) {
@@ -144,14 +144,231 @@ define([
         this._setInputTextValue(nextValue);
       },
 
-      _renderWorkspacePathTokenEditor: function() {
+      _getAttachmentSlotCount: function() {
+        return (this.attachedImages ? this.attachedImages.length : 0) +
+          (this.attachedFiles ? this.attachedFiles.length : 0);
+      },
+
+      _createAttachMenuItem: function(menuNode, iconClass, label, onClick) {
+        var item = domConstruct.create('button', {
+          type: 'button',
+          className: 'copilotAttachMenuItem',
+          role: 'menuitem'
+        }, menuNode);
+        domConstruct.create('i', {
+          className: 'fa ' + iconClass
+        }, item);
+        domConstruct.create('span', {
+          textContent: label
+        }, item);
+        on(item, 'click', lang.hitch(this, function(evt) {
+          evt.preventDefault();
+          evt.stopPropagation();
+          onClick.call(this);
+        }));
+        return item;
+      },
+
+      _isAttachMenuOpen: function() {
+        return !!(this.imageActionMenuNode && this.imageActionMenuNode.style.display !== 'none');
+      },
+
+      _toggleAttachMenu: function(evt) {
+        if (evt) {
+          evt.preventDefault();
+          evt.stopPropagation();
+        }
+        if (this._isCapturingScreenshot) {
+          return;
+        }
+        if (this._isAttachMenuOpen()) {
+          this._closeAttachMenu();
+        } else {
+          this._openAttachMenu();
+        }
+      },
+
+      _openAttachMenu: function() {
+        if (!this.imageActionMenuNode) {
+          return;
+        }
+        this._updateImageCapabilityUI();
+        this.imageActionMenuNode.style.display = 'block';
+        if (this.imageActionNode) {
+          this.imageActionNode.setAttribute('aria-expanded', 'true');
+        }
+        this._bindAttachMenuDismiss();
+      },
+
+      _closeAttachMenu: function() {
+        if (this.imageActionMenuNode) {
+          this.imageActionMenuNode.style.display = 'none';
+        }
+        if (this.imageActionNode) {
+          this.imageActionNode.setAttribute('aria-expanded', 'false');
+        }
+        this._unbindAttachMenuDismiss();
+      },
+
+      _bindAttachMenuDismiss: function() {
+        this._unbindAttachMenuDismiss();
+        this.imageActionOutsideClickHandle = on(document, 'mousedown', lang.hitch(this, function(evt) {
+          var target = evt.target;
+          if (this.imageActionMenuNode && this.imageActionMenuNode.contains(target)) {
+            return;
+          }
+          if (this.imageActionNode && this.imageActionNode.contains(target)) {
+            return;
+          }
+          this._closeAttachMenu();
+        }));
+        this._attachMenuKeyHandle = on(document, 'keydown', lang.hitch(this, function(evt) {
+          if (evt.key === 'Escape' || evt.keyCode === 27) {
+            this._closeAttachMenu();
+          }
+        }));
+      },
+
+      _unbindAttachMenuDismiss: function() {
+        if (this.imageActionOutsideClickHandle) {
+          this.imageActionOutsideClickHandle.remove();
+          this.imageActionOutsideClickHandle = null;
+        }
+        if (this._attachMenuKeyHandle) {
+          this._attachMenuKeyHandle.remove();
+          this._attachMenuKeyHandle = null;
+        }
+      },
+
+      _setAttachButtonCapturing: function(isCapturing) {
+        if (!this.imageActionNode) {
+          return;
+        }
+        this.imageActionNode.disabled = !!isCapturing;
+        this.imageActionNode.title = isCapturing ? 'Capturing screenshot...' : 'Attach';
+        this.imageActionNode.classList.toggle('isCapturing', !!isCapturing);
+      },
+
+      _captureScreenshotNow: function() {
+        if (this._isCapturingScreenshot) {
+          return;
+        }
+        if (!this._modelSupportsImage(this.model)) {
+          return;
+        }
+        var maxAttachments = 3;
+        if (this._getAttachmentSlotCount() >= maxAttachments) {
+          topic.publish('CopilotApiError', { error: new Error('You can attach up to 3 files per message.') });
+          return;
+        }
+
+        this._isCapturingScreenshot = true;
+        this._setAttachButtonCapturing(true);
+
+        var capturePromise = html2canvas(document.body, {
+          onclone: function(clonedDoc) {
+            var chatPanels = clonedDoc.querySelectorAll('.ChatContainerFloatingWindow, .CopilotFloatingWindow');
+            for (var i = 0; i < chatPanels.length; i++) {
+              chatPanels[i].style.display = 'none';
+            }
+          }
+        });
+        var timeoutPromise = new Promise(function(_, reject) {
+          setTimeout(function() { reject(new Error('Screenshot capture timed out')); }, 10000);
+        });
+
+        Promise.race([capturePromise, timeoutPromise]).then(lang.hitch(this, function(canvas) {
+          if (this._getAttachmentSlotCount() >= maxAttachments) {
+            return;
+          }
+          this.attachedImages.push({
+            id: 'img-' + Date.now() + '-' + Math.floor(Math.random() * 1000000),
+            image: canvas.toDataURL('image/png'),
+            attachment: {
+              type: 'image',
+              source: 'screenshot',
+              name: 'Page screenshot'
+            }
+          });
+          this._renderAttachmentChips();
+          this._emitImageAttachmentsChanged();
+        })).catch(lang.hitch(this, function(error) {
+          console.error('Screenshot capture failed:', error);
+          topic.publish('CopilotApiError', {
+            error: error instanceof Error ? error : new Error('Screenshot capture failed.')
+          });
+        })).finally(lang.hitch(this, function() {
+          this._isCapturingScreenshot = false;
+          this._setAttachButtonCapturing(false);
+        }));
+      },
+
+      _removeAttachedImageById: function(id) {
+        this.attachedImages = (this.attachedImages || []).filter(function(entry) {
+          return entry && entry.id !== id;
+        });
+        this._renderAttachmentChips();
+        this._emitImageAttachmentsChanged();
+      },
+
+      _removeAttachedFileById: function(id) {
+        this.attachedFiles = (this.attachedFiles || []).filter(function(entry) {
+          return entry && entry.id !== id;
+        });
+        this._renderAttachmentChips();
+      },
+
+      _appendAttachmentChip: function(parentNode, options) {
+        var chip = domConstruct.create('div', {
+          className: 'copilotAttachmentChip'
+        }, parentNode);
+
+        if (options.thumbnail) {
+          domConstruct.create('img', {
+            className: 'copilotAttachmentChipThumb',
+            src: options.thumbnail,
+            alt: ''
+          }, chip);
+        } else if (options.iconClass) {
+          domConstruct.create('i', {
+            className: 'fa ' + options.iconClass + ' copilotAttachmentChipIcon'
+          }, chip);
+        }
+
+        domConstruct.create('span', {
+          className: 'copilotAttachmentChipName',
+          textContent: options.label || '',
+          title: options.title || options.label || ''
+        }, chip);
+
+        var removeButton = domConstruct.create('button', {
+          type: 'button',
+          className: 'workspacePathEditorTokenRemove',
+          textContent: '\u00d7',
+          title: options.removeTitle || 'Remove attachment'
+        }, chip);
+        on(removeButton, 'click', lang.hitch(this, function(evt) {
+          evt.preventDefault();
+          evt.stopPropagation();
+          if (typeof options.onRemove === 'function') {
+            options.onRemove();
+          }
+        }));
+        return chip;
+      },
+
+      _renderAttachmentChips: function() {
         if (!this.workspacePathTokenEditorNode) {
           return;
         }
         domConstruct.empty(this.workspacePathTokenEditorNode);
-        var value = this._getInputValue();
-        var matches = WorkspacePathUtils.findPathMatches(value);
-        if (!matches.length) {
+
+        var images = Array.isArray(this.attachedImages) ? this.attachedImages : [];
+        var files = Array.isArray(this.attachedFiles) ? this.attachedFiles : [];
+        var matches = WorkspacePathUtils.findPathMatches(this._getInputValue());
+        var hasChips = images.length > 0 || files.length > 0 || matches.length > 0;
+
+        if (!hasChips) {
           this.workspacePathTokenEditorNode.style.display = 'none';
           return;
         }
@@ -161,6 +378,40 @@ define([
         var tokenListNode = domConstruct.create('div', {
           className: 'workspacePathTokenEditorList'
         }, this.workspacePathTokenEditorNode);
+
+        images.forEach(lang.hitch(this, function(entry) {
+          if (!entry) {
+            return;
+          }
+          var attachment = entry.attachment || {};
+          var label = attachment.name || (attachment.source === 'screenshot' ? 'Page screenshot' : 'Attached image');
+          this._appendAttachmentChip(tokenListNode, {
+            thumbnail: typeof entry.image === 'string' ? entry.image : null,
+            iconClass: 'icon-image',
+            label: label,
+            title: label,
+            removeTitle: 'Remove this image',
+            onRemove: lang.hitch(this, function() {
+              this._removeAttachedImageById(entry.id);
+            })
+          });
+        }));
+
+        files.forEach(lang.hitch(this, function(entry) {
+          if (!entry) {
+            return;
+          }
+          var label = entry.name || 'Attached file';
+          this._appendAttachmentChip(tokenListNode, {
+            iconClass: 'icon-file-text-o',
+            label: label,
+            title: label,
+            removeTitle: 'Remove this file',
+            onRemove: lang.hitch(this, function() {
+              this._removeAttachedFileById(entry.id);
+            })
+          });
+        }));
 
         matches.forEach(lang.hitch(this, function(match) {
           var tokenNode = domConstruct.create('div', {
@@ -198,6 +449,10 @@ define([
             this._removeWorkspacePathFromInput(match);
           }));
         }));
+      },
+
+      _renderWorkspacePathTokenEditor: function() {
+        this._renderAttachmentChips();
       },
 
       _openWorkspaceChooser: function() {
@@ -534,7 +789,7 @@ define([
       postCreate: function() {
         // Create main wrapper with flex layout
         var wrapperDiv = domConstruct.create('div', {
-            style: 'display: flex; flex-direction: column; justify-content: center; align-items: center; width: 100%; height: 100%; padding-top: 2px; border: 0;'
+            style: 'display: flex; flex-direction: column; justify-content: center; align-items: center; width: 100%; height: 100%; padding-top: 2px; border: 0; overflow: visible;'
         }, this.containerNode);
 
         // Container for input elements with flex layout
@@ -542,129 +797,93 @@ define([
             style: 'display: flex; justify-content: center; align-items: flex-start; width: 100%;'
         }, wrapperDiv);
 
-        // Add container for the split image button on the left side
         var toggleContainer = domConstruct.create('div', {
-            style: 'width: auto; height: 60px; display: flex; flex-direction: row; align-items: center; margin-right: 15px; position: relative; gap: 8px;'
+            className: 'copilotAttachButtonContainer'
         }, inputContainer);
 
-        // Image attachment counter (similar to workspace selection indicator) - positioned to the left
-        this.imageAttachmentCounter = domConstruct.create('div', {
-            className: 'imageAttachmentCounter',
-            title: 'Attached images'
-        }, toggleContainer);
-        this.imageAttachmentCountNode = domConstruct.create('span', {
-            className: 'imageAttachmentCount'
-        }, this.imageAttachmentCounter);
-
-        // Create split button container
-        var splitButtonContainer = domConstruct.create('div', {
-            className: 'imageSplitButtonContainer'
-        }, toggleContainer);
-
-        // Top half - Screenshot
-        var screenshotHalf = domConstruct.create('button', {
+        this.imageActionNode = domConstruct.create('button', {
             type: 'button',
-            className: 'imageSplitButtonTop pageContentToggleInactive',
-            innerHTML: 'Screenshot'
-        }, splitButtonContainer);
-        this.screenshotToggleNode = screenshotHalf;
+            className: 'copilotAttachButton',
+            title: 'Attach',
+            'aria-haspopup': 'true',
+            'aria-expanded': 'false',
+            innerHTML: '<i class="fa icon-paperclip"></i>'
+        }, toggleContainer);
+        on(this.imageActionNode, 'click', lang.hitch(this, this._toggleAttachMenu));
 
-        // Bottom half - Upload
-        var uploadHalf = domConstruct.create('button', {
-            type: 'button',
-            className: 'imageSplitButtonBottom',
-            innerHTML: 'Upload'
-        }, splitButtonContainer);
-        this.uploadImageNode = uploadHalf;
+        this.imageActionMenuNode = domConstruct.create('div', {
+            className: 'copilotAttachMenu',
+            role: 'menu',
+            style: 'display: none;'
+        }, toggleContainer);
+
+        this.screenshotMenuItemNode = this._createAttachMenuItem(
+            this.imageActionMenuNode,
+            'icon-image',
+            'Screenshot',
+            function() {
+                this._closeAttachMenu();
+                this._captureScreenshotNow();
+            }
+        );
+
+        this._createAttachMenuItem(
+            this.imageActionMenuNode,
+            'icon-file-text-o',
+            'Upload File',
+            function() {
+                this._closeAttachMenu();
+                if (this.imageUploadInput) {
+                    this.imageUploadInput.click();
+                }
+            }
+        );
+
+        this._createAttachMenuItem(
+            this.imageActionMenuNode,
+            'icon-folder-open-o',
+            'Add Workspace Path',
+            function() {
+                this._closeAttachMenu();
+                this._openWorkspaceChooser();
+            }
+        );
 
         this.imageUploadInput = domConstruct.create('input', {
             type: 'file',
             multiple: true,
             style: 'display: none;'
         }, wrapperDiv);
-
-        this.pageContentToggle = {
-            domNode: screenshotHalf
-        };
-
-        screenshotHalf.title = 'Include a screenshot of the current page with your next message.';
-        uploadHalf.title = 'Attach images or text files from your computer.';
-
-        on(screenshotHalf, 'click', lang.hitch(this, function(evt) {
-            evt.preventDefault();
-            evt.stopPropagation();
-            if (!this._modelSupportsImage(this.model)) {
-                return;
-            }
-            topic.publish('pageContentToggleChanged', !this.pageContentEnabled);
-        }));
-
-        on(uploadHalf, 'click', lang.hitch(this, function(evt) {
-            evt.preventDefault();
-            evt.stopPropagation();
-            if (!this.imageUploadInput) {
-                return;
-            }
-            this.imageUploadInput.click();
-        }));
-
         on(this.imageUploadInput, 'change', lang.hitch(this, this._handleImageUploadChange));
 
-        // Initialize button style
-        this._updateToggleButtonStyle();
-
-        // Textarea wrapper with workspace icon inside
         var textAreaWrapper = domConstruct.create('div', {
             className: 'copilotTextAreaWrapper',
             style: 'width: 60%; position: relative; margin-right: 10px;'
         }, inputContainer);
 
-        // Configure textarea with auto-expansion and styling
         this.textArea = new Textarea({
-            style: 'width: 100%; min-height: 50px; max-height: 100%; resize: none; overflow-y: hidden; border-radius: 5px; padding-bottom: 24px;',
+            style: 'width: 100%; min-height: 50px; max-height: 100%; resize: none; overflow-y: hidden; border-radius: 5px;',
             rows: 3,
             maxLength: 10000,
             placeholder: 'Enter your text here...'
         });
-
-        // Add textarea to wrapper
         this.textArea.placeAt(textAreaWrapper);
 
-        // Workspace path icon inside textarea border (bottom-left)
-        var wsIconButton = domConstruct.create('button', {
-            type: 'button',
-            className: 'copilotWsPathInlineButton',
-            title: 'Browse workspace to add a path to your message',
-            innerHTML: '<i class="fa icon-folder-open-o"></i>'
-        }, textAreaWrapper);
-        on(wsIconButton, 'click', lang.hitch(this, function(evt) {
-            evt.preventDefault();
-            evt.stopPropagation();
-            this._openWorkspaceChooser();
-        }));
-
-        // Path token chips row beneath textarea
         this.workspacePathTokenEditorNode = domConstruct.create('div', {
             className: 'workspacePathTokenEditor',
             style: 'display: none;'
         }, textAreaWrapper);
 
-        // Configure submit button with click handler
         this.submitButton = new Button({
             label: 'Submit',
             style: 'height: 30px; margin-right: 10px;',
             onClick: lang.hitch(this, function() {
-            // Prevent multiple simultaneous submissions
             if (this.isSubmitting) return;
             if (!this.copilotApi) {
                 console.error('CopilotApi widget not initialized');
                 return;
             }
-            if (this.pageContentEnabled) {
-                this._captureScreenshotThenSubmit();
-            } else {
-                this._handleSubmitStream();
-            }
+            this._handleSubmitStream();
             })
         });
 
@@ -681,29 +900,10 @@ define([
         });
         this.abortButton.placeAt(inputContainer);
 
-        // Subscribe to page content toggle changes from ChatSessionOptionsBar
-        this._topicHandles.push(topic.subscribe('pageContentToggleChanged', lang.hitch(this, function(checked) {
-            if (!this._modelSupportsImage(this.model)) {
-                this.pageContentEnabled = false;
-                this._updateToggleButtonStyle();
-                return;
-            }
-            this.pageContentEnabled = checked;
-            this._updateToggleButtonStyle();
-            console.log('Page content toggle changed to:', checked);
-        })));
-
-        // Subscribe to session changes to reset state
         this._topicHandles.push(topic.subscribe('ChatSession:Selected', lang.hitch(this, function(data) {
-            // Reset screenshot toggle state
-            this.pageContentEnabled = false;
-            this._updateToggleButtonStyle();
-            topic.publish('pageContentToggleChanged', false);
-
-            // Clear attached images
+            this._closeAttachMenu();
             this._clearAttachedImage();
 
-            // Clear selected workspace items
             this.selectedWorkspaceItems = [];
             this._renderWorkspaceSelectionIndicator();
             this.selectedJobs = [];
@@ -726,16 +926,14 @@ define([
             } else {
             this.textArea.style.overflowY = 'hidden';
             }
-            this._renderWorkspacePathTokenEditor();
+            this._renderAttachmentChips();
         }.bind(this));
 
-        // Update path tokens after paste (Dojo Textarea may not fire 'input' on paste)
         on(this.textArea, 'paste', lang.hitch(this, function() {
-            setTimeout(lang.hitch(this, this._renderWorkspacePathTokenEditor), 0);
+            setTimeout(lang.hitch(this, this._renderAttachmentChips), 0);
         }));
 
-        // Also sync tokens on keyup to catch deletions, cut, and other edits
-        on(this.textArea, 'keyup', lang.hitch(this, this._renderWorkspacePathTokenEditor));
+        on(this.textArea, 'keyup', lang.hitch(this, this._renderAttachmentChips));
 
         // Handle Enter key for submission (except with Shift)
         on(this.textArea, 'keypress', lang.hitch(this, function(evt) {
@@ -1017,7 +1215,7 @@ define([
         this._renderJobsSelectionIndicator();
         this._updateImageCapabilityUI();
         this._updateAbortButtonState();
-        this._renderWorkspacePathTokenEditor();
+        this._renderAttachmentChips();
       },
 
       _isAbortableQueryTool: function(toolId) {
@@ -1153,15 +1351,9 @@ define([
             this._updateAbortButtonState();
         }
 
-        // Reset screenshot toggle state
-        this.pageContentEnabled = false;
-        this._updateToggleButtonStyle();
-        topic.publish('pageContentToggleChanged', false);
-
-        // Clear attached images
+        this._closeAttachMenu();
         this._clearAttachedImage();
 
-        // Clear selected workspace items
         this.selectedWorkspaceItems = [];
         this._renderWorkspaceSelectionIndicator();
         this.selectedJobs = [];
@@ -1186,15 +1378,9 @@ define([
             this._updateAbortButtonState();
         }
 
-        // Reset screenshot toggle state
-        this.pageContentEnabled = false;
-        this._updateToggleButtonStyle();
-        topic.publish('pageContentToggleChanged', false);
-
-        // Clear attached images
+        this._closeAttachMenu();
         this._clearAttachedImage();
 
-        // Clear selected workspace items
         this.selectedWorkspaceItems = [];
         this._renderWorkspaceSelectionIndicator();
         this.selectedJobs = [];
@@ -1296,21 +1482,15 @@ define([
       _updateImageCapabilityUI: function() {
         var enabled = this._modelSupportsImage(this.model);
 
-        if (this.screenshotToggleNode) {
-          this.screenshotToggleNode.style.display = enabled ? 'block' : 'none';
-        }
-        // Upload button is always visible — it handles both images and text files
-        if (this.uploadImageNode) {
-          this.uploadImageNode.style.display = 'block';
+        if (this.screenshotMenuItemNode) {
+          this.screenshotMenuItemNode.style.display = enabled ? 'flex' : 'none';
         }
 
-        if (!enabled) {
-          this.pageContentEnabled = false;
-          // Only clear image attachments, not file attachments
-          this._clearAttachedImage();
-          topic.publish('pageContentToggleChanged', false);
+        if (!enabled && this.attachedImages && this.attachedImages.length > 0) {
+          this.attachedImages = [];
+          this._renderAttachmentChips();
+          this._emitImageAttachmentsChanged();
         }
-        this._renderAttachedImageIndicator();
       },
 
       _handleImageUploadChange: function(evt) {
@@ -1434,7 +1614,7 @@ define([
               this.attachedFiles.push(entry);
             }
           }));
-          this._renderAttachedImageIndicator();
+          this._renderAttachmentChips();
           this._emitImageAttachmentsChanged();
         })).catch(function(error) {
           topic.publish('CopilotApiError', { error: error });
@@ -1449,34 +1629,14 @@ define([
         if (this.imageUploadInput) {
           this.imageUploadInput.value = '';
         }
-        this._renderAttachedImageIndicator();
+        this._renderAttachmentChips();
         this._emitImageAttachmentsChanged();
       },
 
       setAttachedImages: function(entries) {
         this.attachedImages = Array.isArray(entries) ? entries.slice() : [];
-        this._renderAttachedImageIndicator();
+        this._renderAttachmentChips();
         this._emitImageAttachmentsChanged();
-      },
-
-      _renderAttachedImageIndicator: function() {
-        if (!this.imageAttachmentCounter || !this.imageAttachmentCountNode) {
-          return;
-        }
-        var imageCount = this.attachedImages.length;
-        var fileCount = this.attachedFiles ? this.attachedFiles.length : 0;
-        var totalCount = imageCount + fileCount;
-        if (totalCount > 0) {
-          var parts = [];
-          if (imageCount > 0) parts.push(imageCount + (imageCount === 1 ? ' image' : ' images'));
-          if (fileCount > 0) parts.push(fileCount + (fileCount === 1 ? ' file' : ' files'));
-          this.imageAttachmentCountNode.textContent = parts.join(', ');
-          this.imageAttachmentCounter.style.display = 'inline-flex';
-          this.imageAttachmentCounter.classList.toggle('hasImages', totalCount > 0);
-        } else {
-          this.imageAttachmentCounter.style.display = 'none';
-          this.imageAttachmentCountNode.textContent = '';
-        }
       },
 
       _buildUserMessageForSubmit: function(inputText, attachmentMeta) {
@@ -1604,47 +1764,46 @@ define([
         }
       },
 
-    _handleSubmitStream: function(screenshotImage, savedInputText) {
-      var calledFromCapture = !!savedInputText;
-      var inputText = savedInputText || this.textArea.get('value');
+    _handleSubmitStream: function() {
+      var inputText = this.textArea.get('value');
       var _self = this;
       var uploadedImagePayload = this._getUploadedImagePayload();
       var hasUploadedImage = !!(uploadedImagePayload && Array.isArray(uploadedImagePayload.images) && uploadedImagePayload.images.length > 0 && this._modelSupportsImage(this.model));
       var uploadedFilesPayload = this._getUploadedFilesPayload();
       var hasUploadedFiles = !!(uploadedFilesPayload && Array.isArray(uploadedFilesPayload.files) && uploadedFilesPayload.files.length > 0);
-      var hasScreenshot = !!screenshotImage;
-      var hasAnyImage = hasUploadedImage || hasScreenshot;
+      var hasScreenshot = hasUploadedImage && (uploadedImagePayload.attachments || []).some(function(att) {
+        return att && att.source === 'screenshot';
+      });
+      var hasAnyImage = hasUploadedImage;
       var submitModel = hasAnyImage ? this._resolveImageModel() : this.model;
 
-      if (!calledFromCapture) {
-        topic.publish('ChatMessageSubmitted');
+      topic.publish('ChatMessageSubmitted');
 
-        var allAttachments = [];
-        if (hasUploadedImage) {
-          allAttachments = allAttachments.concat(uploadedImagePayload.attachments);
-        }
-        if (hasUploadedFiles) {
-          allAttachments = allAttachments.concat(uploadedFilesPayload.attachments);
-        }
-        var userMessage = this._buildUserMessageForSubmit(
-            inputText,
-            allAttachments.length > 0 ? allAttachments : null
-        );
-
-        this.chatStore.addMessage(userMessage);
-        this.displayWidget.showMessages(this.chatStore.query());
-        this._setInputTextValue('');
-        if (hasUploadedImage || hasUploadedFiles) {
-          this._clearAttachedImage();
-        }
-
-        this.isSubmitting = true;
-        this.isQueryProgressActive = false;
-        this.submitButton.set('disabled', true);
-        this._updateAbortButtonState();
-
-        this.displayWidget.showLoadingIndicator();
+      var allAttachments = [];
+      if (hasUploadedImage) {
+        allAttachments = allAttachments.concat(uploadedImagePayload.attachments);
       }
+      if (hasUploadedFiles) {
+        allAttachments = allAttachments.concat(uploadedFilesPayload.attachments);
+      }
+      var userMessage = this._buildUserMessageForSubmit(
+          inputText,
+          allAttachments.length > 0 ? allAttachments : null
+      );
+
+      this.chatStore.addMessage(userMessage);
+      this.displayWidget.showMessages(this.chatStore.query());
+      this._setInputTextValue('');
+      if (hasUploadedImage || hasUploadedFiles) {
+        this._clearAttachedImage();
+      }
+
+      this.isSubmitting = true;
+      this.isQueryProgressActive = false;
+      this.submitButton.set('disabled', true);
+      this._updateAbortButtonState();
+
+      this.displayWidget.showLoadingIndicator();
 
       var systemPrompt = 'You are a helpful scientist website assistant for the website BV-BRC, the Bacterial and Viral Bioinformatics Resource Center.\\n\\n';
       if (this.systemPrompt) {
@@ -1672,23 +1831,9 @@ define([
           save_chat: true
       };
 
-      var allImages = [];
-      var imageAttachments = [];
-      if (hasScreenshot) {
-        allImages.push(screenshotImage);
-        imageAttachments.push({ type: 'image', source: 'screenshot', name: 'Page screenshot' });
-      }
       if (hasUploadedImage) {
-        allImages = allImages.concat(uploadedImagePayload.images);
-        (uploadedImagePayload.attachments || []).forEach(function(att) {
-          if (att && att.type === 'image') {
-            imageAttachments.push(att);
-          }
-        });
-      }
-      if (allImages.length > 0) {
-        params.images = allImages;
-        params.image_attachments = imageAttachments;
+        params.images = uploadedImagePayload.images;
+        params.image_attachments = uploadedImagePayload.attachments || [];
       }
       if (hasUploadedFiles) {
         params.files = uploadedFilesPayload.files;
@@ -1739,11 +1884,6 @@ define([
               this.isQueryProgressActive = false;
               this.submitButton.set('disabled', false);
               this._updateAbortButtonState();
-              if (hasScreenshot) {
-                  this.pageContentEnabled = false;
-                  this._updateToggleButtonStyle();
-                  topic.publish('pageContentToggleChanged', false);
-              }
           },
           (error) => {
               topic.publish('CopilotApiError', { error: error });
@@ -1790,62 +1930,8 @@ define([
       );
     },
 
-    _captureScreenshotThenSubmit: function() {
-      var savedText = this.textArea.get('value');
-
-      topic.publish('ChatMessageSubmitted');
-      var userMessage = this._buildUserMessageForSubmit(savedText, [
-        { type: 'image', source: 'screenshot', name: 'Page screenshot' }
-      ]);
-      this.chatStore.addMessage(userMessage);
-      this.displayWidget.showMessages(this.chatStore.query());
-      this._setInputTextValue('');
-
-      this.isSubmitting = true;
-      this.submitButton.set('disabled', true);
-      this._updateAbortButtonState();
-      this.displayWidget.showLoadingIndicator('Taking screenshot...');
-
-      var capturePromise = html2canvas(document.body, {
-        onclone: function(clonedDoc) {
-          var chatPanels = clonedDoc.querySelectorAll('.ChatContainerFloatingWindow, .CopilotFloatingWindow');
-          for (var i = 0; i < chatPanels.length; i++) {
-            chatPanels[i].style.display = 'none';
-          }
-        }
-      });
-      var timeoutPromise = new Promise(function(_, reject) {
-        setTimeout(function() { reject(new Error('Screenshot capture timed out')); }, 10000);
-      });
-
-      Promise.race([capturePromise, timeoutPromise]).then(lang.hitch(this, function(canvas) {
-        var base64Image = canvas.toDataURL('image/png');
-        this._handleSubmitStream(base64Image, savedText);
-      })).catch(lang.hitch(this, function(error) {
-        console.error('Screenshot capture failed, submitting without screenshot:', error);
-        this._handleSubmitStream(null, savedText);
-      }));
-    },
-
-    /**
-       * @method _updateToggleButtonStyle
-       * @description Updates the toggle button's visual state based on pageContentEnabled
-       */
-    _updateToggleButtonStyle: function() {
-      if (!this.pageContentToggle || !this.pageContentToggle.domNode) {
-          return;
-      }
-      var buttonNode = this.pageContentToggle.domNode;
-      if (this.pageContentEnabled) {
-          buttonNode.classList.remove('pageContentToggleInactive');
-          buttonNode.classList.add('pageContentToggleActive');
-      } else {
-          buttonNode.classList.remove('pageContentToggleActive');
-          buttonNode.classList.add('pageContentToggleInactive');
-      }
-    },
-
     destroy: function() {
+      this._closeAttachMenu();
       this._topicHandles.forEach(function(h) { h.remove(); });
       this._topicHandles = [];
       this.inherited(arguments);

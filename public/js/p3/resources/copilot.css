@@ -1735,72 +1735,113 @@
     background-color: rgba(0, 0, 0, 0.05);
 }
 
-/* Split Image Button Container */
-.imageSplitButtonContainer {
-    width: 70px;
-    height: 56px;
+/* Attach button + drop-up menu */
+.copilotAttachButtonContainer {
+    position: relative;
     display: flex;
-    flex-direction: column;
-    border-radius: 8px;
-    overflow: hidden;
+    align-items: center;
+    margin-right: 10px;
+    flex-shrink: 0;
+}
+
+.copilotAttachButton {
+    width: 36px;
+    height: 36px;
+    padding: 0;
     border: 1px solid #cbd5e1;
+    border-radius: 8px;
     background: #f8fafc;
-}
-
-/* Top Half - Screenshot */
-.imageSplitButtonTop {
-    width: 100%;
-    height: 50%;
-    padding: 0;
-    margin: 0;
-    border: 0;
-    border-bottom: 1px solid #cbd5e1;
-    background: #f8fafc;
-    font-size: 11px;
-    font-weight: 600;
     color: #334155;
+    font-size: 16px;
     cursor: pointer;
-    transition: background-color 0.15s ease, color 0.15s ease;
     display: flex;
     align-items: center;
     justify-content: center;
+    transition: background-color 0.15s ease, color 0.15s ease;
 }
 
-.imageSplitButtonTop:hover {
+.copilotAttachButton:hover {
     background: #eff6ff;
     color: #1e40af;
 }
 
-.imageSplitButtonTop.pageContentToggleActive {
-    background: #e0f2fe !important;
-    color: #1e3a8a !important;
+.copilotAttachButton:disabled,
+.copilotAttachButton.isCapturing {
+    opacity: 0.6;
+    cursor: wait;
 }
 
-.imageSplitButtonTop.pageContentToggleActive:hover {
-    background: #bfdbfe !important;
+.copilotAttachMenu {
+    position: absolute;
+    bottom: calc(100% + 4px);
+    left: 0;
+    min-width: 200px;
+    padding: 4px 0;
+    background: #fff;
+    border: 1px solid #cbd5e1;
+    border-radius: 8px;
+    box-shadow: 0 8px 20px rgba(15, 23, 42, 0.12);
+    z-index: 200;
 }
 
-/* Bottom Half - Upload */
-.imageSplitButtonBottom {
-    width: 100%;
-    height: 50%;
-    padding: 0;
-    margin: 0;
-    border: 0;
-    background: #f8fafc;
-    font-size: 11px;
-    font-weight: 600;
-    color: #334155;
-    cursor: pointer;
-    transition: background-color 0.15s ease, color 0.15s ease;
+.copilotAttachMenuItem {
     display: flex;
     align-items: center;
-    justify-content: center;
+    gap: 8px;
+    width: 100%;
+    padding: 8px 12px;
+    border: 0;
+    background: transparent;
+    color: #334155;
+    font-size: 13px;
+    text-align: left;
+    cursor: pointer;
 }
 
-.imageSplitButtonBottom:hover {
+.copilotAttachMenuItem:hover {
     background: #eff6ff;
     color: #1e40af;
+}
+
+.copilotAttachMenuItem .fa {
+    width: 16px;
+    color: #64748b;
+}
+
+.copilotAttachmentChip {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    border: 1px solid #c7d4e8;
+    border-radius: 4px;
+    background: #eef2f9;
+    overflow: hidden;
+    max-width: 100%;
+    padding-left: 4px;
+}
+
+.copilotAttachmentChipThumb {
+    width: 24px;
+    height: 24px;
+    object-fit: cover;
+    border-radius: 3px;
+    flex-shrink: 0;
+}
+
+.copilotAttachmentChipIcon {
+    color: #5b7aa7;
+    font-size: 12px;
+    margin-left: 4px;
+}
+
+.copilotAttachmentChipName {
+    font-size: 12px;
+    font-weight: 600;
+    color: #1e3a5f;
+    max-width: 160px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
 }
 
 .imageAttachmentIndicator {
@@ -1863,33 +1904,6 @@
 }
 
 .workspaceSelectionCount {
-    white-space: nowrap;
-}
-
-/* Image Attachment Counter */
-.imageAttachmentCounter {
-    position: relative;
-    display: inline-flex;
-    align-items: center;
-    height: 30px;
-    padding: 0 8px;
-    border: 1px solid #d1d5db;
-    border-radius: 5px;
-    background-color: #f9fafb;
-    color: #374151;
-    font-size: 11px;
-    line-height: 1;
-    cursor: default;
-    overflow: visible;
-    z-index: 40;
-}
-
-.imageAttachmentCounter.hasImages {
-    border-color: #93c5fd;
-    background-color: #eff6ff;
-}
-
-.imageAttachmentCount {
     white-space: nowrap;
 }
 
@@ -3568,33 +3582,6 @@ a.workspace-path-chip:hover {
   flex-direction: column;
 }
 
-/* Workspace path icon button inside textarea area */
-.copilotWsPathInlineButton {
-  position: absolute;
-  bottom: 4px;
-  left: 6px;
-  width: 22px;
-  height: 22px;
-  padding: 0;
-  margin: 0;
-  border: none;
-  border-radius: 3px;
-  background: transparent;
-  color: #94a3b8;
-  font-size: 14px;
-  cursor: pointer;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  transition: color 0.12s ease, background 0.12s ease;
-  z-index: 1;
-}
-
-.copilotWsPathInlineButton:hover {
-  color: #3b82f6;
-  background: rgba(59, 130, 246, 0.08);
-}
-
 .copilotAddWorkspacePathButton {
   display: inline-flex;
   align-items: center;
@@ -3625,9 +3612,10 @@ a.workspace-path-chip:hover {
 .workspacePathTokenEditor {
   display: flex;
   align-items: center;
-  flex-wrap: nowrap;
+  flex-wrap: wrap;
   gap: 5px;
   overflow-x: auto;
+  margin-top: 4px;
 }
 
 .workspacePathTokenEditorTitle {
