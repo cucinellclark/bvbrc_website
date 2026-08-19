@@ -1857,14 +1857,18 @@ define([
         this.isSubmitting = true;
         this.submitButton.set('disabled', true);
 
-        topic.publish('hideChatPanel'); // Hide panel before taking screenshot
+        this.displayWidget.showLoadingIndicator(this.chatStore.query());
 
-        html2canvas(document.body).then(lang.hitch(this, function(canvas) {
+        html2canvas(document.body, {
+          onclone: function(clonedDoc) {
+            var chatPanels = clonedDoc.querySelectorAll('.ChatContainerFloatingWindow, .CopilotFloatingWindow');
+            for (var i = 0; i < chatPanels.length; i++) {
+              chatPanels[i].style.display = 'none';
+            }
+          }
+        }).then(lang.hitch(this, function(canvas) {
           var base64Image = canvas.toDataURL('image/png');
 
-          topic.publish('showChatPanel'); // Show panel again
-
-          this.displayWidget.showLoadingIndicator(this.chatStore.query());
           var imageSystemPrompt = 'You are a helpful scientist website assistant for the website BV-BRC, the Bacterial and Viral Bioinformatics Resource Center. You can also answer questions about the attached screenshot.\n' +
           'Analyze the screenshot and respond to the user\'s query.';
 
@@ -1884,7 +1888,6 @@ define([
               selected_workflows: this._getSelectedWorkflowsForRequest()
           })
               .then(lang.hitch(this, function(response) {
-                  // Only add assistant message and system message (if present) - user message was already added
                   var messagesToAdd = [];
                   if (response.systemMessage) {
                       messagesToAdd.push(response.systemMessage);
@@ -1909,16 +1912,13 @@ define([
                   this.isSubmitting = false;
                   this.submitButton.set('disabled', false);
 
-                  // Deselect the pageContentToggle after submission
                   this.pageContentEnabled = false;
                   this._updateToggleButtonStyle();
                   topic.publish('pageContentToggleChanged', false);
               }));
       })).catch(lang.hitch(this, function(error) {
           console.error('Error capturing or processing screenshot:', error);
-          topic.publish('showChatPanel'); // Ensure panel is shown even on error
 
-          // Fall back to HTML content if screenshot fails
           console.log('Falling back to HTML content');
           this._handlePageContentSubmit();
       }));
@@ -2482,14 +2482,18 @@ define([
       this.isSubmitting = true;
       this.submitButton.set('disabled', true);
 
-      topic.publish('hideChatPanel'); // Hide panel before taking screenshot
+      this.displayWidget.showLoadingIndicator(this.chatStore.query());
 
-      html2canvas(document.body).then(lang.hitch(this, function(canvas) {
+      html2canvas(document.body, {
+        onclone: function(clonedDoc) {
+          var chatPanels = clonedDoc.querySelectorAll('.ChatContainerFloatingWindow, .CopilotFloatingWindow');
+          for (var i = 0; i < chatPanels.length; i++) {
+            chatPanels[i].style.display = 'none';
+          }
+        }
+      }).then(lang.hitch(this, function(canvas) {
         var base64Image = canvas.toDataURL('image/png');
 
-        topic.publish('showChatPanel'); // Show panel again
-
-        this.displayWidget.showLoadingIndicator(this.chatStore.query());
         var imageSystemPrompt = 'You are a helpful scientist website assistant for the website BV-BRC, the Bacterial and Viral Bioinformatics Resource Center. You can also answer questions about the attached screenshot.\\n' +
         'Analyze the screenshot and respond to the user\'s query.';
 
@@ -2502,12 +2506,9 @@ define([
 
         var imgtxt_model = this._resolveImageModel();
 
-        // Track assistant message and status message ID
         let assistantMessage = null;
         let statusMessageId = null;
         let assistantMessageCreated = false;
-
-        this.displayWidget.hideLoadingIndicator();
 
         var uploadedFilesPayloadPage = this._getUploadedFilesPayload();
         var hasUploadedFilesPage = !!(uploadedFilesPayloadPage && Array.isArray(uploadedFilesPayloadPage.files) && uploadedFilesPayloadPage.files.length > 0);
@@ -2534,17 +2535,15 @@ define([
 
         this._submitCopilotQueryStreamWithRegistration(params,
             (chunk, toolMetadata) => {
-                // onData - create assistant message on first chunk if not exists
                 var hasTextChunk = !!(chunk && String(chunk).length > 0);
                 var hasWidget = !!(toolMetadata && (toolMetadata.isPlan || toolMetadata.isPlanClarification || toolMetadata.workflowData));
 
                 if (!assistantMessageCreated && (hasTextChunk || hasWidget)) {
-                    // Remove status message if it exists
+                    this.displayWidget.hideLoadingIndicator();
                     if (statusMessageId) {
                         this.chatStore.removeMessage(statusMessageId);
                         statusMessageId = null;
                     }
-                    // Create assistant message
                     assistantMessage = {
                         role: 'assistant',
                         content: '',
@@ -2552,7 +2551,6 @@ define([
                         timestamp: new Date().toISOString()
                     };
 
-                    // Add tool metadata if available (for workflow handling)
                     if (toolMetadata) {
                         this._applyToolMetadataToAssistantMessage(assistantMessage, toolMetadata);
                     }
@@ -2563,7 +2561,6 @@ define([
                 if (assistantMessageCreated && toolMetadata) {
                     this._applyToolMetadataToAssistantMessage(assistantMessage, toolMetadata);
                 }
-                // Append content to assistant message (guard against duplicate chunks)
                 if (assistantMessageCreated && hasTextChunk) {
                     if (!(chunk.length > 1 && assistantMessage.content.length >= chunk.length && assistantMessage.content.endsWith(chunk))) {
                         assistantMessage.content += chunk;
@@ -2574,19 +2571,16 @@ define([
                 }
             },
             () => {
-                // onEnd
                 if (_self.new_chat) {
                     _self._finishNewChat();
                 }
                 this.isSubmitting = false;
                 this.submitButton.set('disabled', false);
-                // Deselect the pageContentToggle after submission
                 this.pageContentEnabled = false;
                 this._updateToggleButtonStyle();
                 topic.publish('pageContentToggleChanged', false);
             },
             (error) => {
-                // onError
                 topic.publish('CopilotApiError', {
                     error: error
                 });
@@ -2595,13 +2589,10 @@ define([
                 this.submitButton.set('disabled', false);
             },
             (progressInfo) => {
-                // onProgress - handle queue status updates
                 switch(progressInfo.type) {
                     case 'queued':
-                        // Silent - no logging for queued event
                         break;
                     case 'started':
-                        // Silent - no logging for started event
                         break;
                     case 'progress':
                         console.log(`Processing: ${progressInfo.percentage}% (Iteration ${progressInfo.iteration}/${progressInfo.max_iterations})`);
@@ -2612,14 +2603,12 @@ define([
                 }
             },
             (statusMessage) => {
-                // onStatusMessage - handle status message updates
                 if (statusMessage.should_remove) {
                     this.chatStore.removeMessage(statusMessage.message_id);
                     if (statusMessageId === statusMessage.message_id) {
                         statusMessageId = null;
                     }
                 } else {
-                    // Track status message ID
                     statusMessageId = statusMessage.message_id;
                     var existingMessage = this.chatStore.getMessageById(statusMessage.message_id);
                     if (existingMessage) {
@@ -2633,9 +2622,7 @@ define([
         );
       })).catch(lang.hitch(this, function(error) {
         console.error('Error capturing or processing screenshot:', error);
-        topic.publish('showChatPanel'); // Ensure panel is shown even on error
 
-        // Fall back to HTML content if screenshot fails
         console.log('Falling back to HTML content');
         this._handlePageContentSubmitStream();
       }));

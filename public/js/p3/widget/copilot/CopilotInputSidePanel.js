@@ -281,7 +281,14 @@ define([
         this.isSubmitting = true;
         this.submitButton.set('disabled', true);
 
-        html2canvas(document.body).then(lang.hitch(this, function(canvas) {
+        html2canvas(document.body, {
+          onclone: function(clonedDoc) {
+            var chatPanels = clonedDoc.querySelectorAll('.ChatContainerFloatingWindow, .CopilotFloatingWindow');
+            for (var i = 0; i < chatPanels.length; i++) {
+              chatPanels[i].style.display = 'none';
+            }
+          }
+        }).then(lang.hitch(this, function(canvas) {
             var base64Image = canvas.toDataURL('image/png');
 
             this.displayWidget.showLoadingIndicator(this.chatStore.query());

@@ -1099,6 +1099,10 @@ define([
             domStyle.set(this.containerNode, {
                 display: 'block'
             });
+            if (this.layoutContainer && this.layoutContainer.resize) {
+                this.layoutContainer.resize();
+            }
+            this.resize();
         },
 
         hide: function() {
