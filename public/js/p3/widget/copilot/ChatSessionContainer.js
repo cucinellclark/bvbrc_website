@@ -253,13 +253,6 @@ define([
                     this.inputWidget.setModel(model);
                 }
             }));
-            topic.subscribe('ChatRagDb', lang.hitch(this, function(ragDb) {
-                this.inputWidget.setRagDb(ragDb);
-                this.inputWidget.setRagButtonLabel(ragDb);
-            }));
-            topic.subscribe('ChatNumDocs', lang.hitch(this, function(numDocs) {
-                this.inputWidget.setNumDocs(numDocs);
-            }));
             topic.subscribe('ChatSystemPrompt', lang.hitch(this, function(systemPrompt) {
                 this.inputWidget.setSystemPrompt(systemPrompt);
             }));

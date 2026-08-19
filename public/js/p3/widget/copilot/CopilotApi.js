@@ -203,87 +203,14 @@ define([
         },
 
         /**
-         * Submits a copilot query with combined functionality
-         * Implementation:
-         * - Builds query data object with text, model, session
-         * - Optionally includes system prompt if provided
-         * - Optionally includes RAG functionality (rag_db, num_docs)
-         * - Optionally includes image if provided
-         * - Makes POST request to copilot endpoint
-         * - Handles errors with detailed logging
-         */
-        submitCopilotQuery: function(inputText, sessionId, systemPrompt, model, save_chat = true, ragDb, numDocs, images, enhancedPrompt = null, extraPayload) {
-            if (!this._checkLoggedIn()) return Promise.reject('Not logged in');
-            var _self = this;
-            console.log('query');
-            console.log('Session ID:', sessionId);
-            var data = {
-                query: inputText,
-                model: model,
-                session_id: sessionId,
-                user_id: _self.user_id,
-                system_prompt: systemPrompt || '',
-                save_chat: save_chat,
-                include_history: true,
-                auth_token: window.App.authorizationToken || null
-            };
-
-            if (extraPayload && Array.isArray(extraPayload.selected_workspace_items) && extraPayload.selected_workspace_items.length > 0) {
-                data.selected_workspace_items = extraPayload.selected_workspace_items;
-            }
-            if (extraPayload && Array.isArray(extraPayload.selected_jobs) && extraPayload.selected_jobs.length > 0) {
-                data.selected_jobs = extraPayload.selected_jobs;
-            }
-            if (extraPayload && Array.isArray(extraPayload.selected_workflows) && extraPayload.selected_workflows.length > 0) {
-                data.selected_workflows = extraPayload.selected_workflows;
-            }
-
-            if (Array.isArray(images) && images.length > 0) {
-                data.images = images;
-            }
-            if (extraPayload && Array.isArray(extraPayload.images) && extraPayload.images.length > 0) {
-                data.images = extraPayload.images;
-            }
-            if (enhancedPrompt) {
-                data.enhanced_prompt = enhancedPrompt;
-            }
-            var hasRagSelection = !!(ragDb && ragDb !== 'null' && ragDb !== 'none');
-            if (hasRagSelection) {
-                data.rag_db = ragDb;
-                if (numDocs !== null && numDocs !== undefined && numDocs !== '') {
-                    data.num_docs = numDocs;
-                }
-            }
-
-            var submitEndpoint = hasRagSelection ? (this.apiUrlBase + '/rag') : (this.apiUrlBase + '/copilot-agent');
-            return request.post(submitEndpoint, {
-                data: JSON.stringify(data),
-                headers: {
-                    'Content-Type': 'application/json',
-                    Authorization: (window.App.authorizationToken || '')
-                },
-                handleAs: 'json'
-            }).then(function(response) {
-                _self.storedResult = response.response || response;
-                return response;
-            }).catch(function(error) {
-                console.error('Error submitting copilot query:', error);
-                throw error;
-            });
-        },
-
-        /**
-         * Submits a copilot query with streaming
+         * Submits a copilot query with streaming via /copilot-agent SSE endpoint.
          * @param {object} params - The parameters for the query
          * @param {string} params.inputText - The user's input text
          * @param {string} params.sessionId - The current session ID
          * @param {string} params.systemPrompt - The system prompt
          * @param {string} params.model - The model to use
          * @param {boolean} params.save_chat - Whether to save the chat
-         * @param {string} params.ragDb - The RAG database to use
-         * @param {number} params.numDocs - The number of documents for RAG
          * @param {string[]} params.images - A list of base64 encoded images
-         * @param {string} params.enhancedPrompt - An enhanced prompt
          * @param {function} onData - Callback for each content chunk (LLM response text)
          * @param {function} onEnd - Callback for when the stream ends
          * @param {function} onError - Callback for any errors
@@ -341,9 +268,6 @@ define([
             if (Array.isArray(params.files) && params.files.length > 0) {
                 data.files = params.files;
             }
-            if (params.enhancedPrompt) {
-                data.enhanced_prompt = params.enhancedPrompt;
-            }
             // Planning agent routing — passed by plan topic subscribers
             if (params.target_agent) {
                 data.target_agent = params.target_agent;
@@ -358,14 +282,7 @@ define([
             if (autoSubmitPref && autoSubmitPref !== 'always_review') {
                 data.auto_submit_preference = autoSubmitPref;
             }
-            var hasRagSelection = !!(params.ragDb && params.ragDb !== 'null' && params.ragDb !== 'none');
-            if (hasRagSelection) {
-                data.rag_db = params.ragDb;
-                if (params.numDocs !== null && params.numDocs !== undefined && params.numDocs !== '') {
-                    data.num_docs = params.numDocs;
-                }
-            }
-            var streamEndpoint = hasRagSelection ? (this.apiUrlBase + '/rag/stream') : (this.apiUrlBase + '/copilot-agent');
+            var streamEndpoint = this.apiUrlBase + '/copilot-agent';
 
             // Create abort controller for this request
             this.currentAbortController = new AbortController();
@@ -978,132 +895,6 @@ define([
             });
         },
 
-
-        /**
-         * Submits a regular chat query
-         * Implementation:
-         * - Builds query data object with text, model, session
-         * - Optionally includes system prompt if provided
-         * - Makes POST request to chat endpoint
-         * - Caches response in storedResult
-         * - Handles errors with detailed logging
-         */
-        submitQuery: function(inputText, sessionId, systemPrompt, model, save_chat = true) {
-            if (!this._checkLoggedIn()) return Promise.reject('Not logged in');
-            var _self = this;
-            console.log('query');
-            console.log('Session ID:', sessionId);
-            var data = {
-                query: inputText,
-                model: model,
-                session_id: sessionId,
-                user_id: _self.user_id,
-                save_chat: save_chat
-            };
-
-            if (systemPrompt) {
-                data.system_prompt = systemPrompt;
-            } else {
-                data.system_prompt = '';
-            }
-            console.log('submitting query to', this.apiUrlBase + '/chat');
-            return request.post(this.apiUrlBase + '/chat', {
-                data: JSON.stringify(data),
-                headers: {
-                    'Content-Type': 'application/json',
-                    Authorization: (window.App.authorizationToken || '')
-                },
-                handleAs: 'json'
-            }).then(function(response) {
-                _self.storedResult = response.response;
-                return response;
-            }).catch(function(error) {
-                console.error('Error submitting query:', error);
-                throw error;
-            });
-        },
-
-        /**
-         * Submits a RAG-enhanced query
-         * Implementation:
-         * - Similar to submitQuery but uses RAG endpoint
-         * - Includes RAG database selection in query
-         * - Validates success message in response
-         * - Throws error if response indicates failure
-         */
-        submitRagQuery: function(inputQuery, ragDb, numDocs, sessionId, model) {
-            if (!this._checkLoggedIn()) return Promise.reject('Not logged in');
-            var _self = this;
-            console.log('Session ID:', sessionId);
-
-            var data = {
-                query: inputQuery,
-                rag_db: ragDb,
-                user_id: _self.user_id,
-                model: model,
-                num_docs: numDocs,
-                session_id: sessionId
-            };
-            var rag_endpoint = this.apiUrlBase + '/rag';
-            console.log('submitting rag query to', rag_endpoint);
-            return request.post(rag_endpoint, {
-                data: JSON.stringify(data),
-                headers: {
-                    'Content-Type': 'application/json',
-                    Authorization: (window.App.authorizationToken || '')
-                },
-                handleAs: 'json'
-            }).then(lang.hitch(this, function(response) {
-                if (response['message'] == 'success') {
-                    _self.storedResult = response;
-                    return response;
-                } else {
-                    throw new Error(response['message']);
-                }
-            })).catch(function(error) {
-                console.error('Error submitting query:', error);
-                throw error;
-            });
-        },
-
-        /**
-         * Submits a regular chat query
-         * Implementation:
-         * - Builds query data object with text, model, session
-         * - Optionally includes system prompt if provided
-         * - Makes POST request to chat endpoint
-         * - Caches response in storedResult
-         * - Handles errors with detailed logging
-         */
-        submitQueryChatOnly: function(inputText, systemPrompt, model) {
-            if (!this._checkLoggedIn()) return Promise.reject('Not logged in');
-            var _self = this;
-            console.log('query');
-            console.log('Session ID: N/A (chat-only query)');
-            var data = {
-                query: inputText,
-                model: model,
-                user_id: _self.user_id,
-            };
-
-            if (systemPrompt) {
-                data.system_prompt = systemPrompt;
-            }
-            console.log('submitting query to', this.apiUrlBase + '/chat-only');
-            return request.post(this.apiUrlBase + '/chat-only', {
-                data: JSON.stringify(data),
-                headers: {
-                    'Content-Type': 'application/json',
-                    Authorization: (window.App.authorizationToken || '')
-                },
-                handleAs: 'json'
-            }).then(function(response) {
-                return response;
-            }).catch(function(error) {
-                console.error('Error submitting query:', error);
-                throw error;
-            });
-        },
 
         /**
          * Retrieves all messages for a session

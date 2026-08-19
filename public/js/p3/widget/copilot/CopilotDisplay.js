@@ -1275,23 +1275,15 @@ define([
      * - Only adds loading indicator message without re-rendering existing messages
      * - Scrolls to bottom
      */
-    showLoadingIndicator: function(chatMessages) {
-      // Only add the loading indicator, don't re-render existing messages
-      // since they're already displayed in the container
-      this.addMessage({
-        role: 'assistant',
-        content: '...',
-        message_id: 'loading-indicator'
-      });
-
+    showLoadingIndicator: function() {
+      this.hideLoadingIndicator();
+      this._loadingIndicator = domConstruct.create('div', {
+        class: 'message assistant',
+        innerHTML: '<div style="font-size: 24px; animation: bounce 1s infinite;">...</div>'
+      }, this.resultContainer);
       this.scrollToBottom();
     },
 
-    /**
-     * Removes the loading animation
-     * Implementation:
-     * - Destroys loading indicator element if exists
-     */
     hideLoadingIndicator: function() {
       if (this._loadingIndicator) {
         domConstruct.destroy(this._loadingIndicator);

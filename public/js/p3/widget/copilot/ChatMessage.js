@@ -711,13 +711,7 @@ define([
         style: 'margin-top: ' + marginTop + ';'
       }, this.container);
 
-      if (this.message.message_id === 'loading-indicator') {
-        // Show animated loading dots
-        domConstruct.create('div', {
-          innerHTML: '...',
-          style: 'font-size: 24px; animation: bounce 1s infinite;'
-        }, messageDiv);
-      } else if (this.message.role === 'system') {
+      if (this.message.role === 'system') {
         if (this.copilotEnableShowPromptDetails) {
           this.renderSystemMessage(messageDiv);
         }
