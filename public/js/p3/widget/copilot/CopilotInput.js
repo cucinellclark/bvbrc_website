@@ -1604,8 +1604,9 @@ define([
         }
       },
 
-    _handleSubmitStream: function(screenshotImage) {
-      var inputText = this.textArea.get('value');
+    _handleSubmitStream: function(screenshotImage, savedInputText) {
+      var calledFromCapture = !!savedInputText;
+      var inputText = savedInputText || this.textArea.get('value');
       var _self = this;
       var uploadedImagePayload = this._getUploadedImagePayload();
       var hasUploadedImage = !!(uploadedImagePayload && Array.isArray(uploadedImagePayload.images) && uploadedImagePayload.images.length > 0 && this._modelSupportsImage(this.model));
@@ -1615,36 +1616,35 @@ define([
       var hasAnyImage = hasUploadedImage || hasScreenshot;
       var submitModel = hasAnyImage ? this._resolveImageModel() : this.model;
 
-      topic.publish('ChatMessageSubmitted');
+      if (!calledFromCapture) {
+        topic.publish('ChatMessageSubmitted');
 
-      var allAttachments = [];
-      if (hasScreenshot) {
-        allAttachments.push({ type: 'image', source: 'screenshot', name: 'Page screenshot' });
-      }
-      if (hasUploadedImage) {
-        allAttachments = allAttachments.concat(uploadedImagePayload.attachments);
-      }
-      if (hasUploadedFiles) {
-        allAttachments = allAttachments.concat(uploadedFilesPayload.attachments);
-      }
-      var userMessage = this._buildUserMessageForSubmit(
-          inputText,
-          allAttachments.length > 0 ? allAttachments : null
-      );
+        var allAttachments = [];
+        if (hasUploadedImage) {
+          allAttachments = allAttachments.concat(uploadedImagePayload.attachments);
+        }
+        if (hasUploadedFiles) {
+          allAttachments = allAttachments.concat(uploadedFilesPayload.attachments);
+        }
+        var userMessage = this._buildUserMessageForSubmit(
+            inputText,
+            allAttachments.length > 0 ? allAttachments : null
+        );
 
-      this.chatStore.addMessage(userMessage);
-      this.displayWidget.showMessages(this.chatStore.query());
-      this._setInputTextValue('');
-      if (hasUploadedImage || hasUploadedFiles) {
-        this._clearAttachedImage();
+        this.chatStore.addMessage(userMessage);
+        this.displayWidget.showMessages(this.chatStore.query());
+        this._setInputTextValue('');
+        if (hasUploadedImage || hasUploadedFiles) {
+          this._clearAttachedImage();
+        }
+
+        this.isSubmitting = true;
+        this.isQueryProgressActive = false;
+        this.submitButton.set('disabled', true);
+        this._updateAbortButtonState();
+
+        this.displayWidget.showLoadingIndicator();
       }
-
-      this.isSubmitting = true;
-      this.isQueryProgressActive = false;
-      this.submitButton.set('disabled', true);
-      this._updateAbortButtonState();
-
-      this.displayWidget.showLoadingIndicator();
 
       var systemPrompt = 'You are a helpful scientist website assistant for the website BV-BRC, the Bacterial and Viral Bioinformatics Resource Center.\\n\\n';
       if (this.systemPrompt) {
@@ -1783,30 +1783,39 @@ define([
     },
 
     _captureScreenshotThenSubmit: function() {
-      var _self = this;
+      var savedText = this.textArea.get('value');
+
+      topic.publish('ChatMessageSubmitted');
+      var userMessage = this._buildUserMessageForSubmit(savedText, [
+        { type: 'image', source: 'screenshot', name: 'Page screenshot' }
+      ]);
+      this.chatStore.addMessage(userMessage);
+      this.displayWidget.showMessages(this.chatStore.query());
+      this._setInputTextValue('');
+
       this.isSubmitting = true;
       this.submitButton.set('disabled', true);
+      this._updateAbortButtonState();
       this.displayWidget.showLoadingIndicator();
 
-      html2canvas(document.body, {
+      var capturePromise = html2canvas(document.body, {
         onclone: function(clonedDoc) {
           var chatPanels = clonedDoc.querySelectorAll('.ChatContainerFloatingWindow, .CopilotFloatingWindow');
           for (var i = 0; i < chatPanels.length; i++) {
             chatPanels[i].style.display = 'none';
           }
         }
-      }).then(lang.hitch(this, function(canvas) {
-        this.displayWidget.hideLoadingIndicator();
-        this.isSubmitting = false;
-        this.submitButton.set('disabled', false);
+      });
+      var timeoutPromise = new Promise(function(_, reject) {
+        setTimeout(function() { reject(new Error('Screenshot capture timed out')); }, 10000);
+      });
+
+      Promise.race([capturePromise, timeoutPromise]).then(lang.hitch(this, function(canvas) {
         var base64Image = canvas.toDataURL('image/png');
-        this._handleSubmitStream(base64Image);
+        this._handleSubmitStream(base64Image, savedText);
       })).catch(lang.hitch(this, function(error) {
         console.error('Screenshot capture failed, submitting without screenshot:', error);
-        this.displayWidget.hideLoadingIndicator();
-        this.isSubmitting = false;
-        this.submitButton.set('disabled', false);
-        this._handleSubmitStream();
+        this._handleSubmitStream(null, savedText);
       }));
     },
 

@@ -910,6 +910,7 @@ define([
           stalePopovers[pi].parentNode.removeChild(stalePopovers[pi]);
         }
         domConstruct.empty(this.resultContainer);
+        this._loadingIndicator = null;
         messages.forEach(lang.hitch(this, function(message) {
           new ChatMessage({
             ...message,
