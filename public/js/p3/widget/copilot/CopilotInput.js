@@ -1820,6 +1820,11 @@ define([
 
       Promise.race([capturePromise, timeoutPromise]).then(lang.hitch(this, function(canvas) {
         var base64Image = canvas.toDataURL('image/png');
+        // DEBUG: save screenshot to downloads for inspection (remove later)
+        var link = document.createElement('a');
+        link.download = 'copilot-screenshot-' + Date.now() + '.png';
+        link.href = base64Image;
+        link.click();
         this._handleSubmitStream(base64Image, savedText);
       })).catch(lang.hitch(this, function(error) {
         console.error('Screenshot capture failed, submitting without screenshot:', error);
