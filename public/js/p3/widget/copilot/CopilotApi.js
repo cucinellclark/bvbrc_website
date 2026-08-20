@@ -17,10 +17,9 @@ define([
     'dojo/_base/lang',
     'dojo/topic',
     'dijit/Dialog',
-    './CopilotSSEEventHandler',
-    './CopilotToolHandler'
+    './CopilotSSEEventHandler'
 ], function(
-    declare, _WidgetBase, request, lang, topic, Dialog, CopilotSSEEventHandler, CopilotToolHandler
+    declare, _WidgetBase, request, lang, topic, Dialog, CopilotSSEEventHandler
 ) {
     /**
      * @class CopilotAPI
@@ -294,117 +293,9 @@ define([
             var eventHandler = new CopilotSSEEventHandler();
             eventHandler.resetState();
 
-            // Create tool handler for special tool processing
-            var toolHandler = new CopilotToolHandler();
-            var latestToolExecutionByTool = {};
-            var latestRenderableToolMetadata = null;
-
-            var hasRenderableToolMetadata = function(toolMetadata) {
-                if (!toolMetadata || typeof toolMetadata !== 'object') {
-                    return false;
-                }
-                return !!(
-                    toolMetadata.workflow ||
-                    toolMetadata.isWorkspaceListing ||
-                    toolMetadata.isWorkspaceBrowse ||
-                    toolMetadata.isJobsBrowse ||
-                    toolMetadata.isQueryCollection ||
-                    toolMetadata.isPlan ||
-                    toolMetadata.isPlanClarification
-                );
-            };
-
-            var resolveToolId = function(parsed) {
-                if (!parsed || typeof parsed !== 'object') {
-                    return null;
-                }
-                return parsed.tool || parsed.source_tool || parsed.tool_id || null;
-            };
-
-            var buildToolMetadata = function(sourceTool, processed) {
-                if (!processed) {
-                    return null;
-                }
-                var toolMetadata = {
-                    source_tool: sourceTool
-                };
-                if (processed.workflow) {
-                    toolMetadata.workflow = processed.workflow;
-                }
-                if (processed.isWorkspaceListing) {
-                    toolMetadata.isWorkspaceListing = processed.isWorkspaceListing;
-                    toolMetadata.workspaceData = processed.workspaceData;
-                }
-                if (processed.isWorkspaceBrowse) {
-                    toolMetadata.isWorkspaceBrowse = processed.isWorkspaceBrowse;
-                    toolMetadata.workspaceBrowseResult = processed.workspaceBrowseResult;
-                    toolMetadata.chatSummary = processed.chatSummary;
-                    toolMetadata.uiPayload = processed.uiPayload;
-                    toolMetadata.uiAction = processed.uiAction;
-                }
-                if (processed.isJobsBrowse) {
-                    toolMetadata.isJobsBrowse = processed.isJobsBrowse;
-                    toolMetadata.jobsBrowseResult = processed.jobsBrowseResult;
-                    toolMetadata.chatSummary = processed.chatSummary;
-                    toolMetadata.uiPayload = processed.uiPayload;
-                    toolMetadata.uiAction = processed.uiAction;
-                }
-                if (processed.isQueryCollection) {
-                    toolMetadata.isQueryCollection = processed.isQueryCollection;
-                    toolMetadata.queryCollectionData = processed.queryCollectionData;
-                    toolMetadata.chatSummary = processed.chatSummary || toolMetadata.chatSummary;
-                    toolMetadata.uiPayload = processed.queryCollectionData || toolMetadata.uiPayload;
-                    toolMetadata.uiAction = processed.uiAction || 'open_data_tab';
-                }
-                if (processed.tool_call) {
-                    toolMetadata.tool_call = processed.tool_call;
-                }
-                return toolMetadata;
-            };
-
-            var isQueryCollectionToolId = function(toolId) {
-                if (!toolId || typeof toolId !== 'string') {
-                    return false;
-                }
-                return toolId === 'bvbrc_server.bvbrc_search_data' ||
-                    toolId === 'bvbrc_server.bvbrc_query_collection' ||
-                    toolId === 'bvbrc_server.query_collection' ||
-                    toolId.indexOf('bvbrc_search_data') !== -1 ||
-                    toolId.indexOf('bvbrc_query_collection') !== -1 ||
-                    toolId.indexOf('query_collection') !== -1;
-            };
-
-            // Some query-tool final responses are plain text. Keep query-card metadata alive
-            // using persisted call envelopes so the UI can still render the Data tab card.
-            var buildFallbackQueryToolMetadata = function(sourceTool, callInfo) {
-                if (!isQueryCollectionToolId(sourceTool)) {
-                    return null;
-                }
-                var normalizedCall = (callInfo && typeof callInfo === 'object') ? callInfo : null;
-                var args = normalizedCall && normalizedCall.arguments_executed && typeof normalizedCall.arguments_executed === 'object'
-                    ? normalizedCall.arguments_executed
-                    : {};
-                var rqlQueryUrl = args.rqlQueryUrl || args.rql_query_url || args.query_url || null;
-                return {
-                    source_tool: sourceTool,
-                    isQueryCollection: true,
-                    queryCollectionData: {
-                        queryParameters: args,
-                        collection: args.collection || null,
-                        rqlQueryUrl: rqlQueryUrl,
-                        resultRows: []
-                    },
-                    chatSummary: 'Data query ready.',
-                    uiPayload: {
-                        queryParameters: args,
-                        collection: args.collection || null,
-                        rqlQueryUrl: rqlQueryUrl,
-                        resultRows: []
-                    },
-                    uiAction: 'open_data_tab',
-                    tool_call: normalizedCall
-                };
-            };
+            // Card metadata is now classified by the gateway and arrives
+            // on SSE events as parsed.card { card_type, card_payload }.
+            // The legacy CopilotToolHandler is no longer needed.
 
             fetch(streamEndpoint, {
                 method: 'POST',
@@ -504,50 +395,18 @@ define([
 
                                 case 'content':
                                 case 'final_response':
-                                    // This is the actual LLM response text
-                                    // Check for special tool handling
-                                    let dataToUse = parsed;
-                                    let toolMetadata = null;
-                                    if (currentEvent === 'final_response') {
-                                        var responseToolId = resolveToolId(parsed);
-                                        if (responseToolId) {
-                                            const processed = toolHandler.processToolEvent(currentEvent, responseToolId, parsed);
+                                    // Extract text chunk and card metadata from SSE event
+                                    var toolMetadata = null;
 
-                                            if (processed) {
-                                                dataToUse = processed;
-                                                toolMetadata = buildToolMetadata(responseToolId, processed);
-                                            }
-
-                                            // Final responses may be natural-language only. Rehydrate UI metadata
-                                            // from the last successful tool_executed payload for this tool.
-                                            if ((!toolMetadata || !hasRenderableToolMetadata(toolMetadata)) &&
-                                                Object.prototype.hasOwnProperty.call(latestToolExecutionByTool, responseToolId)) {
-                                                const cachedResult = latestToolExecutionByTool[responseToolId];
-                                                const replayProcessed = toolHandler.processToolEvent(
-                                                    'final_response',
-                                                    responseToolId,
-                                                    { chunk: cachedResult, tool: responseToolId }
-                                                );
-                                                if (replayProcessed) {
-                                                    toolMetadata = buildToolMetadata(responseToolId, replayProcessed);
-                                                }
-                                            }
-
-                                            if ((!toolMetadata || !hasRenderableToolMetadata(toolMetadata)) &&
-                                                parsed && parsed.call && typeof parsed.call === 'object') {
-                                                toolMetadata = buildFallbackQueryToolMetadata(responseToolId, parsed.call);
-                                            }
-                                        }
+                                    // Extract gateway-classified card from the SSE event data.
+                                    if (parsed && parsed.card && parsed.card.card_type) {
+                                        toolMetadata = {
+                                            source_tool: parsed.tool || parsed.source_tool || null,
+                                            card: parsed.card
+                                        };
                                     }
 
-                                    // If finalization moved to a different tool, still preserve the most recent
-                                    // renderable tool metadata so UI cards remain available.
-                                    if ((!toolMetadata || !hasRenderableToolMetadata(toolMetadata)) && latestRenderableToolMetadata) {
-                                        toolMetadata = lang.mixin({}, latestRenderableToolMetadata);
-                                    }
-
-                                    let textChunk = dataToUse.chunk || dataToUse.delta || dataToUse.content || '';
-                                    // If chunk is still an object (not handled by tool handler), stringify it
+                                    var textChunk = parsed.chunk || parsed.delta || parsed.content || '';
                                     if (typeof textChunk === 'object' && textChunk !== null) {
                                         textChunk = JSON.stringify(textChunk, null, 2);
                                     }
@@ -598,32 +457,6 @@ define([
                                     break;
 
                                 case 'tool_executed':
-                                    if (parsed && parsed.tool && parsed.status === 'success' &&
-                                        Object.prototype.hasOwnProperty.call(parsed, 'result')) {
-                                        latestToolExecutionByTool[parsed.tool] = parsed.result;
-                                        const replayProcessed = toolHandler.processToolEvent(
-                                            'final_response',
-                                            parsed.tool,
-                                            {
-                                                chunk: parsed.result,
-                                                tool: parsed.tool,
-                                                call: parsed.call || (parsed.result && parsed.result.call) || null
-                                            }
-                                        );
-                                        if (replayProcessed) {
-                                            const replayMetadata = buildToolMetadata(parsed.tool, replayProcessed);
-                                            if (hasRenderableToolMetadata(replayMetadata)) {
-                                                latestRenderableToolMetadata = replayMetadata;
-                                            }
-                                        }
-                                        if ((!latestRenderableToolMetadata || !hasRenderableToolMetadata(latestRenderableToolMetadata)) &&
-                                            parsed.call && typeof parsed.call === 'object') {
-                                            var fallbackMetadata = buildFallbackQueryToolMetadata(parsed.tool, parsed.call);
-                                            if (fallbackMetadata && hasRenderableToolMetadata(fallbackMetadata)) {
-                                                latestRenderableToolMetadata = fallbackMetadata;
-                                            }
-                                        }
-                                    }
                                     if (parsed && parsed.tool) {
                                         _self.currentActiveToolId = parsed.tool;
                                     }
@@ -666,16 +499,9 @@ define([
 
                                 case 'ask_questions':
                                     // Planning agent clarification questions.
-                                    // Deliver as tool metadata so ChatMessage renders ClarificationChips.
-                                    // Include the original query so ClarificationChips can pass it back
-                                    // when the user submits answers.
-                                    if (parsed.questions && onData) {
+                                    if (parsed.questions && parsed.card && onData) {
                                         onData('', {
-                                            isPlanClarification: true,
-                                            clarificationData: {
-                                                questions: parsed.questions,
-                                                agent: parsed.agent
-                                            },
+                                            card: parsed.card,
                                             originalQuery: data.query || ''
                                         });
                                     }
@@ -683,12 +509,8 @@ define([
 
                                 case 'plan_created':
                                     // Planning agent produced a plan for approval.
-                                    // Deliver as tool metadata so ChatMessage renders PlanCard.
-                                    if (parsed.plan && onData) {
-                                        onData('', {
-                                            isPlan: true,
-                                            planData: parsed.plan
-                                        });
+                                    if (parsed.plan && parsed.card && onData) {
+                                        onData('', { card: parsed.card });
                                     }
                                     break;
 

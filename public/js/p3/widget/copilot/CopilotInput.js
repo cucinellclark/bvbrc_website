@@ -524,45 +524,20 @@ define([
           return;
         }
 
-        assistantMessage.source_tool = toolMetadata.source_tool || assistantMessage.source_tool;
-        assistantMessage.tool_call = toolMetadata.tool_call || assistantMessage.tool_call;
-
-        // Workflow — single nested object
-        if (toolMetadata.workflow) {
-          assistantMessage.workflow = toolMetadata.workflow;
+        // Gateway-classified card
+        if (toolMetadata.card && toolMetadata.card.card_type) {
+          assistantMessage.card = toolMetadata.card;
         }
 
-        // Workspace browse
-        assistantMessage.isWorkspaceListing = toolMetadata.isWorkspaceListing;
-        assistantMessage.workspaceData = toolMetadata.workspaceData;
-        assistantMessage.isWorkspaceBrowse = toolMetadata.isWorkspaceBrowse;
-        assistantMessage.workspaceBrowseResult = toolMetadata.workspaceBrowseResult;
-
-        // Jobs browse
-        assistantMessage.isJobsBrowse = toolMetadata.isJobsBrowse;
-        assistantMessage.jobsBrowseResult = toolMetadata.jobsBrowseResult;
-
-        // Query collection
-        assistantMessage.isQueryCollection = toolMetadata.isQueryCollection;
-        assistantMessage.queryCollectionData = toolMetadata.queryCollectionData;
-
-        // Planning agent
-        if (toolMetadata.isPlan) {
-          assistantMessage.isPlan = true;
-          assistantMessage.planData = toolMetadata.planData;
-        }
-        if (toolMetadata.isPlanClarification) {
-          assistantMessage.isPlanClarification = true;
-          assistantMessage.clarificationData = toolMetadata.clarificationData;
-        }
+        // Pass through original query for clarification flows
         if (toolMetadata.originalQuery) {
           assistantMessage.originalQuery = toolMetadata.originalQuery;
         }
 
-        // UI action/payload
-        assistantMessage.chatSummary = toolMetadata.chatSummary;
-        assistantMessage.uiPayload = toolMetadata.uiPayload;
-        assistantMessage.uiAction = toolMetadata.uiAction;
+        // Source tool for reference
+        if (toolMetadata.source_tool) {
+          assistantMessage.source_tool = toolMetadata.source_tool;
+        }
       },
 
       setSelectedWorkspaceItems: function(items) {
@@ -701,7 +676,7 @@ define([
             // Only create an assistant message when we actually have something
             // to render (text chunk or a UI widget such as plan/clarification).
             var hasTextChunk = !!(chunk && String(chunk).length > 0);
-            var hasWidget = !!(toolMetadata && (toolMetadata.isPlan || toolMetadata.isPlanClarification));
+            var hasWidget = !!(toolMetadata && toolMetadata.card);
 
             if (!assistantMessageCreated && (hasTextChunk || hasWidget)) {
               if (statusMessageId) {
@@ -1843,7 +1818,7 @@ define([
       this._submitCopilotQueryStreamWithRegistration(params,
           (chunk, toolMetadata) => {
               var hasTextChunk = !!(chunk && String(chunk).length > 0);
-              var hasWidget = !!(toolMetadata && (toolMetadata.isPlan || toolMetadata.isPlanClarification || toolMetadata.workflowData));
+              var hasWidget = !!(toolMetadata && toolMetadata.card);
 
               if (!assistantMessageCreated && (hasTextChunk || hasWidget)) {
                   this.displayWidget.hideLoadingIndicator();

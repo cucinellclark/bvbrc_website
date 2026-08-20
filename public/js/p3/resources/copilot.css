@@ -1099,8 +1099,13 @@
   overflow-y: auto;
 }
 
-/* Tool card: original style with row/data/link layout */
-.workspace-summary-card {
+/* ==========================================================================
+   Unified Chat Card System
+   Base card class with type-specific modifiers.
+   Replaces legacy .workspace-summary-card / .copilot-service-card patterns.
+   ========================================================================== */
+
+.chat-card {
   border: 1px solid #dbeafe;
   border-radius: 8px;
   background-color: #f8fbff;
@@ -1109,36 +1114,20 @@
   min-width: 260px;
 }
 
-.workspace-summary-card .tool-card-status-row {
-  margin-bottom: 4px;
-}
-
-.workspace-summary-text {
+.chat-card-header {
   font-weight: 600;
   color: #1e3a8a;
-  margin: 0;
+  margin: 0 0 4px 0;
 }
 
-.workspace-summary-path {
+.chat-card-detail {
   font-size: 12px;
   color: #334155;
   margin-bottom: 10px;
   overflow-wrap: anywhere;
 }
 
-.workspace-summary-link {
-  display: block;
-  color: #1e3a8a;
-  text-decoration: none;
-  font-size: 13px;
-  margin-top: 4px;
-}
-
-.workspace-summary-link:hover {
-  text-decoration: underline;
-}
-
-.workspace-summary-open-button {
+.chat-card-btn {
   display: block;
   padding: 6px 12px;
   border: 1px solid #60a5fa;
@@ -1154,8 +1143,33 @@
   text-decoration: none;
 }
 
-.workspace-summary-open-button:hover {
+.chat-card-btn:hover {
   background-color: #bfdbfe;
+}
+
+.chat-card-link {
+  display: block;
+  color: #1e3a8a;
+  text-decoration: none;
+  font-size: 13px;
+  margin-top: 4px;
+}
+
+.chat-card-link:hover {
+  text-decoration: underline;
+}
+
+/* Type modifiers (for type-specific overrides if needed) */
+.chat-card--workflow {
+  border-color: #e5e7eb;
+  background: #f9fafb;
+}
+
+.chat-card--workflow-error {
+  border-color: #fbbf24;
+  background: #fffbeb;
+  color: #b45309;
+  font-size: 13px;
 }
 
 /* File metadata card - extends workspace-summary-card layout */
@@ -3397,102 +3411,6 @@
   text-align: center;
   color: #6b7280;
   padding: 18px 10px;
-}
-
-/* ========================================
-   TOOL CARD SELECTION INDICATOR
-   ======================================== */
-
-.tool-card-selection-indicator {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  margin-top: 8px;
-  padding-top: 8px;
-  border-top: 1px solid #e5e7eb;
-  cursor: pointer;
-}
-
-.tool-card-selection-count {
-  font-size: 12px;
-  font-weight: 500;
-  color: #1e3a8a;
-  background-color: #dbeafe;
-  padding: 2px 8px;
-  border-radius: 999px;
-  border: 1px solid #93c5fd;
-  white-space: nowrap;
-}
-
-.tool-card-selection-info-icon {
-  cursor: pointer;
-  color: #6b7280;
-  font-size: 14px;
-  display: flex;
-  align-items: center;
-  transition: color 0.15s ease;
-}
-
-.tool-card-selection-info-icon:hover {
-  color: #1e3a8a;
-}
-
-.tool-card-selection-hover {
-  position: fixed;
-  min-width: 220px;
-  max-width: 380px;
-  max-height: 240px;
-  overflow-y: auto;
-  background: #ffffff;
-  border: 1px solid #d1d5db;
-  border-radius: 8px;
-  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.12);
-  padding: 8px 10px;
-  z-index: 10000;
-}
-
-.tool-card-selection-hover-item {
-  font-size: 12px;
-  color: #374151;
-  padding: 3px 0;
-  word-break: break-word;
-  border-bottom: 1px solid #f3f4f6;
-}
-
-.tool-card-selection-hover-item:last-child {
-  border-bottom: none;
-}
-
-.tool-card-selection-hover-more {
-  font-size: 12px;
-  color: #6b7280;
-  font-style: italic;
-  padding-top: 4px;
-}
-
-/* ========================================
-   SIMPLIFIED SERVICE CARD (single-step)
-   ======================================== */
-.copilot-service-card {
-  border: 1px solid #e5e7eb;
-  border-radius: 8px;
-  padding: 16px;
-  background: #f9fafb;
-  margin: 8px 0;
-}
-.copilot-service-card-title {
-  font-size: 15px;
-  font-weight: 600;
-  color: #1f2937;
-  margin-bottom: 8px;
-}
-.copilot-service-card-actions {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  margin-top: 12px;
-  padding-top: 12px;
-  border-top: 1px solid #e5e7eb;
 }
 
 /* ========================================

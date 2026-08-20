@@ -9,7 +9,6 @@ define([
   'markdown-it/dist/markdown-it.min', // Markdown parser and renderer
   'markdown-it-link-attributes/dist/markdown-it-link-attributes.min', // Plugin to add attributes to links
   'dijit/Dialog', // Dialog widget
-  './CopilotToolHandler', // Tool handler for special tool processing
   './WorkflowEngine', // Workflow engine widget for displaying workflows
   './workflowForms/CopilotServiceFormAdapter', // Dojo form wrappers for single-step direct form modal
   '../../WorkspaceManager', // Workspace manager for file operations
@@ -17,7 +16,7 @@ define([
   './PlanCard', // Plan card widget for planning agent
   './ClarificationChips' // Clarification chips for planning agent questions
 ], function (
-  declare, domConstruct, on, topic, lang, Deferred, request, markdownit, linkAttributes, Dialog, CopilotToolHandler, WorkflowEngine, CopilotServiceFormAdapter, WorkspaceManager, WorkspacePathUtils, PlanCard, ClarificationChips
+  declare, domConstruct, on, topic, lang, Deferred, request, markdownit, linkAttributes, Dialog, WorkflowEngine, CopilotServiceFormAdapter, WorkspaceManager, WorkspacePathUtils, PlanCard, ClarificationChips
 ) {
   /**
    * @class ChatMessage
@@ -49,15 +48,6 @@ define([
     /** @property {string} sessionId - Current session ID for workflow submission context */
     sessionId: null,
 
-    /** @property {Array} _selectionSubscriptions - Topic subscriptions for cleanup */
-    _selectionSubscriptions: null,
-
-    /** @property {Array} _selectionIndicators - Tracked indicator nodes for reactive updates */
-    _selectionIndicators: null,
-
-    /** @property {Array} _bodyPopovers - Popover nodes appended to document.body for cleanup */
-    _bodyPopovers: null,
-
     /**
      * @constructor
      * Creates a new ChatMessage instance
@@ -71,7 +61,6 @@ define([
       this.copilotApi = message.copilotApi || null; // Get copilotApi from message if provided
       this.sessionId = message.sessionId || null; // Get sessionId from message if provided
       this.copilotEnableShowPromptDetails = window.App && window.App.copilotEnableShowPromptDetails === 'true';
-      this.toolHandler = new CopilotToolHandler();
       this.renderMessage(); // Immediately render on construction
     },
 
@@ -213,41 +202,6 @@ define([
       }));
     },
 
-    _extractRagSummaryText: function() {
-      if (typeof this.message.content === 'object' && this.message.content && this.message.content.type === 'rag_result') {
-        return this.message.content.summary || '';
-      }
-      if (typeof this.message.content === 'string') {
-        return this.message.content;
-      }
-      return '';
-    },
-
-    _buildRagChunkSearchFilters: function() {
-      var seededFilters = this.message && this.message.ragChunkSearchFilters && typeof this.message.ragChunkSearchFilters === 'object'
-        ? this.message.ragChunkSearchFilters
-        : {};
-      var messageToolCall = this._resolveMessageToolCall();
-      var toolArgs = messageToolCall && messageToolCall.arguments_executed && typeof messageToolCall.arguments_executed === 'object'
-        ? messageToolCall.arguments_executed
-        : {};
-      var messageId = this.message && this.message.message_id ? this.message.message_id : null;
-      if (typeof messageId === 'string' && messageId.indexOf('assistant_') === 0) {
-        messageId = null;
-      }
-      return {
-        message_id: seededFilters.message_id || messageId || null,
-        session_id: seededFilters.session_id || this.sessionId || null,
-        user_id: seededFilters.user_id || (this.copilotApi && this.copilotApi.user_id ? this.copilotApi.user_id : null),
-        rag_db: seededFilters.rag_db || toolArgs.rag_db || toolArgs.database_name || toolArgs.config_name || null,
-        rag_api_name: seededFilters.rag_api_name || toolArgs.rag_api_name || null,
-        doc_id: seededFilters.doc_id || toolArgs.doc_id || toolArgs.document_id || null,
-        source_id: seededFilters.source_id || toolArgs.source_id || null,
-        include_content: true,
-        limit: 100
-      };
-    },
-
     _resolveMessageToolCall: function() {
       if (!this.message || typeof this.message !== 'object') {
         return null;
@@ -291,156 +245,6 @@ define([
     },
 
     /**
-     * Renders a selection indicator on a tool card showing count and hover list.
-     * @param {HTMLElement} containerNode - The tool card to append the indicator to
-     * @param {Object} opts - Options: { category, toolCallId, getSelectedItems }
-     *   category: 'files'|'workflows'|'workspace'|'jobs'
-     *   toolCallId: unique identifier for this tool call (for scoping)
-     *   getSelectedItems: function returning array of {label, id} for current selections
-     */
-    _renderSelectionIndicator: function(containerNode, opts) {
-      if (!containerNode || !opts) return;
-      var category = opts.category || '';
-      var getSelectedItems = opts.getSelectedItems;
-      if (typeof getSelectedItems !== 'function') return;
-
-      var indicatorRow = domConstruct.create('div', {
-        class: 'tool-card-selection-indicator',
-        style: 'display:none;'
-      }, containerNode);
-
-      var countLabel = domConstruct.create('span', {
-        class: 'tool-card-selection-count'
-      }, indicatorRow);
-
-      var infoIcon = domConstruct.create('span', {
-        class: 'tool-card-selection-info-icon',
-        innerHTML: '<i class="fa fa-info-circle"></i>',
-        title: 'View selected items'
-      }, indicatorRow);
-
-      var hoverPopover = domConstruct.create('div', {
-        class: 'tool-card-selection-hover',
-        style: 'display:none;'
-      }, document.body);
-
-      // Track body-appended popover for cleanup
-      if (!this._bodyPopovers) { this._bodyPopovers = []; }
-      this._bodyPopovers.push(hoverPopover);
-
-      var hideTimer = null;
-      var maxDisplay = 20;
-
-      var positionPopover = function() {
-        var rect = indicatorRow.getBoundingClientRect();
-        hoverPopover.style.left = rect.left + 'px';
-        // Position above the indicator row with a 6px gap
-        hoverPopover.style.top = 'auto';
-        hoverPopover.style.bottom = (window.innerHeight - rect.top + 6) + 'px';
-      };
-
-      var hidePopover = function() {
-        if (hideTimer) { clearTimeout(hideTimer); hideTimer = null; }
-        hoverPopover.style.display = 'none';
-      };
-      var scheduleHide = function() {
-        if (hideTimer) { clearTimeout(hideTimer); }
-        hideTimer = setTimeout(hidePopover, 160);
-      };
-      var showPopover = function() {
-        if (hideTimer) { clearTimeout(hideTimer); hideTimer = null; }
-        positionPopover();
-        hoverPopover.style.display = 'block';
-      };
-
-      on(indicatorRow, 'mouseenter', showPopover);
-      on(indicatorRow, 'mouseleave', scheduleHide);
-      on(hoverPopover, 'mouseenter', function() {
-        if (hideTimer) { clearTimeout(hideTimer); hideTimer = null; }
-      });
-      on(hoverPopover, 'mouseleave', scheduleHide);
-
-      var updateIndicator = function() {
-        var items = getSelectedItems();
-        var count = Array.isArray(items) ? items.length : 0;
-        if (count === 0) {
-          indicatorRow.style.display = 'none';
-          return;
-        }
-        indicatorRow.style.display = '';
-        countLabel.textContent = count + ' selected';
-
-        // Rebuild popover content
-        hoverPopover.innerHTML = '';
-        items.slice(0, maxDisplay).forEach(function(item) {
-          var itemNode = document.createElement('div');
-          itemNode.className = 'tool-card-selection-hover-item';
-          itemNode.textContent = (item && item.label) ? item.label : String(item);
-          hoverPopover.appendChild(itemNode);
-        });
-        if (items.length > maxDisplay) {
-          var moreNode = document.createElement('div');
-          moreNode.className = 'tool-card-selection-hover-more';
-          moreNode.textContent = '+ ' + (items.length - maxDisplay) + ' more';
-          hoverPopover.appendChild(moreNode);
-        }
-      };
-
-      // Initial render
-      updateIndicator();
-
-      // Track for reactive updates
-      if (!this._selectionIndicators) {
-        this._selectionIndicators = [];
-      }
-      this._selectionIndicators.push({
-        category: category,
-        update: updateIndicator
-      });
-
-      // Subscribe to selection changes if not already subscribed
-      this._ensureSelectionSubscription();
-    },
-
-    /**
-     * Subscribes to CopilotSelectionChanged topic for reactive tool card updates.
-     * Only subscribes once per ChatMessage instance.
-     */
-    _ensureSelectionSubscription: function() {
-      if (this._selectionSubscriptions) return;
-      this._selectionSubscriptions = [];
-      if (!this._selectionDataByCategory) {
-        this._selectionDataByCategory = {};
-      }
-      this._selectionSubscriptions.push(
-        topic.subscribe('CopilotSelectionChanged', lang.hitch(this, function(payload) {
-          if (!payload || !payload.category) return;
-          // Cache the latest selection data per category
-          this._selectionDataByCategory[payload.category] = Array.isArray(payload.items) ? payload.items : [];
-          if (!this._selectionIndicators) return;
-          var changedCategory = payload.category;
-          this._selectionIndicators.forEach(function(indicator) {
-            if (!changedCategory || indicator.category === changedCategory) {
-              indicator.update();
-            }
-          });
-        }))
-      );
-    },
-
-    /**
-     * Returns the cached selection items for a given category.
-     * @param {string} category - The selection category
-     * @returns {Array} Current selected items
-     */
-    _getSelectionItemsForCategory: function(category) {
-      if (!this._selectionDataByCategory) {
-        this._selectionDataByCategory = {};
-      }
-      return this._selectionDataByCategory[category] || [];
-    },
-
-    /**
      * Renders a chat message in the container
      * - Adds appropriate spacing based on if it's the first message
      * - Creates message container with role-based styling
@@ -461,239 +265,24 @@ define([
       }
 
       // Omit empty assistant messages (common during planning/clarification flows).
-      // We only skip if there's no visible content and no widget/tool UI to render.
+      // We only skip if there's no visible content and no card to render.
       if (this.message && this.message.role === 'assistant') {
         var hasText = typeof this.message.content === 'string' && this.message.content.trim() !== '';
         var hasWidget = !!(
-          this.message.isPlan ||
-          this.message.planData ||
-          this.message.isPlanClarification ||
-          this.message.clarificationData ||
+          this.message.card ||
           this.message.workflow ||
-          this.message.workflowData ||
-          this.message.uiPayload ||
-          this.message.workspaceBrowseResult ||
-          this.message.jobsBrowseResult ||
-          this.message.queryCollectionData
+          this.message.workflowData
         );
         if (!hasText && !hasWidget) {
           return;
         }
       }
 
-      // Check if content is a JSON string containing source_tool (for real-time results)
-      var sourceTool = this.message.ui_source_tool || this.message.source_tool;
-      var contentToProcess = this.message.content;
+      // Resolve tool_call from message metadata for card renderers that
+      // still reference it (workflow review, data query replay).
       var messageToolCall = this._resolveMessageToolCall();
       if (messageToolCall && !this.message.tool_call) {
         this.message.tool_call = messageToolCall;
-      }
-
-      if (!sourceTool && typeof this.message.content === 'string') {
-        try {
-          // Try to parse the content as JSON to see if source_tool is inside
-          var parsedContent = JSON.parse(this.message.content);
-          if (parsedContent && parsedContent.source_tool) {
-            sourceTool = parsedContent.source_tool;
-            // Set it on the message object for consistency
-            this.message.source_tool = sourceTool;
-            // Use the parsed content for processing
-            contentToProcess = parsedContent;
-          }
-        } catch (e) {
-          // Not valid JSON, continue with normal processing
-          // Silently skip source_tool extraction for non-JSON content
-        }
-      }
-
-      // Reloaded session messages may carry canonical tool_call without source_tool.
-      // Use it as fallback so tool-specific UI rendering still activates.
-      if (messageToolCall && typeof (messageToolCall.tool || messageToolCall.tool_id) === 'string') {
-        var toolCallId = messageToolCall.tool || messageToolCall.tool_id;
-        var sourceToolLooksLikeTransport =
-          typeof sourceTool === 'string' &&
-          (
-            sourceTool.indexOf('read_file_bytes_tool') !== -1 ||
-            sourceTool.indexOf('read_file_tool') !== -1
-          );
-        if (!sourceTool || sourceToolLooksLikeTransport) {
-          sourceTool = toolCallId;
-        }
-      }
-      if (sourceTool) {
-        this.message.source_tool = sourceTool;
-      }
-      // debugger;
-      var contentLooksLikeJson = false;
-      if (typeof contentToProcess === 'string') {
-        var trimmedContent = contentToProcess.trim();
-        contentLooksLikeJson = trimmedContent.indexOf('{') === 0 || trimmedContent.indexOf('[') === 0;
-      }
-      var toolCallArgs = messageToolCall && messageToolCall.arguments_executed && typeof messageToolCall.arguments_executed === 'object'
-        ? messageToolCall.arguments_executed
-        : {};
-
-      // Infer lightweight tool-card metadata from persisted tool identity.
-      if (sourceTool && (sourceTool.indexOf('workspace_browse_tool') !== -1 ||
-          sourceTool.indexOf('list_genome_groups') !== -1 ||
-          sourceTool.indexOf('list_feature_groups') !== -1)) {
-        this.message.isWorkspaceBrowse = true;
-        if (!this.message.uiAction) {
-          this.message.uiAction = 'open_workspace_tab';
-        }
-      }
-      if (sourceTool && (sourceTool.indexOf('list_jobs') !== -1 || sourceTool.indexOf('get_recent_jobs') !== -1)) {
-        this.message.isJobsBrowse = true;
-        if (!this.message.uiAction) {
-          this.message.uiAction = 'open_jobs_tab';
-        }
-      }
-      if (
-        sourceTool &&
-        (
-          sourceTool.indexOf('bvbrc_search_data') !== -1 ||
-          sourceTool.indexOf('query_collection') !== -1 ||
-          sourceTool.indexOf('bvbrc_query_collection') !== -1
-        )
-      ) {
-        this.message.isQueryCollection = true;
-        if (!this.message.queryCollectionData) {
-          // Reconstruct snapshot metadata from persisted tool_call.replay
-          var replayMeta = (messageToolCall && messageToolCall.replay && typeof messageToolCall.replay === 'object')
-            ? messageToolCall.replay
-            : {};
-          var restoredDownloadUrl = replayMeta.download_url || null;
-          // If a download_url exists, this was a snapshot result
-          var restoredIsSnapshot = !!restoredDownloadUrl;
-          // Extract numFound from download URL limit(N) parameter
-          var restoredNumFound = null;
-          if (restoredDownloadUrl) {
-            var limitMatch = restoredDownloadUrl.match(/[&?]limit\((\d+)\)/);
-            if (limitMatch) {
-              restoredNumFound = parseInt(limitMatch[1], 10);
-            }
-          }
-
-          this.message.queryCollectionData = {
-            queryParameters: toolCallArgs,
-            collection: toolCallArgs.collection || null,
-            rqlQueryUrl: toolCallArgs.data_api_base_url ? toolCallArgs.data_api_base_url : "https://www.bv-brc.org/api-bulk",
-            resultRows: [],
-            // Snapshot metadata restored from tool_call.replay
-            download_url: restoredDownloadUrl,
-            is_snapshot: restoredIsSnapshot,
-            numFound: restoredNumFound,
-            snapshot_limit: null
-          };
-        }
-      }
-      // Infer plan metadata from persisted planning_agent messages.
-      if (sourceTool && sourceTool.indexOf('planning_agent') !== -1) {
-        if (this.message.plan) {
-          this.message.isPlan = true;
-          if (!this.message.planData) {
-            this.message.planData = this.message.plan;
-          }
-        }
-      }
-
-      // Ensure persisted tool_call survives downstream processing.
-      if (messageToolCall && !this.message.tool_call) {
-        this.message.tool_call = messageToolCall;
-      }
-
-      // Process content based on source_tool using tool handler
-      // Skip processing if the message already has processed tool data (uiPayload/workspaceBrowseResult)
-      // This happens when SSE handler already processed the tool output
-      var alreadyProcessed = false;
-      if ((sourceTool === 'bvbrc_server.workspace_browse_tool' ||
-          (sourceTool && (sourceTool.indexOf('list_genome_groups') !== -1 || sourceTool.indexOf('list_feature_groups') !== -1))) &&
-          this.message.uiPayload && this.message.workspaceBrowseResult) {
-        console.log('[ChatMessage] Workspace browse / group list already processed by SSE handler, skipping re-processing');
-        alreadyProcessed = true;
-      }
-      if (
-        sourceTool &&
-        (sourceTool.indexOf('list_jobs') !== -1 || sourceTool.indexOf('get_recent_jobs') !== -1) &&
-        this.message.uiPayload &&
-        this.message.jobsBrowseResult
-      ) {
-        console.log('[ChatMessage] Jobs browse already processed by SSE handler, skipping re-processing');
-        alreadyProcessed = true;
-      }
-      if (this.message.workflow && this.message.workflow.workflow_id) {
-        alreadyProcessed = true;
-      }
-      if (
-        sourceTool &&
-        (sourceTool.indexOf('workspace_browse_tool') !== -1 ||
-          sourceTool.indexOf('list_genome_groups') !== -1 ||
-          sourceTool.indexOf('list_feature_groups') !== -1) &&
-        messageToolCall &&
-        !contentLooksLikeJson
-      ) {
-        alreadyProcessed = true;
-      }
-      if (
-        sourceTool &&
-        (sourceTool.indexOf('list_jobs') !== -1 || sourceTool.indexOf('get_recent_jobs') !== -1) &&
-        messageToolCall &&
-        !contentLooksLikeJson
-      ) {
-        alreadyProcessed = true;
-      }
-      if (
-        sourceTool &&
-        (
-          sourceTool.indexOf('bvbrc_search_data') !== -1 ||
-          sourceTool.indexOf('query_collection') !== -1 ||
-          sourceTool.indexOf('bvbrc_query_collection') !== -1
-        ) &&
-        messageToolCall &&
-        !contentLooksLikeJson
-      ) {
-        // Persisted session messages are often markdown summaries with tool_call metadata.
-        // Skip re-processing so we don't erase query-card flags inferred above.
-        alreadyProcessed = true;
-      }
-
-      // debugger;
-      if (sourceTool && !alreadyProcessed) {
-        // If content is an object with nested structure, extract the actual content
-        if (typeof contentToProcess === 'object' && contentToProcess.content) {
-          contentToProcess = contentToProcess.content;
-        }
-
-        var processedData = this.toolHandler.processMessageContent(contentToProcess, sourceTool);
-
-        this.message.content = processedData.content;
-        if (processedData.workflow) {
-          this.message.workflow = processedData.workflow;
-        }
-        this.message.isWorkspaceBrowse = typeof processedData.isWorkspaceBrowse !== 'undefined'
-          ? (processedData.isWorkspaceBrowse || this.message.isWorkspaceBrowse)
-          : this.message.isWorkspaceBrowse;
-        this.message.workspaceBrowseResult = typeof processedData.workspaceBrowseResult !== 'undefined'
-          ? (processedData.workspaceBrowseResult || this.message.workspaceBrowseResult)
-          : this.message.workspaceBrowseResult;
-        this.message.chatSummary = typeof processedData.chatSummary !== 'undefined' ? processedData.chatSummary : this.message.chatSummary;
-        this.message.uiPayload = typeof processedData.uiPayload !== 'undefined' ? processedData.uiPayload : this.message.uiPayload;
-        this.message.uiAction = typeof processedData.uiAction !== 'undefined' ? processedData.uiAction : this.message.uiAction;
-        this.message.isWorkspaceListing = typeof processedData.isWorkspaceListing !== 'undefined' ? processedData.isWorkspaceListing : this.message.isWorkspaceListing;
-        this.message.workspaceData = typeof processedData.workspaceData !== 'undefined' ? processedData.workspaceData : this.message.workspaceData;
-        this.message.isQueryCollection = typeof processedData.isQueryCollection !== 'undefined' ? processedData.isQueryCollection : this.message.isQueryCollection;
-        this.message.queryCollectionData = typeof processedData.queryCollectionData !== 'undefined' ? processedData.queryCollectionData : this.message.queryCollectionData;
-        this.message.isJobsBrowse = typeof processedData.isJobsBrowse !== 'undefined'
-          ? (processedData.isJobsBrowse || this.message.isJobsBrowse)
-          : this.message.isJobsBrowse;
-        this.message.jobsBrowseResult = typeof processedData.jobsBrowseResult !== 'undefined'
-          ? (processedData.jobsBrowseResult || this.message.jobsBrowseResult)
-          : this.message.jobsBrowseResult;
-        this.message.tool_call = (typeof processedData.ui_tool_call !== 'undefined' && processedData.ui_tool_call)
-          ? processedData.ui_tool_call
-          : this.message.tool_call;
-
-        // Workflow and query collection data are set on message object above
       }
 
       // Add more top margin for first message, less for subsequent
@@ -857,15 +446,10 @@ define([
           console.warn('[ChatMessage] ⚠ Content is not a string, converting to string. Type:', typeof this.message.content);
           console.warn('[ChatMessage] Content value:', this.message.content);
 
-          // Special handling for rag_result type - extract only the summary field
-          if (typeof this.message.content === 'object' && this.message.content.type === 'rag_result') {
-            contentToRender = this.message.content.summary || '';
-          } else {
-            // Convert to string - if it's an object, stringify it
-            contentToRender = typeof this.message.content === 'object'
-              ? JSON.stringify(this.message.content, null, 2)
-              : String(this.message.content);
-          }
+          // Convert to string - if it's an object, stringify it
+          contentToRender = typeof this.message.content === 'object'
+            ? JSON.stringify(this.message.content, null, 2)
+            : String(this.message.content);
         }
       }
 
@@ -881,47 +465,44 @@ define([
         this.makeLargeCodeBlocksCollapsible(markdownContainer);
       }
 
-      // Tool-specific widgets are appended under the message text when available.
-      var renderSourceTool = this.message.ui_source_tool ||
-        this.message.source_tool ||
-        (this.message.tool_call && this.message.tool_call.tool) ||
-        '';
-
-      if (this.message.isPlan && this.message.planData) {
-        this.renderPlanCard(messageDiv);
-      } else if (this.message.isPlanClarification && this.message.clarificationData) {
-        this.renderClarificationChips(messageDiv);
+      // --- Card dispatch ---
+      // Cards are classified by the gateway and stored as message.card
+      // with { card_type, card_payload }.
+      if (this.message.card && this.message.card.card_type) {
+        switch (this.message.card.card_type) {
+          case 'plan':
+            this.renderPlanCard(messageDiv);
+            break;
+          case 'clarification':
+            this.renderClarificationChips(messageDiv);
+            break;
+          case 'workflow':
+            this.renderWorkflowCard(messageDiv);
+            break;
+          case 'workflow_error':
+            this._renderWorkflowPersistWarning(messageDiv);
+            break;
+          case 'data_query':
+            this.renderQueryCollectionWidget(messageDiv);
+            break;
+          case 'workspace_browse':
+            this.renderWorkspaceBrowseSummaryWidget(messageDiv);
+            break;
+          case 'jobs_browse':
+            this.renderJobsBrowseSummaryWidget(messageDiv);
+            break;
+          case 'file_metadata':
+            this.renderFileMetadataWidget(messageDiv);
+            break;
+        }
       } else if (this.message.workflow && this.message.workflow.workflow_id) {
+        // Workflow cards persisted before the card system have workflow
+        // metadata directly on the message (set by the gateway).
         if (this.message.workflow.persisted === false) {
-          // Engine persistence failed — render an inline warning instead of a card
           this._renderWorkflowPersistWarning(messageDiv);
         } else {
           this.renderWorkflowCard(messageDiv);
         }
-      } else if (
-        this.message.uiAction === 'show_file_metadata' &&
-        this.message.uiPayload
-      ) {
-        this.renderFileMetadataWidget(messageDiv);
-      } else if (
-        (this.message.isWorkspaceBrowse && this.message.uiPayload) ||
-        (this.message.isWorkspaceListing && this.message.workspaceData) ||
-        ((renderSourceTool.indexOf('workspace_browse_tool') !== -1 ||
-          renderSourceTool.indexOf('list_genome_groups') !== -1 ||
-          renderSourceTool.indexOf('list_feature_groups') !== -1) && this.message.tool_call)
-      ) {
-        this.renderWorkspaceBrowseSummaryWidget(messageDiv);
-      } else if (
-        (this.message.isJobsBrowse && this.message.uiPayload) ||
-        ((renderSourceTool.indexOf('list_jobs') !== -1 || renderSourceTool.indexOf('get_recent_jobs') !== -1) && this.message.tool_call)
-      ) {
-        this.renderJobsBrowseSummaryWidget(messageDiv);
-      } else if (
-        this.message.isRagStreamQuery === true
-      ) {
-        this.renderRagResultWidget(messageDiv);
-      } else if (this.message.isQueryCollection && this.message.queryCollectionData) {
-        this.renderQueryCollectionWidget(messageDiv);
       }
 
       if (this.message.role === 'assistant') {
@@ -1073,30 +654,27 @@ define([
      * @param {HTMLElement} messageDiv - Container to render widget into
      */
     renderWorkspaceBrowseSummaryWidget: function(messageDiv) {
-      if (!this.message.tool_call || !this.message.tool_call.replay) {
+      // --- Resolve data from card payload (new) or legacy sources ---
+      var cp = (this.message.card && this.message.card.card_type === 'workspace_browse')
+        ? this.message.card.card_payload
+        : null;
+
+      var toolCall = this.message.tool_call || this.message.ui_tool_call;
+      var toolArgs = (toolCall && toolCall.replay) ? toolCall.replay : null;
+
+      if (!cp && (!toolCall || !toolCall.replay)) {
         return;
       }
-      var toolCall = this.message.tool_call || this.message.ui_tool_call;
-      var toolArgs = toolCall.replay ? toolCall.replay : null;
 
-      var payload = {
-        arguments_executed: toolArgs ? toolArgs : null,
-        tool: toolCall.tool || null
-      };
+      var payload = cp
+        ? { arguments_executed: cp.replay_args || null, tool: cp.tool_name || null }
+        : { arguments_executed: toolArgs, tool: (toolCall && toolCall.tool) || null };
 
-      var toolName = toolCall.tool || '';
-      var isGroupListTool = toolName.indexOf('list_genome_groups') !== -1 ||
-        toolName.indexOf('list_feature_groups') !== -1;
-      var isSearch = toolArgs && toolArgs.name_contains && toolArgs.name_contains.length > 0 ? true : false;
-      var isSearchResult = isGroupListTool ||
-        (this.message.uiPayload && this.message.uiPayload.result_type === 'search_result') ||
-        (toolArgs && toolArgs.result_type === 'search_result');
-
-      // Derive count: prefer uiPayload.count, then toolArgs.num_results, then chatSummary
-      var countValue = (this.message.uiPayload && typeof this.message.uiPayload.count === 'number')
-        ? this.message.uiPayload.count
+      var pathValue = (cp && cp.path) || (toolArgs && toolArgs.path) || 'unknown path';
+      var countValue = (cp && typeof cp.count === 'number') ? cp.count
+        : (this.message.uiPayload && typeof this.message.uiPayload.count === 'number') ? this.message.uiPayload.count
         : (toolArgs && toolArgs.num_results ? toolArgs.num_results : null);
-      var pathValue = toolCall.replay.path ? toolCall.replay.path : 'unknown path';
+      var isSearchResult = cp ? !!cp.is_search : !!(toolArgs && toolArgs.name_contains);
 
       var summaryText;
       if (this.message.chatSummary) {
@@ -1106,25 +684,26 @@ define([
       } else {
         summaryText = 'Workspace results are available. Open Workspace Tab to load.';
       }
-      var workspaceBrowserUrl = this._buildWorkspaceBrowserUrl(toolCall.replay.path);
+      var workspaceBrowserUrl = (cp && cp.workspace_browser_url)
+        || this._buildWorkspaceBrowserUrl(pathValue);
 
       var container = domConstruct.create('div', {
-        class: 'workspace-summary-card'
+        class: 'chat-card chat-card--workspace'
       }, messageDiv);
 
       domConstruct.create('div', {
-        class: 'tool-card-status-row workspace-summary-text',
+        class: 'chat-card-header',
         innerHTML: this.escapeHtml(summaryText)
       }, container);
 
       domConstruct.create('div', {
-        class: 'workspace-summary-path',
+        class: 'chat-card-detail',
         innerHTML: 'Path: ' + this.escapeHtml(pathValue)
       }, container);
 
       var openButton = domConstruct.create('button', {
         type: 'button',
-        class: 'workspace-summary-open-button',
+        class: 'chat-card-btn',
         innerHTML: 'Open Workspace Tab'
       }, container);
       on(openButton, 'click', lang.hitch(this, function() {
@@ -1136,9 +715,9 @@ define([
         });
       }));
 
-      if (workspaceBrowserUrl && !isSearch && !isSearchResult) {
+      if (workspaceBrowserUrl && !isSearchResult) {
         domConstruct.create('a', {
-          class: 'workspace-summary-link',
+          class: 'chat-card-link',
           href: workspaceBrowserUrl,
           target: '_blank',
           rel: 'noopener noreferrer',
@@ -1146,55 +725,54 @@ define([
         }, container);
       }
 
-      // Selection indicator for workspace items
-      this._renderSelectionIndicator(container, {
-        category: 'workspace',
-        getSelectedItems: lang.hitch(this, function() {
-          var items = this._getSelectionItemsForCategory('workspace');
-          return items.map(function(item) {
-            return { label: item.path || item.name || item.id || 'Workspace item', id: item.id || item.path };
-          });
-        })
-      });
     },
 
     renderJobsBrowseSummaryWidget: function(messageDiv) {
+      // --- Resolve data from card payload (new) or legacy sources ---
+      var cp = (this.message.card && this.message.card.card_type === 'jobs_browse')
+        ? this.message.card.card_payload
+        : null;
+
       var payload = this.message.uiPayload || {};
       var jobs = Array.isArray(payload.jobs) ? payload.jobs : [];
-      var countValue = jobs.length;
+      var countValue = (cp && typeof cp.count === 'number') ? cp.count : jobs.length;
       var summaryText = this.message.chatSummary || ('Found ' + countValue + ' ' + (countValue === 1 ? 'job' : 'jobs'));
 
       var container = domConstruct.create('div', {
-        class: 'workspace-summary-card'
+        class: 'chat-card chat-card--jobs'
       }, messageDiv);
 
       domConstruct.create('div', {
-        class: 'tool-card-status-row workspace-summary-text',
+        class: 'chat-card-header',
         innerHTML: this.escapeHtml(summaryText)
       }, container);
 
       var detailParts = [];
-      if (payload.sort_by || payload.sort_dir || payload.status || payload.service) {
-        if (payload.sort_by) {
-          detailParts.push('Sort: ' + payload.sort_by + (payload.sort_dir ? ' (' + payload.sort_dir + ')' : ''));
+      var sortBy = (cp && cp.sort_by) || payload.sort_by;
+      var sortDir = (cp && cp.sort_dir) || payload.sort_dir;
+      var statusFilter = (cp && cp.status) || payload.status;
+      var serviceFilter = (cp && cp.service) || payload.service;
+      if (sortBy || sortDir || statusFilter || serviceFilter) {
+        if (sortBy) {
+          detailParts.push('Sort: ' + sortBy + (sortDir ? ' (' + sortDir + ')' : ''));
         }
-        if (payload.status) {
-          detailParts.push('Status: ' + payload.status);
+        if (statusFilter) {
+          detailParts.push('Status: ' + statusFilter);
         }
-        if (payload.service) {
-          detailParts.push('Service: ' + payload.service);
+        if (serviceFilter) {
+          detailParts.push('Service: ' + serviceFilter);
         }
       }
       if (detailParts.length) {
         domConstruct.create('div', {
-          class: 'workspace-summary-path',
-          innerHTML: this.escapeHtml(detailParts.join(' • '))
+          class: 'chat-card-detail',
+          innerHTML: this.escapeHtml(detailParts.join(' \u2022 '))
         }, container);
       }
 
       var openButton = domConstruct.create('button', {
         type: 'button',
-        class: 'workspace-summary-open-button',
+        class: 'chat-card-btn',
         innerHTML: 'Open Jobs Tab'
       }, container);
       on(openButton, 'click', lang.hitch(this, function() {
@@ -1206,145 +784,6 @@ define([
         });
       }));
 
-      // Selection indicator for jobs
-      this._renderSelectionIndicator(container, {
-        category: 'jobs',
-        getSelectedItems: lang.hitch(this, function() {
-          var items = this._getSelectionItemsForCategory('jobs');
-          return items.map(function(item) {
-            return { label: item.id || item.application_name || 'Job', id: item.id || item.job_id };
-          });
-        })
-      });
-    },
-
-    renderRagResultWidget: function(messageDiv) {
-      var summaryText = this._extractRagSummaryText();
-      var cardText = summaryText || 'RAG results are available.';
-      var container = domConstruct.create('div', {
-        class: 'workspace-summary-card'
-      }, messageDiv);
-
-      domConstruct.create('div', {
-        class: 'tool-card-status-row workspace-summary-text',
-        innerHTML: 'RAG results ready'
-      }, container);
-
-      domConstruct.create('div', {
-        class: 'workspace-summary-path',
-        innerHTML: this.escapeHtml(cardText)
-      }, container);
-
-      var openButton = domConstruct.create('button', {
-        type: 'button',
-        class: 'workspace-summary-open-button',
-        innerHTML: 'View Retrieved Chunks'
-      }, container);
-      on(openButton, 'click', lang.hitch(this, function() {
-        this.showRagChunksDialog(openButton);
-      }));
-
-      // Selection indicator for files (RAG results may create files)
-      this._renderSelectionIndicator(container, {
-        category: 'files',
-        getSelectedItems: lang.hitch(this, function() {
-          var items = this._getSelectionItemsForCategory('files');
-          return items.map(function(item) {
-            return { label: item.file_name || item.id || 'File', id: item.id || item.file_id };
-          });
-        })
-      });
-    },
-
-    showRagChunksDialog: function(triggerButton) {
-      if (!this.copilotApi || typeof this.copilotApi.searchRagChunkReferences !== 'function') {
-        console.warn('[ChatMessage] Copilot API does not support rag chunk search');
-        return;
-      }
-
-      var filters = this._buildRagChunkSearchFilters();
-      var dialogBody = domConstruct.create('div', {
-        style: 'max-height: 60vh; overflow-y: auto;'
-      });
-
-      var statusNode = domConstruct.create('div', {
-        innerHTML: 'Loading retrieved chunks...',
-        style: 'color: #4b5563; margin-bottom: 10px;'
-      }, dialogBody);
-
-      var chunksContainer = domConstruct.create('div', {}, dialogBody);
-
-      var chunksDialog = new Dialog({
-        title: 'Retrieved RAG Chunks',
-        style: 'width: 900px; max-width: 95vw;',
-        content: dialogBody
-      });
-
-      chunksDialog.startup();
-      chunksDialog.show();
-
-      if (triggerButton) {
-        triggerButton.disabled = true;
-        triggerButton.innerHTML = 'Loading...';
-      }
-
-      this.copilotApi.searchRagChunkReferences(filters).then(lang.hitch(this, function(response) {
-        domConstruct.empty(chunksContainer);
-        var items = response && Array.isArray(response.items) ? response.items : [];
-        var total = response && typeof response.total === 'number' ? response.total : items.length;
-        statusNode.innerHTML = 'Showing ' + items.length + ' of ' + total + ' chunk references';
-
-        if (!items.length) {
-          domConstruct.create('div', {
-            innerHTML: 'No chunks were found for this response.',
-            style: 'color: #6b7280;'
-          }, chunksContainer);
-          return;
-        }
-
-        items.forEach(lang.hitch(this, function(item, index) {
-          var chunkCard = domConstruct.create('div', {
-            style: 'border: 1px solid #e5e7eb; border-radius: 6px; padding: 10px; margin-bottom: 10px; background: #f9fafb;'
-          }, chunksContainer);
-
-          var titleParts = [];
-          titleParts.push('Chunk ' + (index + 1));
-          if (item.chunk_id) {
-            titleParts.push('ID: ' + item.chunk_id);
-          }
-          domConstruct.create('div', {
-            innerHTML: this.escapeHtml(titleParts.join(' | ')),
-            style: 'font-weight: 600; margin-bottom: 6px; color: #1f2937;'
-          }, chunkCard);
-
-          var metaParts = [];
-          if (item.doc_id) metaParts.push('Doc: ' + item.doc_id);
-          if (item.source_id) metaParts.push('Source: ' + item.source_id);
-          if (item.rag_db) metaParts.push('DB: ' + item.rag_db);
-          if (typeof item.score === 'number') metaParts.push('Score: ' + item.score);
-          if (item.message_timestamp) metaParts.push('Time: ' + new Date(item.message_timestamp).toLocaleString());
-          if (metaParts.length) {
-            domConstruct.create('div', {
-              innerHTML: this.escapeHtml(metaParts.join(' | ')),
-              style: 'font-size: 12px; color: #4b5563; margin-bottom: 8px;'
-            }, chunkCard);
-          }
-
-          if (item.content) {
-            domConstruct.create('pre', {
-              innerHTML: this.escapeHtml(item.content),
-              style: 'margin: 0; white-space: pre-wrap; word-break: break-word; max-height: 260px; overflow-y: auto; background: #fff; border: 1px solid #e5e7eb; border-radius: 4px; padding: 8px; font-size: 12px;'
-            }, chunkCard);
-          }
-        }));
-      })).catch(lang.hitch(this, function(error) {
-        statusNode.innerHTML = 'Failed to load chunks: ' + this.escapeHtml(error && error.message ? error.message : String(error));
-      })).then(function() {
-        if (triggerButton) {
-          triggerButton.disabled = false;
-          triggerButton.innerHTML = 'View Retrieved Chunks';
-        }
-      });
     },
 
     /**
@@ -1352,24 +791,28 @@ define([
      * @param {HTMLElement} messageDiv - Container to render widget into
      */
     renderFileMetadataWidget: function(messageDiv) {
-      var payload = this.message.uiPayload;
+      // Prefer card payload, fall back to legacy uiPayload
+      var cp = (this.message.card && this.message.card.card_type === 'file_metadata')
+        ? this.message.card.card_payload
+        : null;
+      var payload = this.message.uiPayload || {};
       var metadata = payload.metadata || {};
-      var filePath = payload.path || 'unknown';
-      var fileName = metadata.name || filePath.split('/').pop() || 'Unknown file';
-      var fileType = metadata.type || 'unknown';
+      var filePath = (cp && cp.path) || payload.path || 'unknown';
+      var fileName = (cp && cp.name) || metadata.name || filePath.split('/').pop() || 'Unknown file';
+      var fileType = (cp && cp.type) || metadata.type || 'unknown';
 
       var container = domConstruct.create('div', {
-        class: 'workspace-summary-card file-metadata-card'
+        class: 'chat-card chat-card--file-metadata'
       }, messageDiv);
 
       domConstruct.create('div', {
-        class: 'tool-card-status-row workspace-summary-text',
+        class: 'chat-card-header',
         innerHTML: this.escapeHtml(fileName)
       }, container);
 
       domConstruct.create('div', {
-        class: 'workspace-summary-path',
-        innerHTML: this.escapeHtml(fileType + ' • ' + filePath)
+        class: 'chat-card-detail',
+        innerHTML: this.escapeHtml(fileType + ' \u2022 ' + filePath)
       }, container);
 
       // Download link container - will be populated async
@@ -1381,7 +824,7 @@ define([
       var workspaceDirUrl = this._buildWorkspaceBrowserUrl(parentPath);
       if (workspaceDirUrl) {
         domConstruct.create('a', {
-          class: 'workspace-summary-link',
+          class: 'chat-card-link',
           href: workspaceDirUrl,
           target: '_blank',
           rel: 'noopener noreferrer',
@@ -1396,7 +839,7 @@ define([
 
       var previewToggleButton = domConstruct.create('button', {
         type: 'button',
-        class: 'workspace-summary-open-button file-preview-toggle-button',
+        class: 'chat-card-btn file-preview-toggle-button',
         innerHTML: 'Show Preview'
       }, previewContainer);
 
@@ -1484,7 +927,7 @@ define([
             var downloadUrl = urls[0];
             domConstruct.empty(downloadContainer);
             domConstruct.create('a', {
-              class: 'workspace-summary-link',
+              class: 'chat-card-link',
               href: downloadUrl,
               target: '_blank',
               download: fileName,
@@ -1494,16 +937,6 @@ define([
         }));
       }), 0);
 
-      // Selection indicator for files
-      this._renderSelectionIndicator(container, {
-        category: 'files',
-        getSelectedItems: lang.hitch(this, function() {
-          var items = this._getSelectionItemsForCategory('files');
-          return items.map(function(item) {
-            return { label: item.file_name || item.id || 'File', id: item.id || item.file_id };
-          });
-        })
-      });
     },
 
     /**
@@ -1695,135 +1128,6 @@ define([
       return container;
     },
 
-    _buildQueryLinkOpenPlan: function(opts) {
-      var options = (opts && typeof opts === 'object') ? opts : {};
-      var queryText = options.rqlReplay || null;
-      var collection = options.collection || null;
-      // Simple special handling: for genome, open GenomeList with query appended directly
-      if (collection && collection.toLowerCase() === 'genome' && queryText) {
-        var baseGenomeUrl = 'https://www.bv-brc.org/view/GenomeList/';
-        return {
-          url: baseGenomeUrl + queryText,
-          collection: collection,
-          sourceTool: options.sourceTool || null
-        };
-      }
-      // Simple special handling: for taxonomy, open TaxonList with query appended directly
-      else if (collection && collection.toLowerCase() === 'taxonomy' && queryText) {
-        var baseTaxonomyUrl = 'https://www.bv-brc.org/view/TaxonList/';
-        return {
-          url: baseTaxonomyUrl + queryText,
-          collection: collection,
-          sourceTool: options.sourceTool || null
-        };
-      }
-      // Simple special handling: for genome_feature, open FeatureList with query appended directly
-      else if (collection && collection.toLowerCase() === 'genome_feature' && queryText) {
-        var baseFeatureUrl = 'https://www.bv-brc.org/view/FeatureList/';
-        return {
-          url: baseFeatureUrl + queryText,
-          collection: collection,
-          sourceTool: options.sourceTool || null
-        };
-      }
-      else if (collection && collection.toLowerCase() === 'pathway' && queryText) {
-        var basePathwayUrl = 'https://www.bv-brc.org/view/PathwayList/';
-        return {
-          url: basePathwayUrl + queryText,
-          collection: collection,
-          sourceTool: options.sourceTool || null
-        };
-      }
-      else if (collection && collection.toLowerCase() === 'protein_structure' && queryText) {
-        var baseProteinStructureUrl = 'https://www.bv-brc.org/view/ProteinStructureList/';
-        return {
-          url: baseProteinStructureUrl + queryText,
-          collection: collection,
-          sourceTool: options.sourceTool || null
-        };
-      }
-      else if (collection && collection.toLowerCase() === 'strain' && queryText) {
-        var baseStrainUrl = 'https://www.bv-brc.org/view/StrainList/';
-        return {
-          url: baseStrainUrl + queryText,
-          collection: collection,
-          sourceTool: options.sourceTool || null
-        };
-      }
-      else if (collection && collection.toLowerCase() === 'surveillance' && queryText) {
-        var baseSurveillanceUrl = 'https://www.bv-brc.org/view/SurveillanceList/';
-        return {
-          url: baseSurveillanceUrl + queryText,
-          collection: collection,
-          sourceTool: options.sourceTool || null
-        };
-      }
-      else if (collection && collection.toLowerCase() === 'subsystem' && queryText) {
-        var baseSubsystemUrl = 'https://www.bv-brc.org/view/SubsystemList/';
-        return {
-          url: baseSubsystemUrl + queryText,
-          collection: collection,
-          sourceTool: options.sourceTool || null
-        };
-      }
-      else if (collection && collection.toLowerCase() === 'serology' && queryText) {
-        var baseSerologyUrl = 'https://www.bv-brc.org/view/SerologyList/';
-        return {
-          url: baseSerologyUrl + queryText,
-          collection: collection,
-          sourceTool: options.sourceTool || null
-        };
-      }
-      else if (collection && collection.toLowerCase() === 'epitope' && queryText) {
-        var baseEpitopeUrl = 'https://www.bv-brc.org/view/EpitopeList/';
-        return {
-          url: baseEpitopeUrl + queryText,
-          collection: collection,
-          sourceTool: options.sourceTool || null
-        };
-      }
-      else if (collection && collection.toLowerCase() === 'sp_gene' && queryText) {
-        var baseSpGeneUrl = 'https://www.bv-brc.org/view/SpecialtyGeneList/';
-        return {
-          url: baseSpGeneUrl + queryText,
-          collection: collection,
-          sourceTool: options.sourceTool || null
-        };
-      }
-      else if (collection && collection.toLowerCase() === 'sp_gene_ref' && queryText) {
-        var baseSpGeneRefUrl = 'https://www.bv-brc.org/view/SpecialtyVFGeneList/';
-        return {
-          url: baseSpGeneRefUrl + queryText,
-          collection: collection,
-          sourceTool: options.sourceTool || null
-        };
-      }
-      else if (collection && collection.toLowerCase() === 'protein_feature' && queryText) {
-        var baseDomainsMotifsUrl = 'https://www.bv-brc.org/view/DomainsAndMotifsList/';
-        return {
-          url: baseDomainsMotifsUrl + queryText,
-          collection: collection,
-          sourceTool: options.sourceTool || null
-        };
-      }
-      else {
-        var baseUrl = 'https://www.bv-brc.org/search/';
-        return {
-          url: baseUrl + queryText,
-          collection: collection,
-          sourceTool: options.sourceTool || null
-        };
-      }
-    },
-
-    _openQueryLink: function(opts) {
-      var openPlan = this._buildQueryLinkOpenPlan(opts);
-      if (!openPlan || !openPlan.url) {
-        return;
-      }
-      window.open(openPlan.url, '_blank', 'noopener,noreferrer');
-    },
-
     /**
      * Map of collection names to their Solr uniqueKey field for cursor pagination.
      * Cursor-based pagination requires sort on the collection's unique key.
@@ -1887,7 +1191,7 @@ define([
       var cancelBtn = domConstruct.create('button', {
         type: 'button',
         innerHTML: 'Cancel',
-        class: 'workspace-summary-open-button',
+        class: 'chat-card-btn',
         style: 'display: block; margin: 0 auto;'
       }, contentDiv);
 
@@ -2175,6 +1479,10 @@ define([
     },
 
     renderQueryCollectionWidget: function(messageDiv) {
+      // --- Resolve data from card payload (new) or legacy queryCollectionData ---
+      var cp = (this.message.card && this.message.card.card_type === 'data_query')
+        ? this.message.card.card_payload
+        : null;
       var data = this.message.queryCollectionData || {};
       var summary = data.summary || {};
       var params = data.queryParameters || {};
@@ -2184,60 +1492,56 @@ define([
       var toolArgs = (toolCall && toolCall.arguments_executed && typeof toolCall.arguments_executed === 'object')
         ? toolCall.arguments_executed
         : {};
+
+      // Collection: prefer card payload, then legacy sources
+      var collection = (cp && cp.collection) || params.collection || toolArgs.collection || data.collection || 'query_collection';
+      var collectionLower = collection ? collection.toLowerCase() : '';
+
+      // RQL query: prefer card payload
+      var rqlQuery = (cp && cp.rql_query) || null;
       var rqlReplay = (toolCall && toolCall.replay && toolCall.replay.rql_replay_query)
         ? toolCall.replay.rql_replay_query
-        : null;
-      var summaryText = this.message.chatSummary || 'Data query ready.';
-      if (rqlReplay == null) {
+        : rqlQuery;
+      if (rqlReplay == null && !cp) {
         return;
       }
-      var rqlQueryUrl = toolArgs.data_api_base_url ? toolArgs.data_api_base_url : "https://www.bv-brc.org/api-bulk";
-      rqlQueryUrl = rqlQueryUrl + '/' + toolArgs.collection + '/';
-      if (rqlReplay[0] === '?') {
-        rqlQueryUrl = rqlQueryUrl + rqlReplay;
-      } else {
-        rqlQueryUrl = rqlQueryUrl + "?" + rqlReplay;
+
+      // Data API URL and full query URL
+      var dataApiUrl = (cp && cp.data_api_url) || toolArgs.data_api_base_url || 'https://www.bv-brc.org/api';
+      var rqlQueryUrl = (cp && cp.rql_query_url) || null;
+      if (!rqlQueryUrl && rqlReplay && collection) {
+        rqlQueryUrl = dataApiUrl + '/' + collection + '/';
+        if (rqlReplay[0] === '?') {
+          rqlQueryUrl = rqlQueryUrl + rqlReplay;
+        } else {
+          rqlQueryUrl = rqlQueryUrl + '?' + rqlReplay;
+        }
       }
-      var inferCollectionFromUrl = function(rqlUrl) {
-        if (!rqlUrl || typeof rqlUrl !== 'string') return null;
-        var withoutQuery = rqlUrl.split('?')[0];
-        var parts = withoutQuery.split('/').filter(function(part) { return !!part; });
-        return parts.length ? parts[parts.length - 1] : null;
-      };
-      var collection = params.collection ||
-        toolArgs.collection ||
-        data.collection ||
-        inferCollectionFromUrl(rqlQueryUrl) ||
-        'query_collection';
+
+      // Website URL: prefer card payload
+      var websiteUrl = (cp && cp.website_url) || null;
+
+      // Count
+      var numFound = (cp && typeof cp.total_count === 'number') ? cp.total_count : (typeof data.numFound === 'number' ? data.numFound : null);
+
+      // Capabilities from card payload
+      var canOpenInChat = cp ? !!cp.can_open_in_chat : ['genome', 'taxonomy', 'genome_feature'].indexOf(collectionLower) !== -1;
+      var supportsFasta = cp ? !!cp.supports_fasta : collectionLower === 'genome_feature';
 
       var rows = Array.isArray(data.resultRows) ? data.resultRows : [];
-      var rowCount = summary.total !== undefined && summary.total !== null
-        ? summary.total
-        : rows.length;
-      var collectionLabel = (collection || '').replace(/_/g, ' ');
-      var detailLine = collectionLabel;
-
-      // Snapshot metadata
-      var numFound = typeof data.numFound === 'number' ? data.numFound : null;
-      var isSnapshot = data.is_snapshot === true;
-      var snapshotLimit = typeof data.snapshot_limit === 'number' ? data.snapshot_limit : null;
-      var downloadUrl = data.download_url || null;
-      var displayCount = rows.length || rowCount;
+      var collectionLabel = (cp && cp.display_label) || (collection || '').replace(/_/g, ' ');
 
       var payload = {
-        queryParameters: params,
+        queryParameters: (cp && cp.replay_args) || params,
         collection: collection,
         rqlQueryUrl: rqlQueryUrl,
         rqlReplay: rqlReplay,
         summary: summary,
         rows: rows,
         numFound: numFound,
-        is_snapshot: isSnapshot,
-        snapshot_limit: snapshotLimit,
-        download_url: downloadUrl,
         // Solr query metadata for cursor-based group creation fetch
-        solrQuery: toolArgs.q || null,
-        dataApiBaseUrl: toolArgs.data_api_base_url || null
+        solrQuery: (cp && cp.replay_args && cp.replay_args.q) || toolArgs.q || null,
+        dataApiBaseUrl: dataApiUrl
       };
 
       // Build count-aware status text
@@ -2249,54 +1553,47 @@ define([
       }
 
       var container = domConstruct.create('div', {
-        class: 'workspace-summary-card'
+        class: 'chat-card chat-card--data-query'
       }, messageDiv);
 
       domConstruct.create('div', {
-        class: 'tool-card-status-row workspace-summary-text',
+        class: 'chat-card-header',
         innerHTML: statusText
       }, container);
 
       domConstruct.create('div', {
-        class: 'workspace-summary-path',
-        innerHTML: this.escapeHtml(detailLine)
+        class: 'chat-card-detail',
+        innerHTML: this.escapeHtml(collectionLabel)
       }, container);
 
-      var data_tab_list = ['genome', 'taxonomy', 'genome_feature'];
-      if (toolArgs.collection && data_tab_list.includes(toolArgs.collection.toLowerCase())) {
+      if (canOpenInChat) {
         var dataTabButton = domConstruct.create('button', {
           type: 'button',
-          class: 'workspace-summary-open-button',
+          class: 'chat-card-btn',
           innerHTML: 'Open in Chat'
         }, container);
         on(dataTabButton, 'click', lang.hitch(this, function() {
           topic.publish('CopilotDataBrowseOpen', {
             uiPayload: payload,
             tool_call: toolCall,
-            chatSummary: summaryText,
+            chatSummary: statusText,
             uiAction: 'open_data_tab'
           });
         }));
       }
 
-      if (rqlQueryUrl) {
+      // "Open in Website" link
+      if (websiteUrl) {
         var queryLink = domConstruct.create('a', {
-          class: 'workspace-summary-link',
-          href: '#',
+          class: 'chat-card-link',
+          href: websiteUrl,
+          target: '_blank',
+          rel: 'noopener noreferrer',
           innerHTML: 'Open in Website'
         }, container);
-        on(queryLink, 'click', lang.hitch(this, function(evt) {
-          evt.preventDefault();
-          this._openQueryLink({
-            rqlQueryUrl: rqlQueryUrl,
-            rqlReplay: rqlReplay,
-            collection: collection,
-            sourceTool: this.message && this.message.source_tool ? this.message.source_tool : null
-          });
-        }));
       }
 
-      if (collection && collection.toLowerCase() === 'genome_feature' && rqlQueryUrl) {
+      if (supportsFasta && rqlQueryUrl) {
         // Build the RQL query for FASTA downloads.
         // rqlReplay comes from the MCP server already URL-encoded via Python's
         // quote().  We decode it to raw RQL, then strip double quotes from
@@ -2330,7 +1627,7 @@ define([
 
         var createFastaLink = lang.hitch(this, function(linkLabel, acceptType) {
           var fastaLink = domConstruct.create('a', {
-            class: 'workspace-summary-link',
+            class: 'chat-card-link',
             href: '#',
             innerHTML: linkLabel
           }, container);
@@ -2375,7 +1672,7 @@ define([
           ? 'Download all ' + numFound.toLocaleString() + ' results as TSV'
           : 'Download Full Dataset (TSV)';
         var tsvLink = domConstruct.create('a', {
-          class: 'workspace-summary-link',
+          class: 'chat-card-link',
           href: '#',
           innerHTML: tsvLabel
         }, container);
@@ -2389,9 +1686,9 @@ define([
         });
       }
 
-      // Group creation buttons - shown for genome and genome_feature collections
-      // when the user is authenticated
-      if (window.App && window.App.user) {
+      // Group creation buttons - hidden; a separate mechanism handles group
+      // creation now.  Code is preserved for potential future re-enablement.
+      if (false && window.App && window.App.user) {
         var normalizedCollection = collection ? collection.toLowerCase() : '';
         var showGenomeGroup = (normalizedCollection === 'genome' || normalizedCollection === 'genome_feature');
         var showFeatureGroup = (normalizedCollection === 'genome_feature');
@@ -2404,7 +1701,7 @@ define([
           if (showFeatureGroup) {
             var featureGroupBtn = domConstruct.create('button', {
               type: 'button',
-              class: 'workspace-summary-open-button',
+              class: 'chat-card-btn',
               innerHTML: '<i class="fa icon-object-group" style="margin-right: 4px;"></i>Create Feature Group',
               style: 'margin-right: 8px;'
             }, groupActionsDiv);
@@ -2416,7 +1713,7 @@ define([
           if (showGenomeGroup) {
             var genomeGroupBtn = domConstruct.create('button', {
               type: 'button',
-              class: 'workspace-summary-open-button',
+              class: 'chat-card-btn',
               innerHTML: '<i class="fa icon-object-group" style="margin-right: 4px;"></i>Create Genome Group'
             }, groupActionsDiv);
             on(genomeGroupBtn, 'click', lang.hitch(this, function() {
@@ -2426,16 +1723,6 @@ define([
         }
       }
 
-      // Selection indicator for files (query results become session files)
-      this._renderSelectionIndicator(container, {
-        category: 'files',
-        getSelectedItems: lang.hitch(this, function() {
-          var items = this._getSelectionItemsForCategory('files');
-          return items.map(function(item) {
-            return { label: item.file_name || item.id || 'File', id: item.id || item.file_id };
-          });
-        })
-      });
     },
 
     /**
@@ -2475,10 +1762,9 @@ define([
      */
     _renderWorkflowPersistWarning: function(messageDiv) {
       domConstruct.create('div', {
+        class: 'chat-card chat-card--workflow-error',
         innerHTML: 'Workflow planning completed but failed to register with the '
-                 + 'engine. Please try again.',
-        style: 'padding: 10px; color: #b45309; background: #fffbeb; '
-             + 'border: 1px solid #fbbf24; border-radius: 4px; font-size: 13px;'
+                 + 'engine. Please try again.'
       }, messageDiv);
     },
 
@@ -2488,27 +1774,32 @@ define([
      * @param {HTMLElement} messageDiv - Container to render into
      */
     renderWorkflowCard: function(messageDiv) {
-      var wf = this.message.workflow;
-      var workflowId = wf.workflow_id;
-      var workflowName = wf.workflow_name || 'Workflow';
-      var stepCount = wf.step_count || null;
-      var currentStatus = wf.status || 'planned';
+      // Prefer card payload for data, fall back to legacy message.workflow
+      var cp = (this.message.card && this.message.card.card_type === 'workflow')
+        ? this.message.card.card_payload
+        : null;
+      var wf = this.message.workflow || {};
+      var workflowId = (cp && cp.workflow_id) || wf.workflow_id;
+      var workflowName = (cp && cp.workflow_name) || wf.workflow_name || 'Workflow';
+      var stepCount = (cp && cp.step_count) || wf.step_count || null;
+      var currentStatus = (cp && cp.status) || wf.status || 'planned';
       var self = this;
 
       // -- Card container --
       var card = domConstruct.create('div', {
-        class: 'copilot-service-card workflow-manifest-card'
+        class: 'chat-card chat-card--workflow'
       }, messageDiv);
 
       // -- Header row: name + status badge --
       var headerRow = domConstruct.create('div', {
-        class: 'copilot-service-card-actions',
+        class: 'chat-card-actions',
         style: 'display: flex; align-items: center; justify-content: space-between;'
       }, card);
 
       domConstruct.create('div', {
-        class: 'copilot-service-card-title',
-        innerHTML: this.escapeHtml(workflowName)
+        class: 'chat-card-header',
+        innerHTML: this.escapeHtml(workflowName),
+        style: 'margin-bottom: 0;'
       }, headerRow);
 
       var statusBadge = domConstruct.create('span', {
@@ -2527,7 +1818,8 @@ define([
 
       // -- Actions row --
       var actionsRow = domConstruct.create('div', {
-        class: 'copilot-service-card-actions'
+        class: 'chat-card-actions',
+        style: 'display: flex; align-items: center; gap: 8px; margin-top: 12px; padding-top: 12px; border-top: 1px solid #e5e7eb;'
       }, card);
 
       // Review button
@@ -2650,19 +1942,7 @@ define([
         });
       }
 
-      // Selection indicator for workflows
-      this._renderSelectionIndicator(card, {
-        category: 'workflows',
-        getSelectedItems: lang.hitch(this, function() {
-          var items = this._getSelectionItemsForCategory('workflows');
-          return items.map(function(item) {
-            return { label: item.workflow_name || item.workflow_id || item.id || 'Workflow', id: item.workflow_id || item.id };
-          });
-        })
-      });
     },
-
-
 
     /**
      * Shows a direct form modal for single-step workflows with Dojo form wrappers.

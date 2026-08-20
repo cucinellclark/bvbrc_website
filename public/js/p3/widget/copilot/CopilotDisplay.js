@@ -2154,7 +2154,7 @@ define([
           ? 'Download all ' + numFound.toLocaleString() + ' results as TSV'
           : 'Download Full Dataset (TSV)';
         var tsvLink = domConstruct.create('a', {
-          class: 'workspace-summary-link',
+          class: 'chat-card-link',
           href: '#',
           innerHTML: tsvLabel,
           style: 'display: inline-block;'
@@ -2172,7 +2172,7 @@ define([
         var loadMoreButton = domConstruct.create('button', {
           type: 'button',
           innerHTML: payload.isLoadingMore ? 'Loading...' : 'Load Next 100 Rows',
-          class: 'workspace-summary-open-button',
+          class: 'chat-card-btn',
           disabled: !!payload.isLoadingMore
         }, actionsNode);
         on(loadMoreButton, 'click', lang.hitch(this, this._loadMoreDataBrowseRows));
