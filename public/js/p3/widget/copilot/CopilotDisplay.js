@@ -28,15 +28,12 @@ define([
   'markdown-it-link-attributes/dist/markdown-it-link-attributes.min', // Plugin to add attributes to links
   './ChatMessage', // Custom message display widget
   './data/SuggestedQuestions', // Suggested questions data module
-  './WorkspaceExplorerAdapter',
-  './JobsExplorerAdapter',
-  './DataExplorerAdapter',
   './SessionFilesExplorerAdapter',
   './WorkflowsExplorerAdapter',
   './WorkflowEngine',
   './PlanTracker'
 ], function (
-  declare, ContentPane, domConstruct, on, topic, lang, domClass, domStyle, request, markdownit, linkAttributes, ChatMessage, SuggestedQuestions, WorkspaceExplorerAdapter, JobsExplorerAdapter, DataExplorerAdapter, SessionFilesExplorerAdapter, WorkflowsExplorerAdapter, WorkflowEngine, PlanTracker
+  declare, ContentPane, domConstruct, on, topic, lang, domClass, domStyle, request, markdownit, linkAttributes, ChatMessage, SuggestedQuestions, SessionFilesExplorerAdapter, WorkflowsExplorerAdapter, WorkflowEngine, PlanTracker
 ) {
 
   /**
@@ -97,22 +94,6 @@ define([
     sessionWorkflowsSelectionItems: [],
     workflowsExplorerWidget: null,
     onWorkflowsSelectionChanged: null,
-    sessionWorkspaceBrowse: null,
-    sessionWorkspaceSelectionItems: [],
-    workspaceExplorerWidget: null,
-    sessionJobsBrowse: null,
-    sessionJobsSelectionItems: [],
-    jobsExplorerWidget: null,
-    sessionDataBrowse: null,
-    dataExplorerWidget: null,
-    // Per-collection column allowlist for Data tab grid rendering.
-    // Adjust this map to control visible columns by collection.
-    dataCollectionColumnWhitelist: {
-      genome: ['genome_id', 'genome_length', 'genome_name'],
-      taxonomy: ['taxon_rank', 'taxon_id', 'taxon_name']
-    },
-    onWorkspaceSelectionChanged: null,
-    onJobsSelectionChanged: null,
     onImageContextChanged: null,
     onContextClearAll: null,
     sessionImageContextItems: [],
@@ -200,22 +181,6 @@ define([
           style: 'display:none;'
         }, this.panelContainer);
 
-        // Create workspace panel container
-        this.workspaceContainer = domConstruct.create('div', {
-          class: 'copilot-workspace-container',
-          style: 'display:none;'
-        }, this.panelContainer);
-
-        this.jobsContainer = domConstruct.create('div', {
-          class: 'copilot-jobs-container',
-          style: 'display:none;'
-        }, this.panelContainer);
-
-        this.dataContainer = domConstruct.create('div', {
-          class: 'copilot-data-container',
-          style: 'display:none;'
-        }, this.panelContainer);
-
         // Apply initial responsive padding
         this._updateResponsivePadding();
 
@@ -239,9 +204,6 @@ define([
         this._renderFilesPanel();
         this._renderImagesPanel();
         this._renderWorkflowsPanel();
-        this._renderWorkspacePanel();
-        this._renderJobsPanel();
-        this._renderDataPanel();
 
         // Initialize markdown parser with link attributes plugin
         this.md = markdownit().use(linkAttributes, {
@@ -255,18 +217,6 @@ define([
         topic.subscribe('RefreshSessionDisplay', lang.hitch(this, 'showMessages'));
         topic.subscribe('CopilotApiError', lang.hitch(this, 'onQueryError'));
         topic.subscribe('chatTextSizeChanged', lang.hitch(this, 'setFontSize'));
-        topic.subscribe('CopilotWorkspaceBrowseOpen', lang.hitch(this, function(data) {
-          this.setActivePanel('workspace');
-          this._openWorkspaceBrowseData(data || null);
-        }));
-        topic.subscribe('CopilotJobsBrowseOpen', lang.hitch(this, function(data) {
-          this.setActivePanel('jobs');
-          this._openJobsBrowseData(data || null);
-        }));
-        topic.subscribe('CopilotDataBrowseOpen', lang.hitch(this, function(data) {
-          this.setActivePanel('data');
-          this._openDataBrowseData(data || null);
-        }));
         topic.subscribe('noJobDataError', lang.hitch(this, function(error) {
             error.message = 'No job data found.\n\n' + error.message;
             this.onQueryError(error);
@@ -287,458 +237,6 @@ define([
       return topResult;
     },
 
-    _openWorkspaceBrowseData: function(data) {
-      var payload = data && data.uiPayload ? data.uiPayload : null;
-
-      this.setSessionWorkspaceBrowseData({
-        chatSummary: data && data.chatSummary ? data.chatSummary : 'Loading workspace results...',
-        uiAction: data && data.uiAction ? data.uiAction : 'open_workspace_tab',
-        tool_call: payload
-      });
-
-      this.copilotApi.replayToolCall(payload, this.sessionId).then(lang.hitch(this, function(replayResponse) {
-        var replayPayload = this._unwrapReplayResultPayload(replayResponse) || {};
-        var items = Array.isArray(replayPayload.items)
-          ? replayPayload.items
-          : (replayPayload.ui_grid && Array.isArray(replayPayload.ui_grid.items) ? replayPayload.ui_grid.items : []);
-        var resultType = replayPayload.result_type || 'list_result';
-        var countValue = typeof replayPayload.count === 'number'
-          ? replayPayload.count
-          : items.length;
-        var uiPayload = {
-          tool_name: replayPayload.tool_name || 'workspace_browse_tool',
-          result_type: resultType,
-          count: countValue,
-          path: replayPayload.path || null,
-          source: replayPayload.source || null,
-          items: items
-        };
-        this.setSessionWorkspaceBrowseData({
-          uiPayload: uiPayload,
-          tool_call: (replayResponse && replayResponse.call) ? replayResponse.call : toolCall,
-          chatSummary: data && data.chatSummary ? data.chatSummary : ('Found ' + countValue + ' ' + (countValue === 1 ? 'result' : 'results') + ' in ' + (uiPayload.path || 'unknown path')),
-          uiAction: data && data.uiAction ? data.uiAction : 'open_workspace_tab'
-        });
-      })).catch(lang.hitch(this, function(error) {
-        this.onQueryError({
-          message: 'Failed to load workspace tab data',
-          details: error && error.message ? error.message : String(error)
-        });
-      }));
-    },
-
-    _openJobsBrowseData: function(data) {
-      var payload = data && data.uiPayload ? data.uiPayload : null;
-      if (payload && Array.isArray(payload.jobs)) {
-        this.setSessionJobsBrowseData(data);
-        return;
-      }
-
-      var toolCall = data && data.tool_call && typeof data.tool_call === 'object' ? data.tool_call : null;
-      if (!toolCall || !this.copilotApi || typeof this.copilotApi.replayToolCall !== 'function') {
-        this.setSessionJobsBrowseData(data || null);
-        return;
-      }
-
-      this.setSessionJobsBrowseData({
-        chatSummary: data && data.chatSummary ? data.chatSummary : 'Loading job results...',
-        uiAction: data && data.uiAction ? data.uiAction : 'open_jobs_tab',
-        tool_call: toolCall
-      });
-
-      this.copilotApi.replayToolCall(toolCall, this.sessionId).then(lang.hitch(this, function(replayResponse) {
-        var replayPayload = this._unwrapReplayResultPayload(replayResponse) || {};
-        var jobs = Array.isArray(replayPayload.items)
-          ? replayPayload.items
-          : (replayPayload.ui_grid && Array.isArray(replayPayload.ui_grid.items) ? replayPayload.ui_grid.items : []);
-        var uiPayload = {
-          jobs: jobs,
-          count: typeof replayPayload.count === 'number' ? replayPayload.count : jobs.length,
-          total: typeof replayPayload.total === 'number' ? replayPayload.total : jobs.length,
-          sort_by: replayPayload.sort_by || null,
-          sort_dir: replayPayload.sort_dir || null,
-          status: replayPayload.status || null,
-          service: replayPayload.service || replayPayload.application_name || null
-        };
-        this.setSessionJobsBrowseData({
-          uiPayload: uiPayload,
-          tool_call: (replayResponse && replayResponse.call) ? replayResponse.call : toolCall,
-          chatSummary: data && data.chatSummary ? data.chatSummary : ('Found ' + uiPayload.count + ' ' + (uiPayload.count === 1 ? 'job' : 'jobs')),
-          uiAction: data && data.uiAction ? data.uiAction : 'open_jobs_tab'
-        });
-      })).catch(lang.hitch(this, function(error) {
-        this.onQueryError({
-          message: 'Failed to load jobs tab data',
-          details: error && error.message ? error.message : String(error)
-        });
-      }));
-    },
-
-    _resolveDataRows: function(payload) {
-      if (Array.isArray(payload)) {
-        return payload;
-      }
-      if (!payload || typeof payload !== 'object') {
-        return [];
-      }
-      if (payload.response && Array.isArray(payload.response.docs)) {
-        return payload.response.docs;
-      }
-      if (Array.isArray(payload.docs)) {
-        return payload.docs;
-      }
-      if (Array.isArray(payload.results)) {
-        return payload.results;
-      }
-      if (typeof payload.tsv === 'string' && payload.tsv.trim().length > 0) {
-        return this._parseTsvRows(payload.tsv);
-      }
-      if (Array.isArray(payload.items)) {
-        return payload.items;
-      }
-      if (payload.ui_grid && Array.isArray(payload.ui_grid.items)) {
-        return payload.ui_grid.items;
-      }
-      return [];
-    },
-
-    _loadDataRowsFromRqlReplay: function(rqlReplay, rqlQueryUrl, requestArgs) {
-      var hasReplayQuery = !!(
-        rqlReplay &&
-        typeof rqlReplay === 'object' &&
-        rqlReplay.data_api_url &&
-        typeof rqlReplay.rql_query === 'string' &&
-        rqlReplay.rql_query.trim().length > 0
-      );
-      var resolvedQueryUrl = rqlQueryUrl ||
-        (rqlReplay && typeof rqlReplay === 'object' ? rqlReplay.data_api_url : null) ||
-        null;
-      if (!hasReplayQuery && !resolvedQueryUrl) {
-        return Promise.reject(new Error('Missing query metadata for data tab load'));
-      }
-
-      var headers = lang.mixin({}, (rqlReplay && rqlReplay.headers) || {});
-      if (!headers.Accept) {
-        headers.Accept = 'application/solr+json';
-      }
-      if (!headers['Content-Type']) {
-        headers['Content-Type'] = 'application/rqlquery+x-www-form-urlencoded';
-      }
-      if (!headers['X-Requested-With']) {
-        headers['X-Requested-With'] = null;
-      }
-      if (window.App && window.App.authorizationToken && !headers.Authorization) {
-        headers.Authorization = window.App.authorizationToken;
-      }
-
-      var maxRows = (requestArgs && typeof requestArgs.limit === 'number' && requestArgs.limit > 0)
-        ? requestArgs.limit
-        : 100;
-      var ensureLimitedQuery = function(queryText) {
-        if (typeof queryText !== 'string') {
-          return '';
-        }
-        var trimmed = queryText.trim();
-        if (!trimmed) {
-          return '';
-        }
-        if (/(^|&)limit\(/i.test(trimmed)) {
-          return trimmed;
-        }
-        return trimmed + '&limit(' + maxRows + ')';
-      };
-
-      var normalizePayload = lang.hitch(this, function(rawResponse) {
-        var collection = (requestArgs && requestArgs.collection) ||
-          this._extractCollectionFromRqlUrl(resolvedQueryUrl) ||
-          null;
-        var rows = this._resolveDataRows(rawResponse);
-        var responseObj = (rawResponse && rawResponse.response && typeof rawResponse.response === 'object')
-          ? rawResponse.response
-          : {};
-        var total = typeof rawResponse.numFound === 'number'
-          ? rawResponse.numFound
-          : (typeof rawResponse.total === 'number'
-            ? rawResponse.total
-            : (typeof responseObj.numFound === 'number' ? responseObj.numFound : rows.length));
-        return {
-          rows: rows,
-          count: rows.length,
-          total: total,
-          nextCursorId: null,
-          collection: collection,
-          queryParameters: requestArgs || null,
-          rqlQueryUrl: resolvedQueryUrl,
-          rqlReplay: rqlReplay || null
-        };
-      });
-
-      var buildRqlGetUrl = function(baseUrl, queryText) {
-        if (!baseUrl || typeof baseUrl !== 'string') {
-          return null;
-        }
-        var trimmedBase = baseUrl.trim();
-        if (!trimmedBase) {
-          return null;
-        }
-        if (!queryText || typeof queryText !== 'string' || !queryText.trim()) {
-          return trimmedBase;
-        }
-        var baseWithoutQuery = trimmedBase.split('?')[0];
-        var encodedQuery = encodeURI(queryText.trim());
-        return baseWithoutQuery + '?' + encodedQuery;
-      };
-
-      var requestUrl = hasReplayQuery
-        ? buildRqlGetUrl((rqlReplay && rqlReplay.data_api_url) || resolvedQueryUrl, ensureLimitedQuery(rqlReplay.rql_query))
-        : resolvedQueryUrl;
-
-      return request.get(requestUrl, {
-        headers: headers,
-        handleAs: 'json'
-      }).then(normalizePayload);
-    },
-
-    _parseTsvRows: function(tsvText) {
-      if (typeof tsvText !== 'string' || tsvText.trim().length === 0) {
-        return [];
-      }
-      var lines = tsvText.split(/\r?\n/).filter(function(line) {
-        return line && line.trim().length > 0;
-      });
-      if (!lines.length) {
-        return [];
-      }
-      var headers = lines[0].split('\t');
-      if (!headers.length) {
-        return [];
-      }
-      return lines.slice(1).map(function(line) {
-        var cells = line.split('\t');
-        var row = {};
-        headers.forEach(function(header, idx) {
-          row[header] = idx < cells.length ? cells[idx] : '';
-        });
-        return row;
-      });
-    },
-
-    _isBvbrcSearchDataTool: function(toolId) {
-      if (!toolId || typeof toolId !== 'string') {
-        return false;
-      }
-      return toolId === 'bvbrc_server.bvbrc_search_data' || toolId.indexOf('bvbrc_search_data') !== -1;
-    },
-
-    _extractCollectionFromRqlUrl: function(rqlUrl) {
-      if (!rqlUrl || typeof rqlUrl !== 'string') {
-        return null;
-      }
-      var trimmed = rqlUrl.trim();
-      if (!trimmed) {
-        return null;
-      }
-      var withoutQuery = trimmed.split('?')[0];
-      var parts = withoutQuery.split('/').filter(function(part) { return !!part; });
-      if (!parts.length) {
-        return null;
-      }
-      return parts[parts.length - 1] || null;
-    },
-
-    _getCollectionColumnWhitelist: function(collection) {
-      if (!collection || typeof collection !== 'string') {
-        return null;
-      }
-      var normalizedCollection = collection.toLowerCase();
-      var map = this.dataCollectionColumnWhitelist || {};
-      var columns = map[normalizedCollection];
-      return Array.isArray(columns) && columns.length > 0 ? columns : null;
-    },
-
-    _buildDataReplayParameters: function(baseArgs, cursorId, maxRows, toolCall) {
-      var args = lang.mixin({}, (baseArgs && typeof baseArgs === 'object') ? baseArgs : {});
-      var toolId = toolCall && typeof toolCall === 'object' ? (toolCall.tool || toolCall.tool_id) : null;
-
-      args.countOnly = false;
-
-      // Keep replay arguments aligned with the tool schema:
-      // bvbrc_search_data supports limit but not cursorId/batchSize/num_results.
-      if (this._isBvbrcSearchDataTool(toolId)) {
-        if (typeof maxRows === 'number' && maxRows > 0) {
-          args.limit = maxRows;
-        }
-        delete args.cursorId;
-        delete args.batchSize;
-        delete args.num_results;
-      } else {
-        args.cursorId = cursorId || '*';
-        args.batchSize = maxRows;
-        args.num_results = maxRows;
-      }
-
-      return args;
-    },
-
-    _cloneToolCallWithArgs: function(toolCall, args) {
-      if (!toolCall || typeof toolCall !== 'object') {
-        return null;
-      }
-      var cloned = lang.mixin({}, toolCall);
-      cloned.arguments_executed = lang.mixin({}, args || {});
-      return cloned;
-    },
-
-    _buildDataBrowseUiPayload: function(replayPayload, requestArgs) {
-      var sourcePayload = replayPayload && typeof replayPayload === 'object' ? replayPayload : {};
-      var sourceArgs = requestArgs && typeof requestArgs === 'object' ? requestArgs : {};
-      var inferredCollection = sourcePayload.collection || sourceArgs.collection || null;
-      var rows = this._resolveDataRows(sourcePayload);
-      return {
-        rows: rows,
-        count: typeof sourcePayload.count === 'number' ? sourcePayload.count : rows.length,
-        total: typeof sourcePayload.numFound === 'number'
-          ? sourcePayload.numFound
-          : (typeof sourcePayload.total === 'number' ? sourcePayload.total : rows.length),
-        nextCursorId: sourcePayload.nextCursorId || null,
-        collection: inferredCollection,
-        queryParameters: sourcePayload.queryParameters || sourcePayload.plan || sourceArgs || null,
-        rqlQueryUrl: sourcePayload.rqlQueryUrl || sourcePayload.rql_query_url || sourcePayload.query_url || sourceArgs.rqlQueryUrl || sourceArgs.rql_query_url || sourceArgs.query_url || null,
-        // Snapshot metadata passthrough
-        numFound: typeof sourcePayload.numFound === 'number' ? sourcePayload.numFound : null,
-        is_snapshot: sourcePayload.is_snapshot === true,
-        snapshot_limit: typeof sourcePayload.snapshot_limit === 'number' ? sourcePayload.snapshot_limit : null,
-        download_url: sourcePayload.download_url || null
-      };
-    },
-
-    _openDataBrowseData: function(data) {
-      var payload = data && data.uiPayload ? data.uiPayload : null;
-      if (payload && Array.isArray(payload.rows) && payload.rows.length > 0) {
-        this.setSessionDataBrowseData(data);
-        return;
-      }
-
-      var toolCall = data && data.tool_call && typeof data.tool_call === 'object' ? data.tool_call : null;
-      var baseArgs = (toolCall.arguments_executed && typeof toolCall.arguments_executed === 'object')
-        ? toolCall.arguments_executed
-        : {};
-
-      // Extract rql_replay data if available
-      var rqlReplay = (toolCall.rql_replay && typeof toolCall.rql_replay === 'object')
-        ? toolCall.rql_replay
-        : null;
-      var rqlQueryUrl = (payload && payload.rqlQueryUrl) ||
-        baseArgs.rqlQueryUrl ||
-        baseArgs.rql_query_url ||
-        baseArgs.query_url ||
-        (rqlReplay && rqlReplay.data_api_url) ||
-        null;
-
-      var inferredCollectionFromUrl = this._extractCollectionFromRqlUrl(rqlQueryUrl);
-
-      var replayArgs = this._buildDataReplayParameters(baseArgs, '*', 100, toolCall);
-      if (!replayArgs.collection && inferredCollectionFromUrl) {
-        replayArgs.collection = inferredCollectionFromUrl;
-      }
-
-      this.setSessionDataBrowseData({
-        chatSummary: data && data.chatSummary ? data.chatSummary : 'Loading data rows...',
-        uiAction: data && data.uiAction ? data.uiAction : 'open_data_tab',
-        tool_call: toolCall,
-        uiPayload: {
-          rows: [],
-          collection: replayArgs.collection || inferredCollectionFromUrl || null,
-          queryParameters: replayArgs,
-          rqlQueryUrl: rqlQueryUrl,
-          rqlReplay: rqlReplay,
-          count: 0,
-          total: 0,
-          nextCursorId: null,
-          isLoadingMore: true
-        }
-      });
-
-      // Preserve snapshot metadata from the original chat card payload so the
-      // data panel can display total counts and download links after replay.
-      var originalSnapshotMeta = {};
-      if (payload) {
-        if (typeof payload.numFound === 'number') originalSnapshotMeta.numFound = payload.numFound;
-        if (payload.is_snapshot === true) originalSnapshotMeta.is_snapshot = true;
-        if (typeof payload.snapshot_limit === 'number') originalSnapshotMeta.snapshot_limit = payload.snapshot_limit;
-        if (payload.download_url) originalSnapshotMeta.download_url = payload.download_url;
-      }
-
-      this._loadDataRowsFromRqlReplay(rqlReplay, rqlQueryUrl, replayArgs).then(lang.hitch(this, function(nextUiPayload) {
-        // Merge snapshot metadata onto the replay-loaded payload
-        if (originalSnapshotMeta.is_snapshot) {
-          nextUiPayload.numFound = originalSnapshotMeta.numFound || nextUiPayload.total;
-          nextUiPayload.is_snapshot = true;
-          nextUiPayload.snapshot_limit = originalSnapshotMeta.snapshot_limit || null;
-          nextUiPayload.download_url = originalSnapshotMeta.download_url || null;
-        }
-        this.setSessionDataBrowseData({
-          uiPayload: nextUiPayload,
-          tool_call: toolCall,
-          chatSummary: data && data.chatSummary ? data.chatSummary : ('Loaded ' + nextUiPayload.rows.length + ' rows'),
-          uiAction: data && data.uiAction ? data.uiAction : 'open_data_tab'
-        });
-      })).catch(lang.hitch(this, function(error) {
-        this.onQueryError({
-          message: 'Failed to load data tab rows',
-          details: error && error.message ? error.message : String(error)
-        });
-      }));
-    },
-
-    _loadMoreDataBrowseRows: function() {
-      if (!this.sessionDataBrowse || !this.sessionDataBrowse.uiPayload) {
-        return;
-      }
-      var current = this.sessionDataBrowse;
-      var payload = current.uiPayload;
-      var nextCursor = payload.nextCursorId;
-      var toolCall = current.tool_call;
-      if (!nextCursor || !toolCall || !this.copilotApi || typeof this.copilotApi.replayToolCall !== 'function') {
-        return;
-      }
-
-      payload.isLoadingMore = true;
-      this._renderDataPanel();
-
-      var baseArgs = (toolCall.arguments_executed && typeof toolCall.arguments_executed === 'object')
-        ? toolCall.arguments_executed
-        : {};
-      if (this._isBvbrcSearchDataTool(toolCall.tool || toolCall.tool_id)) {
-        payload.isLoadingMore = false;
-        this._renderDataPanel();
-        return;
-      }
-      var replayArgs = this._buildDataReplayParameters(baseArgs, nextCursor, 100, toolCall);
-      var replayCall = this._cloneToolCallWithArgs(toolCall, replayArgs);
-      this.copilotApi.replayToolCall(replayCall, this.sessionId).then(lang.hitch(this, function(replayResponse) {
-        var replayPayload = this._unwrapReplayResultPayload(replayResponse) || {};
-        var nextUiPayload = this._buildDataBrowseUiPayload(replayPayload, replayArgs);
-        var appendedRows = (payload.rows || []).concat(nextUiPayload.rows || []);
-        this.setSessionDataBrowseData({
-          uiPayload: lang.mixin({}, payload, nextUiPayload, {
-            rows: appendedRows,
-            isLoadingMore: false
-          }),
-          tool_call: toolCall,
-          chatSummary: current.chatSummary || ('Loaded ' + appendedRows.length + ' rows'),
-          uiAction: current.uiAction || 'open_data_tab'
-        });
-      })).catch(lang.hitch(this, function(error) {
-        payload.isLoadingMore = false;
-        this._renderDataPanel();
-        this.onQueryError({
-          message: 'Failed to load more data rows',
-          details: error && error.message ? error.message : String(error)
-        });
-      }));
-    },
-
     setActivePanel: function(panel) {
       if (panel === 'files') {
         this.activePanel = 'files';
@@ -746,12 +244,6 @@ define([
         this.activePanel = 'images';
       } else if (panel === 'workflows') {
         this.activePanel = 'workflows';
-      } else if (panel === 'workspace') {
-        this.activePanel = 'workspace';
-      } else if (panel === 'jobs') {
-        this.activePanel = 'jobs';
-      } else if (panel === 'data') {
-        this.activePanel = 'data';
       } else {
         this.activePanel = 'messages';
       }
@@ -760,26 +252,12 @@ define([
       domStyle.set(this.filesContainer, 'display', this.activePanel === 'files' ? 'block' : 'none');
       domStyle.set(this.imagesContainer, 'display', this.activePanel === 'images' ? 'block' : 'none');
       domStyle.set(this.workflowsContainer, 'display', this.activePanel === 'workflows' ? 'block' : 'none');
-      domStyle.set(this.workspaceContainer, 'display', this.activePanel === 'workspace' ? 'block' : 'none');
-      domStyle.set(this.jobsContainer, 'display', this.activePanel === 'jobs' ? 'block' : 'none');
-      domStyle.set(this.dataContainer, 'display', this.activePanel === 'data' ? 'block' : 'none');
 
-      // dgrid can mis-measure header/body when created while hidden.
-      // Ensure workspace grid recalculates layout when tab becomes visible.
-      if (this.activePanel === 'workspace' && this.workspaceExplorerWidget && typeof this.workspaceExplorerWidget.resize === 'function') {
-        this.workspaceExplorerWidget.resize();
-      }
-      if (this.activePanel === 'jobs' && this.jobsExplorerWidget && typeof this.jobsExplorerWidget.resize === 'function') {
-        this.jobsExplorerWidget.resize();
-      }
       if (this.activePanel === 'files' && this.filesExplorerWidget && typeof this.filesExplorerWidget.resize === 'function') {
         this.filesExplorerWidget.resize();
       }
       if (this.activePanel === 'workflows' && this.workflowsExplorerWidget && typeof this.workflowsExplorerWidget.resize === 'function') {
         this.workflowsExplorerWidget.resize();
-      }
-      if (this.activePanel === 'data' && this.dataExplorerWidget && typeof this.dataExplorerWidget.resize === 'function') {
-        this.dataExplorerWidget.resize();
       }
     },
 
@@ -1246,13 +724,8 @@ define([
       this._contextHiddenIdsByCategory = {};
       this.resetSessionFiles();
       this.resetSessionWorkflows();
-      this.resetSessionWorkspaceBrowse();
       this.setSessionFilesSelectionData([]);
       this.setSessionWorkflowsSelectionData([]);
-      this.setSessionWorkspaceSelectionData([]);
-      this.resetSessionJobsBrowse();
-      this.setSessionJobsSelectionData([]);
-      this.resetSessionDataBrowse();
     },
 
     /**
@@ -1645,36 +1118,6 @@ define([
       this._renderWorkflowsPanel();
     },
 
-    resetSessionWorkspaceBrowse: function() {
-      this.sessionWorkspaceBrowse = null;
-      this._renderWorkspacePanel();
-    },
-
-    setSessionWorkspaceBrowseData: function(workspaceBrowseData) {
-      this.sessionWorkspaceBrowse = workspaceBrowseData || null;
-      this._renderWorkspacePanel();
-    },
-
-    resetSessionJobsBrowse: function() {
-      this.sessionJobsBrowse = null;
-      this._renderJobsPanel();
-    },
-
-    setSessionJobsBrowseData: function(jobsBrowseData) {
-      this.sessionJobsBrowse = jobsBrowseData || null;
-      this._renderJobsPanel();
-    },
-
-    resetSessionDataBrowse: function() {
-      this.sessionDataBrowse = null;
-      this._renderDataPanel();
-    },
-
-    setSessionDataBrowseData: function(dataBrowseData) {
-      this.sessionDataBrowse = dataBrowseData || null;
-      this._renderDataPanel();
-    },
-
     setSessionWorkspaceSelectionData: function(selectedItems) {
       this.sessionWorkspaceSelectionItems = this._dedupeItemsByCategory('workspace', selectedItems);
       this._mergeContextEntriesByCategory('workspace', this.sessionWorkspaceSelectionItems);
@@ -1932,250 +1375,6 @@ define([
       }
       if (typeof this.workflowsExplorerWidget.resize === 'function') {
         this.workflowsExplorerWidget.resize();
-      }
-    },
-
-    _renderWorkspacePanel: function() {
-      if (!this.workspaceContainer) return;
-      domConstruct.empty(this.workspaceContainer);
-
-      if (this.workspaceExplorerWidget) {
-        this._clearWorkspaceSelectionHandles();
-        this.workspaceExplorerWidget.destroyRecursive();
-        this.workspaceExplorerWidget = null;
-      }
-
-      if (!this.sessionWorkspaceBrowse || !this.sessionWorkspaceBrowse.uiPayload) {
-        domConstruct.create('div', {
-          class: 'copilot-workspace-empty',
-          innerHTML: 'No grids loaded yet'
-        }, this.workspaceContainer);
-        return;
-      }
-
-      var payload = this.sessionWorkspaceBrowse.uiPayload;
-      var flattenedCount = 0;
-      if (Array.isArray(payload.items)) {
-        payload.items.forEach(function(item) {
-          if (Array.isArray(item)) {
-            flattenedCount += 1;
-          } else if (item && typeof item === 'object') {
-            var firstKey = Object.keys(item)[0];
-            if (firstKey && firstKey.charAt(0) === '/') {
-              // Path-keyed nested structure: { "/path": [row1, row2, ...] }
-              for (var key in item) {
-                if (item.hasOwnProperty(key) && Array.isArray(item[key])) {
-                  flattenedCount += item[key].length;
-                }
-              }
-            } else {
-              // Regular data object (e.g. from group list tools)
-              flattenedCount += 1;
-            }
-          }
-        });
-      }
-      var countValue = payload.result_type === 'search_result'
-        ? flattenedCount
-        : (typeof payload.count === 'number' ? payload.count : flattenedCount);
-
-      var summaryBits = [];
-      summaryBits.push('Results: ' + countValue);
-      if (payload.path) {
-        summaryBits.push('Path: ' + payload.path);
-      }
-      if (payload.result_type) {
-        summaryBits.push('Type: ' + payload.result_type);
-      }
-
-      domConstruct.create('div', {
-        class: 'copilot-workspace-summary',
-        innerHTML: summaryBits.join(' | ')
-      }, this.workspaceContainer);
-
-      if (payload.path && !payload.search && payload.result_type !== 'search_result') {
-        domConstruct.create('a', {
-          class: 'copilot-file-workspace-link',
-          href: '/workspace' + (payload.path.charAt(0) === '/' ? payload.path : ('/' + payload.path)),
-          target: '_blank',
-          rel: 'noopener noreferrer',
-          innerHTML: 'Open in Workspace Browser'
-        }, this.workspaceContainer);
-      }
-
-      var gridContainer = domConstruct.create('div', {
-        class: 'copilot-workspace-grid-container'
-      }, this.workspaceContainer);
-
-      this.workspaceExplorerWidget = new WorkspaceExplorerAdapter({
-        region: 'center',
-        allowDragAndDrop: false,
-        onlyWritable: false
-      });
-
-      this.workspaceExplorerWidget.setMcpData({
-        path: payload.path || null,
-        items: Array.isArray(payload.items) ? payload.items : []
-      });
-
-      domConstruct.place(this.workspaceExplorerWidget.domNode, gridContainer);
-      this.workspaceExplorerWidget.startup();
-      this._bindWorkspaceSelectionEvents();
-      if (typeof this.workspaceExplorerWidget.setSelectedWorkspaceItems === 'function') {
-        this.workspaceExplorerWidget.setSelectedWorkspaceItems(this.sessionWorkspaceSelectionItems);
-      }
-      if (typeof this.workspaceExplorerWidget.resize === 'function') {
-        this.workspaceExplorerWidget.resize();
-      }
-    },
-
-    _renderJobsPanel: function() {
-      if (!this.jobsContainer) return;
-      domConstruct.empty(this.jobsContainer);
-
-      if (this.jobsExplorerWidget) {
-        this._clearJobsSelectionHandles();
-        this.jobsExplorerWidget.destroyRecursive();
-        this.jobsExplorerWidget = null;
-      }
-
-      if (!this.sessionJobsBrowse || !this.sessionJobsBrowse.uiPayload) {
-        domConstruct.create('div', {
-          class: 'copilot-jobs-empty',
-          innerHTML: 'No grids loaded yet'
-        }, this.jobsContainer);
-        return;
-      }
-
-      var payload = this.sessionJobsBrowse.uiPayload;
-      var jobs = Array.isArray(payload.jobs) ? payload.jobs : [];
-      var summaryBits = [];
-      summaryBits.push('Results: ' + jobs.length);
-      if (payload.sort_by) {
-        summaryBits.push('Sort: ' + payload.sort_by + (payload.sort_dir ? ' (' + payload.sort_dir + ')' : ''));
-      }
-      if (payload.status) {
-        summaryBits.push('Status: ' + payload.status);
-      }
-      if (payload.service) {
-        summaryBits.push('Service: ' + payload.service);
-      }
-
-      domConstruct.create('div', {
-        class: 'copilot-jobs-summary',
-        innerHTML: summaryBits.join(' | ')
-      }, this.jobsContainer);
-
-      var gridContainer = domConstruct.create('div', {
-        class: 'copilot-jobs-grid-container'
-      }, this.jobsContainer);
-
-      this.jobsExplorerWidget = new JobsExplorerAdapter({
-        region: 'center'
-      });
-
-      this.jobsExplorerWidget.setJobsData(jobs);
-      domConstruct.place(this.jobsExplorerWidget.domNode, gridContainer);
-      this.jobsExplorerWidget.startup();
-      this._bindJobsSelectionEvents();
-      if (typeof this.jobsExplorerWidget.setSelectedJobs === 'function') {
-        this.jobsExplorerWidget.setSelectedJobs(this.sessionJobsSelectionItems);
-      }
-      if (typeof this.jobsExplorerWidget.resize === 'function') {
-        this.jobsExplorerWidget.resize();
-      }
-    },
-
-    _renderDataPanel: function() {
-      if (!this.dataContainer) return;
-      domConstruct.empty(this.dataContainer);
-
-      if (this.dataExplorerWidget) {
-        this.dataExplorerWidget.destroyRecursive();
-        this.dataExplorerWidget = null;
-      }
-
-      if (!this.sessionDataBrowse || !this.sessionDataBrowse.uiPayload) {
-        domConstruct.create('div', {
-          class: 'copilot-data-empty',
-          innerHTML: 'No grids loaded yet'
-        }, this.dataContainer);
-        return;
-      }
-
-      var payload = this.sessionDataBrowse.uiPayload;
-      var rows = Array.isArray(payload.rows) ? payload.rows : [];
-      var isSnapshot = payload.is_snapshot === true;
-      var numFound = typeof payload.numFound === 'number' ? payload.numFound : null;
-      var downloadUrl = payload.download_url || null;
-
-      var summaryBits = [];
-      if (isSnapshot && numFound !== null) {
-        summaryBits.push('Rows: ' + rows.length.toLocaleString() + ' of ' + numFound.toLocaleString() + ' total');
-      } else {
-        summaryBits.push('Rows: ' + rows.length.toLocaleString());
-        if (payload.total !== undefined && payload.total !== null) {
-          summaryBits.push('Total: ' + payload.total.toLocaleString());
-        }
-      }
-      if (payload.collection) {
-        summaryBits.push('Collection: ' + payload.collection);
-      }
-
-      domConstruct.create('div', {
-        class: 'copilot-data-summary',
-        innerHTML: summaryBits.join(' | ')
-      }, this.dataContainer);
-
-      var gridContainer = domConstruct.create('div', {
-        class: 'copilot-data-grid-container'
-      }, this.dataContainer);
-
-      this.dataExplorerWidget = new DataExplorerAdapter({
-        region: 'center'
-      });
-      this.dataExplorerWidget.setRows(rows, {
-        visibleColumns: this._getCollectionColumnWhitelist(payload.collection)
-      });
-      domConstruct.place(this.dataExplorerWidget.domNode, gridContainer);
-      this.dataExplorerWidget.startup();
-
-      if (typeof this.dataExplorerWidget.resize === 'function') {
-        this.dataExplorerWidget.resize();
-      }
-
-      var actionsNode = domConstruct.create('div', {
-        style: 'margin-top: 10px;'
-      }, this.dataContainer);
-
-      // In snapshot mode, show download link instead of "Load Next 100 Rows"
-      if (isSnapshot && downloadUrl) {
-        var tsvLabel = numFound !== null
-          ? 'Download all ' + numFound.toLocaleString() + ' results as TSV'
-          : 'Download Full Dataset (TSV)';
-        var tsvLink = domConstruct.create('a', {
-          class: 'chat-card-link',
-          href: '#',
-          innerHTML: tsvLabel,
-          style: 'display: inline-block;'
-        }, actionsNode);
-        on(tsvLink, 'click', function(evt) {
-          evt.preventDefault();
-          var tsvDownloadUrl = downloadUrl;
-          if (window.App && window.App.authorizationToken) {
-            tsvDownloadUrl += '&http_authorization=' + encodeURIComponent(window.App.authorizationToken);
-          }
-          window.open(tsvDownloadUrl, '_blank', 'noopener,noreferrer');
-        });
-      } else if (payload.nextCursorId) {
-        // Legacy cursor-based pagination (non-snapshot mode)
-        var loadMoreButton = domConstruct.create('button', {
-          type: 'button',
-          innerHTML: payload.isLoadingMore ? 'Loading...' : 'Load Next 100 Rows',
-          class: 'chat-card-btn',
-          disabled: !!payload.isLoadingMore
-        }, actionsNode);
-        on(loadMoreButton, 'click', lang.hitch(this, this._loadMoreDataBrowseRows));
       }
     },
 

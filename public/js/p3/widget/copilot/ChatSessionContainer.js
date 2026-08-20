@@ -267,16 +267,6 @@ define([
             topic.subscribe('CopilotSessionFileCreated', lang.hitch(this, this._handleSessionFileCreated));
             topic.subscribe('CopilotSessionWorkflowCreated', lang.hitch(this, this._handleSessionWorkflowCreated));
             topic.subscribe('CopilotWorkflowCardStatusUpdated', lang.hitch(this, this._handleWorkflowCardStatusUpdated));
-            topic.subscribe('CopilotWorkspaceBrowseOpen', lang.hitch(this, function() {
-                this._setActiveTab('grids', 'workspace');
-            }));
-            topic.subscribe('CopilotJobsBrowseOpen', lang.hitch(this, function() {
-                this._setActiveTab('grids', 'jobs');
-            }));
-            topic.subscribe('CopilotDataBrowseOpen', lang.hitch(this, function() {
-                this._setActiveTab('grids', 'data');
-            }));
-
             // Subscribe to message submission to switch back to Messages tab and close file previews
             topic.subscribe('ChatMessageSubmitted', lang.hitch(this, function() {
                 this._setActiveTab('messages');
@@ -452,10 +442,7 @@ define([
             var domClass = require('dojo/dom-class');
             var legacyGridPanels = {
                 files: true,
-                workflows: true,
-                workspace: true,
-                jobs: true,
-                data: true
+                workflows: true
             };
 
             if (legacyGridPanels[panel]) {
@@ -592,8 +579,6 @@ define([
             this._syncJobsSelectionsToWidgets();
             // Reset workflows when changing session
             this.displayWidget.resetSessionWorkflows();
-            this.displayWidget.resetSessionWorkspaceBrowse();
-            this.displayWidget.resetSessionJobsBrowse();
 
             // Removed reloadUserSessions publish: the scroll bar will react to
             // ChatSession:Selected and other dedicated events, so a full reload
