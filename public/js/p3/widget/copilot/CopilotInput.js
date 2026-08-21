@@ -527,11 +527,14 @@ define([
         // Gateway-classified card
         if (toolMetadata.card && toolMetadata.card.card_type) {
           assistantMessage.card = toolMetadata.card;
-          // Bridge clarification card payload to clarificationData so
-          // ChatMessage.renderClarificationChips() can find the questions.
+          // Bridge card payloads to the properties that ChatMessage renderers expect.
           if (toolMetadata.card.card_type === 'clarification' && toolMetadata.card.card_payload) {
             assistantMessage.clarificationData = toolMetadata.card.card_payload;
             assistantMessage.isPlanClarification = true;
+          }
+          if (toolMetadata.card.card_type === 'plan' && toolMetadata.card.card_payload) {
+            assistantMessage.planData = toolMetadata.card.card_payload;
+            assistantMessage.isPlan = true;
           }
         }
 
