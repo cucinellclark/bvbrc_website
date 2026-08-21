@@ -410,10 +410,14 @@ define([
                     window.App.api.service('AppService.query_tasks', [idsToQuery])
                         .then(function(jobResults) {
                             var jobMap = {};
-                            if (Array.isArray(jobResults)) {
-                                jobResults.forEach(function(job) {
-                                    if (job && job.id) {
-                                        jobMap[job.id] = job;
+                            // query_tasks returns [ { jobId: jobObj, ... } ]
+                            // The first element is a hash keyed by job ID.
+                            if (Array.isArray(jobResults) && jobResults.length > 0 && jobResults[0]) {
+                                var taskHash = jobResults[0];
+                                Object.keys(taskHash).forEach(function(jobId) {
+                                    var job = taskHash[jobId];
+                                    if (job) {
+                                        jobMap[jobId] = job;
                                     }
                                 });
                             }

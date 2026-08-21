@@ -461,28 +461,7 @@ define([
       };
     },
 
-    /**
-     * Formats 'plan_review_ready' event
-     */
-    format_plan_review_ready: function(data) {
-      topic.publish('CopilotPlanReviewReady', {
-        plan_id: data.plan_id,
-        step_id: data.step_id,
-        step_index: data.step_index,
-        review_config: data.review_config || {},
-        source_data: data.source_data || {},
-        prompt: data.prompt || 'Review the results before continuing.'
-      });
-
-      // The PlanCard handles the review UI via the CopilotPlanReviewReady
-      // topic (renders an inline review panel). No separate assistant
-      // message is needed -- returning a removable status message to
-      // avoid showing redundant "Review checkpoint: ..." text.
-      return this.updateStatusMessage(
-        'Review step ready -- see plan card above.',
-        'plan_review_ready'
-      );
-    },
+    // format_plan_review_ready removed — review steps are no longer used.
 
     /**
      * Formats 'plan_step_failed' event

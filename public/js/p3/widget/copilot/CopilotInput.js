@@ -1075,48 +1075,7 @@ define([
           );
         })));
 
-        // 5. CopilotPlanContinueReview — user completed a review step
-        this._topicHandles.push(topic.subscribe('CopilotPlanContinueReview', lang.hitch(this, function(data) {
-          if (!data || !data.plan) { return; }
-          console.log('[CopilotInput] CopilotPlanContinueReview received:', data);
-
-          this._submitPlanAction(
-            'Continue after review',
-            data.sessionId,
-            {
-              plan: data.plan,
-              plan_action: 'continue_review',
-              current_step_index: data.currentStepIndex,
-              completed_step_results: data.completedResults || {},
-              review_selections: data.reviewSelections || {}
-            }
-          );
-        })));
-
-        // 5b. CopilotPlanReviewReady — attach review data to the plan message
-        // in the chat store so it survives showMessages() re-renders.
-        this._topicHandles.push(topic.subscribe('CopilotPlanReviewReady', lang.hitch(this, function(data) {
-          if (!data || !data.plan_id) { return; }
-          // Find the plan message in the chat store and attach review data
-          var messages = this.chatStore.query();
-          for (var i = 0; i < messages.length; i++) {
-            var msg = messages[i];
-            if (msg.isPlan && msg.planData && msg.planData.plan_id === data.plan_id) {
-              msg.planData._activeReviewData = data;
-              msg.planData._activeReviewStepId = data.step_id;
-              break;
-            }
-            // Also check msg.plan for persisted messages
-            if (msg.plan && msg.plan.plan_id === data.plan_id) {
-              if (!msg.planData) msg.planData = msg.plan;
-              msg.planData._activeReviewData = data;
-              msg.planData._activeReviewStepId = data.step_id;
-              break;
-            }
-          }
-        })));
-
-        // 5c. CopilotPlanStepUpdate — sync step statuses on the plan message
+        // 5. CopilotPlanStepUpdate — sync step statuses on the plan message
         // in the chat store so they survive showMessages() re-renders.
         this._topicHandles.push(topic.subscribe('CopilotPlanStepUpdate', lang.hitch(this, function(data) {
           if (!data || !data.plan_id) { return; }
@@ -1139,24 +1098,6 @@ define([
                   break;
                 }
               }
-              break;
-            }
-          }
-        })));
-
-        // 5d. CopilotPlanContinueReview — clear review data from plan message
-        // when the user completes a review step.
-        this._topicHandles.push(topic.subscribe('CopilotPlanContinueReview', lang.hitch(this, function(data) {
-          if (!data || !data.plan) { return; }
-          var planId = data.plan.plan_id;
-          if (!planId) { return; }
-          var messages = this.chatStore.query();
-          for (var i = 0; i < messages.length; i++) {
-            var msg = messages[i];
-            var planData = msg.planData || msg.plan;
-            if (planData && planData.plan_id === planId) {
-              delete planData._activeReviewData;
-              delete planData._activeReviewStepId;
               break;
             }
           }

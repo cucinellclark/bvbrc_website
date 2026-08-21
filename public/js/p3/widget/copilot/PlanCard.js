@@ -59,8 +59,6 @@ define([
     _completedResults: null,  // {step_id: result_data}
     _stepNodes: null,         // Map of step_id -> DOM node
     _topicHandles: null,
-    _reviewData: null,        // Active review step data (from plan_review_ready)
-    _reviewStepId: null,      // step_id of the active review step
     _waitingForWorkflow: null, // DEPRECATED: single-workflow compat; use _waitingForWorkflows
     _waitingForWorkflows: null, // {submission_id: {status: 'active'|'completed'|'failed'}} — batch support
     _waitingStepId: null,     // step_id of the step that submitted workflow(s)
@@ -76,15 +74,6 @@ define([
       );
       this._stepNodes = {};
       this._topicHandles = [];
-
-      // Restore review state from plan data if it was attached by
-      // CopilotInput's CopilotPlanReviewReady subscriber (survives
-      // showMessages re-renders that destroy and recreate PlanCard).
-      this._reviewData = this.plan._activeReviewData || null;
-      this._reviewStepId = this.plan._activeReviewStepId || null;
-      if (this._reviewData) {
-        this._paused = true;
-      }
 
       // Restore workflow waiting state from persisted plan data.
       // Polling will be started in postCreate after topics are subscribed.
@@ -143,10 +132,6 @@ define([
       // Subscribe to step update events
       var handle = topic.subscribe('CopilotPlanStepUpdate', lang.hitch(this, '_onStepUpdate'));
       this._topicHandles.push(handle);
-
-      // Subscribe to review-ready events
-      var reviewHandle = topic.subscribe('CopilotPlanReviewReady', lang.hitch(this, '_onReviewReady'));
-      this._topicHandles.push(reviewHandle);
 
       // Subscribe to plan exit events (from PlanTracker)
       var exitHandle = topic.subscribe('CopilotPlanExit', lang.hitch(this, '_onPlanExit'));
@@ -252,11 +237,6 @@ define([
 
       (plan.steps || []).forEach(function (step, idx) {
         self._renderStep(step, idx, stepsList);
-
-        // Render review panel inline after the review step
-        if (self._reviewData && step.step_id === self._reviewStepId) {
-          self._renderReviewPanel(stepsList);
-        }
       });
 
       // Action buttons
@@ -752,247 +732,6 @@ define([
     },
 
     // =========================================================================
-    // Review Step Handling
-    // =========================================================================
-
-    _onReviewReady: function (data) {
-      if (!data || data.plan_id !== this.plan.plan_id) return;
-
-      this._paused = true;
-      this._reviewData = data;
-      this._reviewStepId = data.step_id;
-
-      // Store on the plan object so _persistPlanState saves it to MongoDB
-      // and it survives page reloads / session switches.
-      this.plan._activeReviewData = data;
-      this.plan._activeReviewStepId = data.step_id;
-
-      // Mark the review step as running
-      var step = this._findStep(data.step_id);
-      if (step) {
-        step.status = 'running';
-      }
-
-      // Persist so review state survives leaving and returning to this chat
-      this._persistPlanState();
-
-      this._render();
-    },
-
-    _renderReviewPanel: function (parentNode) {
-      var self = this;
-      var data = this._reviewData;
-      if (!data) return;
-
-      var reviewConfig = data.review_config || {};
-      var sourceData = data.source_data || {};
-      var structuredData = sourceData.structured_data || {};
-
-      var panel = domConstruct.create('div', {
-        'class': 'plan-review-panel'
-      }, parentNode);
-
-      // Review prompt
-      domConstruct.create('div', {
-        'class': 'plan-review-prompt',
-        innerHTML: data.prompt || 'Review the results before continuing.'
-      }, panel);
-
-      // Data summary
-      if (sourceData.answer) {
-        var summaryDiv = domConstruct.create('div', {
-          'class': 'plan-review-summary'
-        }, panel);
-
-        var summaryText = sourceData.answer;
-        if (summaryText.length > 500) {
-          summaryText = summaryText.substring(0, 500) + '...';
-        }
-        domConstruct.create('p', {
-          innerHTML: summaryText
-        }, summaryDiv);
-      }
-
-      // Structured data display
-      if (structuredData.record_count !== undefined && structuredData.record_count !== null) {
-        domConstruct.create('div', {
-          'class': 'plan-review-stat',
-          innerHTML: '<strong>Records found:</strong> ' + structuredData.record_count
-        }, panel);
-      }
-
-      if (structuredData.collection) {
-        domConstruct.create('div', {
-          'class': 'plan-review-stat',
-          innerHTML: '<strong>Collection:</strong> ' + structuredData.collection
-        }, panel);
-      }
-
-      // Facet distributions
-      if (structuredData.facets && Object.keys(structuredData.facets).length > 0) {
-        var facetSection = domConstruct.create('div', {
-          'class': 'plan-review-facets'
-        }, panel);
-
-        domConstruct.create('div', {
-          'class': 'plan-review-facet-title',
-          innerHTML: 'Distribution'
-        }, facetSection);
-
-        Object.keys(structuredData.facets).forEach(function (field) {
-          var facet = structuredData.facets[field];
-          var facetDiv = domConstruct.create('div', {
-            'class': 'plan-review-facet'
-          }, facetSection);
-
-          domConstruct.create('span', {
-            'class': 'plan-review-facet-label',
-            innerHTML: field + ': '
-          }, facetDiv);
-
-          if (typeof facet === 'object' && !Array.isArray(facet)) {
-            var entries = Object.entries(facet).slice(0, 10);
-            var facetText = entries.map(function (e) { return e[0] + ' (' + e[1] + ')'; }).join(', ');
-            if (Object.keys(facet).length > 10) {
-              facetText += ', ... (' + Object.keys(facet).length + ' total)';
-            }
-            domConstruct.create('span', {
-              innerHTML: facetText
-            }, facetDiv);
-          }
-        });
-      }
-
-      // Workflow selector (for workflow_choice review types)
-      var suggestedWorkflows = reviewConfig.suggested_workflows || [];
-      if (reviewConfig.review_type === 'workflow_choice' || suggestedWorkflows.length > 0) {
-        var wfSection = domConstruct.create('div', {
-          'class': 'plan-review-workflow-section'
-        }, panel);
-
-        domConstruct.create('label', {
-          innerHTML: 'Select analysis workflow:',
-          'class': 'plan-review-label'
-        }, wfSection);
-
-        var wfSelect = domConstruct.create('select', {
-          'class': 'plan-review-workflow-select'
-        }, wfSection);
-
-        domConstruct.create('option', {
-          value: '',
-          innerHTML: '-- Choose a workflow --'
-        }, wfSelect);
-
-        suggestedWorkflows.forEach(function (wf) {
-          domConstruct.create('option', {
-            value: wf,
-            innerHTML: wf
-          }, wfSelect);
-        });
-      }
-
-      // Action buttons
-      var reviewActions = domConstruct.create('div', {
-        'class': 'plan-review-actions'
-      }, panel);
-
-      var acceptBtn = domConstruct.create('button', {
-        'class': 'plan-card-btn plan-card-btn-primary',
-        innerHTML: 'Accept'
-      }, reviewActions);
-
-      on(acceptBtn, 'click', function () {
-        var selections = {
-          selected_ids: structuredData.record_ids || [],
-          record_count: structuredData.record_count
-        };
-
-        // Capture chosen workflow if selector exists
-        var wfSelectNode = dojoQuery('.plan-review-workflow-select', panel)[0];
-        if (wfSelectNode && wfSelectNode.value) {
-          selections.chosen_workflow = wfSelectNode.value;
-        }
-
-        self._submitReviewSelections(selections);
-      });
-
-      var skipBtn = domConstruct.create('button', {
-        'class': 'plan-card-btn plan-card-btn-secondary',
-        innerHTML: 'Skip'
-      }, reviewActions);
-
-      on(skipBtn, 'click', function () {
-        self._skipReviewStep();
-      });
-
-      var cancelBtn = domConstruct.create('button', {
-        'class': 'plan-card-btn plan-card-btn-danger',
-        innerHTML: 'Cancel Plan'
-      }, reviewActions);
-
-      on(cancelBtn, 'click', function () {
-        self._cancelPlan();
-      });
-    },
-
-    _submitReviewSelections: function (selections) {
-      var step = this._findStep(this._reviewStepId);
-      if (step) {
-        step.status = 'completed';
-        step.result_summary = 'Review completed';
-      }
-
-      // Store selections as this step's result
-      this._storeCompletedResult(this._reviewStepId, {
-        answer: 'Review completed',
-        status: 'completed',
-        structured_data: selections
-      });
-
-      // Clear review state
-      var reviewData = this._reviewData;
-      this._reviewData = null;
-      this._reviewStepId = null;
-      this._paused = false;
-
-      // Clear persisted review data from plan object
-      delete this.plan._activeReviewData;
-      delete this.plan._activeReviewStepId;
-
-      // Persist review completion to MongoDB
-      this._persistPlanState();
-
-      topic.publish('CopilotPlanContinueReview', {
-        plan: this.plan,
-        currentStepIndex: reviewData.step_index,
-        completedResults: this._completedResultsForPublish(),
-        reviewSelections: selections,
-        sessionId: this.sessionId
-      });
-    },
-
-    _skipReviewStep: function () {
-      var step = this._findStep(this._reviewStepId);
-      if (step) {
-        step.status = 'skipped';
-      }
-
-      this._reviewData = null;
-      this._reviewStepId = null;
-      this._paused = false;
-
-      // Clear persisted review data from plan object
-      delete this.plan._activeReviewData;
-      delete this.plan._activeReviewStepId;
-
-      // Persist skip to MongoDB
-      this._persistPlanState();
-
-      this._render();
-      this._executeNextPendingStep();
-    },
-
     /**
      * Cancel the entire plan. Marks all pending/running steps as skipped,
      * sets plan status to completed, clears all active state, and
@@ -1009,16 +748,12 @@ define([
       this.plan.status = 'completed';
 
       // Clear all active state
-      this._reviewData = null;
-      this._reviewStepId = null;
       this._stopWorkflowPoll();
       this._waitingForWorkflow = null;
       this._waitingForWorkflows = null;
       this._waitingStepId = null;
       this._waitingStepIndex = null;
       this._workflowCompleteData = null;
-      delete this.plan._activeReviewData;
-      delete this.plan._activeReviewStepId;
       delete this.plan._waitingForWorkflow;
       delete this.plan._waitingForWorkflows;
       delete this.plan._waitingStepId;
@@ -1056,9 +791,7 @@ define([
       }
       this.plan.status = 'completed';
 
-      // Clear any active review/workflow state
-      this._reviewData = null;
-      this._reviewStepId = null;
+      // Clear any active workflow state
       this._stopWorkflowPoll();
       this._waitingForWorkflow = null;
       this._waitingForWorkflows = null;
