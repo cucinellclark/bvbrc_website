@@ -357,20 +357,37 @@ define([
                 return;
             }
 
-            copilotApi.getSessionWorkflowWatches(sessionId).then(function(result) {
+            // Fetch from two sources in parallel:
+            //  1. Workflow watches (MongoDB) — has GoWe-level pending state
+            //  2. AppService jobs whose output_path is under .chats/<sessionId>
+            var watchesPromise = copilotApi.getSessionWorkflowWatches(sessionId)
+                .then(function(result) { return (result && result.watches) || []; })
+                .catch(function() { return []; });
+
+            var appServicePromise;
+            if (window.App && window.App.api && window.App.api.service) {
+                var sessionPathFragment = '.chats/' + sessionId;
+                appServicePromise = window.App.api.service(
+                    'AppService.enumerate_tasks_filtered', [0, 50, { sort_field: 'submit_time', sort_order: 'desc' }]
+                ).then(function(res) {
+                    var jobs = (Array.isArray(res) && res[0]) ? res[0] : [];
+                    return jobs.filter(function(job) {
+                        var outPath = job && job.parameters && job.parameters.output_path;
+                        return outPath && outPath.indexOf(sessionPathFragment) !== -1;
+                    });
+                }).catch(function() { return []; });
+            } else {
+                appServicePromise = Promise.resolve([]);
+            }
+
+            Promise.all([watchesPromise, appServicePromise]).then(function(results) {
                 domConstruct.empty(body);
-                var watches = (result && result.watches) || [];
+                var watches = results[0];
+                var appServiceJobs = results[1];
 
-                if (watches.length === 0) {
-                    domConstruct.create('div', {
-                        innerHTML: 'No jobs submitted in this session.',
-                        style: 'padding: 16px; color: #6b7280; font-size: 13px;'
-                    }, body);
-                    return;
-                }
-
-                // Collect all external_ids across all watches
+                // Build entries from workflow watches
                 var allExternalIds = [];
+                var watchExternalIdSet = {};
                 watches.forEach(function(w) {
                     if (w.external_ids && w.external_ids.length > 0) {
                         w.external_ids.forEach(function(eid) {
@@ -381,9 +398,9 @@ define([
                                 created_at: w.created_at,
                                 completed_at: w.completed_at
                             });
+                            if (eid.external_id) watchExternalIdSet[eid.external_id] = true;
                         });
                     } else {
-                        // No external_id yet (task not yet checked out by worker)
                         allExternalIds.push({
                             external_id: null,
                             step_id: '',
@@ -394,41 +411,61 @@ define([
                     }
                 });
 
-                // Query BV-BRC AppService for live status of external_ids that exist
+                // Add AppService jobs not already covered by a watch external_id
+                var extraJobs = {};
+                appServiceJobs.forEach(function(job) {
+                    var jobId = job.id || '';
+                    if (jobId && !watchExternalIdSet[jobId]) {
+                        allExternalIds.push({
+                            external_id: jobId,
+                            step_id: '',
+                            gowe_state: null,
+                            created_at: job.submit_time || null,
+                            completed_at: job.completed_time || null
+                        });
+                        extraJobs[jobId] = job;
+                    }
+                });
+
+                if (allExternalIds.length === 0) {
+                    domConstruct.create('div', {
+                        innerHTML: 'No jobs submitted in this session.',
+                        style: 'padding: 16px; color: #6b7280; font-size: 13px;'
+                    }, body);
+                    return;
+                }
+
+                // Query AppService for live status of all external_ids
                 var idsToQuery = allExternalIds
                     .filter(function(e) { return e.external_id; })
                     .map(function(e) { return e.external_id; });
 
                 if (idsToQuery.length === 0) {
-                    // No external IDs available yet — show watch-level status
                     self._renderJobsList(body, allExternalIds, {});
                     return;
                 }
 
-                // Use AppService.query_tasks to fetch live job data
                 if (window.App && window.App.api && window.App.api.service) {
                     window.App.api.service('AppService.query_tasks', [idsToQuery])
                         .then(function(jobResults) {
                             var jobMap = {};
-                            // query_tasks returns [ { jobId: jobObj, ... } ]
-                            // The first element is a hash keyed by job ID.
                             if (Array.isArray(jobResults) && jobResults.length > 0 && jobResults[0]) {
                                 var taskHash = jobResults[0];
                                 Object.keys(taskHash).forEach(function(jobId) {
-                                    var job = taskHash[jobId];
-                                    if (job) {
-                                        jobMap[jobId] = job;
-                                    }
+                                    if (taskHash[jobId]) jobMap[jobId] = taskHash[jobId];
                                 });
                             }
+                            // Merge in jobs we already fetched from enumerate_tasks
+                            Object.keys(extraJobs).forEach(function(id) {
+                                if (!jobMap[id]) jobMap[id] = extraJobs[id];
+                            });
                             self._renderJobsList(body, allExternalIds, jobMap);
                         })
                         .catch(function() {
-                            // Fallback: show what we have from workflow watches
-                            self._renderJobsList(body, allExternalIds, {});
+                            self._renderJobsList(body, allExternalIds, extraJobs);
                         });
                 } else {
-                    self._renderJobsList(body, allExternalIds, {});
+                    self._renderJobsList(body, allExternalIds, extraJobs);
                 }
             }).catch(function(err) {
                 domConstruct.empty(body);
