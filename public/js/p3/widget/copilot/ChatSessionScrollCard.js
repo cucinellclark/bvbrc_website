@@ -49,6 +49,7 @@ define([
         '<div class="session-title-container" style="display: flex; justify-content: space-between; align-items: center;">' +
             '<div class="session-title" data-dojo-attach-point="titleNode"></div>' +
             '<div class="scrollCardActions">' +
+                '<div class="jobs-button" data-dojo-attach-point="jobsButtonNode"></div>' +
                 '<div class="folder-button" data-dojo-attach-point="folderButtonNode"></div>' +
                 '<div class="delete-button" data-dojo-attach-point="deleteButtonNode"></div>' +
             '</div>' +
@@ -91,8 +92,10 @@ define([
             this.containerNode.className += ' scrollCardContainer';
             this.deleteButtonNode.className += ' scrollCardDelete';
             this.folderButtonNode.className += ' scrollCardFolder';
+            this.jobsButtonNode.className += ' scrollCardJobs';
 
             // Add tooltips
+            this.jobsButtonNode.title = 'View session jobs';
             this.folderButtonNode.title = 'Open session folder in workspace';
             this.deleteButtonNode.title = 'Delete chat session';
 
@@ -111,7 +114,7 @@ define([
 
                 // Click handler to load session messages
                 on(this.containerNode, 'click', lang.hitch(this, function(evt) {
-                    if (evt.target === this.deleteButtonNode || evt.target === this.folderButtonNode) {
+                    if (evt.target === this.deleteButtonNode || evt.target === this.folderButtonNode || evt.target === this.jobsButtonNode) {
                         return;
                     }
 
@@ -225,6 +228,33 @@ define([
                     );
                 })));
 
+                // Add hover effects for jobs button
+                this.own(on(this.jobsButtonNode, 'mouseenter', lang.hitch(this, function() {
+                    this.jobsButtonNode.style.opacity = '1';
+                    this.jobsButtonNode.style.backgroundColor = '#f0f0f0';
+                })));
+
+                this.own(on(this.jobsButtonNode, 'mouseleave', lang.hitch(this, function() {
+                    this.jobsButtonNode.style.opacity = '0.7';
+                    this.jobsButtonNode.style.backgroundColor = 'transparent';
+                })));
+
+                this.own(on(this.jobsButtonNode, 'mousedown', lang.hitch(this, function(evt) {
+                    evt.stopPropagation();
+                    this.jobsButtonNode.style.backgroundColor = '#e0e0e0';
+                })));
+
+                this.own(on(this.jobsButtonNode, 'mouseup', lang.hitch(this, function(evt) {
+                    evt.stopPropagation();
+                    this.jobsButtonNode.style.backgroundColor = '#f0f0f0';
+                })));
+
+                // Click handler for jobs button - shows session jobs panel
+                this.own(on(this.jobsButtonNode, 'click', lang.hitch(this, function(evt) {
+                    evt.stopPropagation();
+                    this._showSessionJobsPanel();
+                })));
+
                 // Container hover effects
                 on(this.containerNode, 'mouseover', lang.hitch(this, function() {
                     // Only apply hover color if not currently selected/highlighted
@@ -246,6 +276,242 @@ define([
             }
 
             this.setupRating();
+        },
+
+        /**
+         * Shows a popup panel listing all jobs (external IDs) associated with this session.
+         * Fetches external_ids from workflow_watches via the gateway, then queries
+         * the BV-BRC AppService for live job status.
+         */
+        _showSessionJobsPanel: function() {
+            var self = this;
+            var sessionId = this.session && this.session.session_id;
+            if (!sessionId) return;
+
+            // Remove any existing jobs panel
+            var existingPanel = document.querySelector('.session-jobs-panel-overlay');
+            if (existingPanel) {
+                existingPanel.parentNode.removeChild(existingPanel);
+            }
+
+            // Create overlay
+            var overlay = domConstruct.create('div', {
+                'class': 'session-jobs-panel-overlay'
+            }, document.body);
+
+            // Create panel
+            var panel = domConstruct.create('div', {
+                'class': 'session-jobs-panel'
+            }, overlay);
+
+            // Header
+            var header = domConstruct.create('div', {
+                'class': 'session-jobs-panel-header'
+            }, panel);
+
+            domConstruct.create('span', {
+                innerHTML: 'Session Jobs',
+                style: 'font-weight: 600; font-size: 14px; color: #1f2937;'
+            }, header);
+
+            var closeBtn = domConstruct.create('button', {
+                innerHTML: '&times;',
+                'class': 'session-jobs-panel-close'
+            }, header);
+
+            // Body
+            var body = domConstruct.create('div', {
+                'class': 'session-jobs-panel-body'
+            }, panel);
+
+            domConstruct.create('div', {
+                innerHTML: 'Loading jobs...',
+                style: 'padding: 16px; color: #6b7280; font-size: 13px;'
+            }, body);
+
+            // Close handlers
+            var closePanel = function() {
+                if (overlay && overlay.parentNode) {
+                    overlay.parentNode.removeChild(overlay);
+                }
+            };
+            closeBtn.onclick = closePanel;
+            on(overlay, 'click', function(evt) {
+                if (evt.target === overlay) closePanel();
+            });
+            var keyHandler = on(document, 'keydown', function(evt) {
+                if (evt.key === 'Escape') {
+                    closePanel();
+                    keyHandler.remove();
+                }
+            });
+
+            // Fetch workflow watches for this session
+            var copilotApi = this.copilotApi || (CopilotAPI && CopilotAPI.getInstance ? CopilotAPI.getInstance() : null);
+            if (!copilotApi || !copilotApi.getSessionWorkflowWatches) {
+                domConstruct.empty(body);
+                domConstruct.create('div', {
+                    innerHTML: 'API not available.',
+                    style: 'padding: 16px; color: #991b1b; font-size: 13px;'
+                }, body);
+                return;
+            }
+
+            copilotApi.getSessionWorkflowWatches(sessionId).then(function(result) {
+                domConstruct.empty(body);
+                var watches = (result && result.watches) || [];
+
+                if (watches.length === 0) {
+                    domConstruct.create('div', {
+                        innerHTML: 'No jobs submitted in this session.',
+                        style: 'padding: 16px; color: #6b7280; font-size: 13px;'
+                    }, body);
+                    return;
+                }
+
+                // Collect all external_ids across all watches
+                var allExternalIds = [];
+                watches.forEach(function(w) {
+                    if (w.external_ids && w.external_ids.length > 0) {
+                        w.external_ids.forEach(function(eid) {
+                            allExternalIds.push({
+                                external_id: eid.external_id,
+                                step_id: eid.step_id,
+                                gowe_state: w.gowe_state,
+                                created_at: w.created_at,
+                                completed_at: w.completed_at
+                            });
+                        });
+                    } else {
+                        // No external_id yet (task not yet checked out by worker)
+                        allExternalIds.push({
+                            external_id: null,
+                            step_id: '',
+                            gowe_state: w.gowe_state,
+                            created_at: w.created_at,
+                            completed_at: w.completed_at
+                        });
+                    }
+                });
+
+                // Query BV-BRC AppService for live status of external_ids that exist
+                var idsToQuery = allExternalIds
+                    .filter(function(e) { return e.external_id; })
+                    .map(function(e) { return e.external_id; });
+
+                if (idsToQuery.length === 0) {
+                    // No external IDs available yet — show watch-level status
+                    self._renderJobsList(body, allExternalIds, {});
+                    return;
+                }
+
+                // Use AppService.query_tasks to fetch live job data
+                if (window.App && window.App.api && window.App.api.service) {
+                    window.App.api.service('AppService.query_tasks', [idsToQuery])
+                        .then(function(jobResults) {
+                            var jobMap = {};
+                            if (Array.isArray(jobResults)) {
+                                jobResults.forEach(function(job) {
+                                    if (job && job.id) {
+                                        jobMap[job.id] = job;
+                                    }
+                                });
+                            }
+                            self._renderJobsList(body, allExternalIds, jobMap);
+                        })
+                        .catch(function() {
+                            // Fallback: show what we have from workflow watches
+                            self._renderJobsList(body, allExternalIds, {});
+                        });
+                } else {
+                    self._renderJobsList(body, allExternalIds, {});
+                }
+            }).catch(function(err) {
+                domConstruct.empty(body);
+                domConstruct.create('div', {
+                    innerHTML: 'Failed to load jobs: ' + (err.message || err),
+                    style: 'padding: 16px; color: #991b1b; font-size: 13px;'
+                }, body);
+            });
+        },
+
+        /**
+         * Renders the list of jobs in the jobs panel body.
+         * @param {HTMLElement} container - The panel body container
+         * @param {Array} externalEntries - Array of {external_id, step_id, gowe_state, ...}
+         * @param {Object} jobMap - Map of external_id -> BV-BRC job object
+         */
+        _renderJobsList: function(container, externalEntries, jobMap) {
+            domConstruct.empty(container);
+
+            var table = domConstruct.create('table', {
+                'class': 'session-jobs-table'
+            }, container);
+
+            // Header row
+            var thead = domConstruct.create('thead', {}, table);
+            var headerRow = domConstruct.create('tr', {}, thead);
+            ['Job ID', 'Service', 'Status', 'Submitted', ''].forEach(function(label) {
+                domConstruct.create('th', { innerHTML: label }, headerRow);
+            });
+
+            var tbody = domConstruct.create('tbody', {}, table);
+
+            externalEntries.forEach(function(entry) {
+                var row = domConstruct.create('tr', {}, tbody);
+                var job = entry.external_id ? (jobMap[entry.external_id] || null) : null;
+
+                // Job ID
+                var idText = entry.external_id || 'Pending...';
+                domConstruct.create('td', {
+                    innerHTML: idText,
+                    style: entry.external_id ? '' : 'color: #9ca3af; font-style: italic;'
+                }, row);
+
+                // Service name
+                var serviceName = job ? (job.application_name || job.app || '-') : '-';
+                domConstruct.create('td', { innerHTML: serviceName }, row);
+
+                // Status
+                var status = job ? (job.status || entry.gowe_state || '-') : (entry.gowe_state || '-');
+                var statusTd = domConstruct.create('td', {}, row);
+                var statusColors = {
+                    'completed': '#10b981', 'in-progress': '#2563eb', 'running': '#2563eb',
+                    'queued': '#f59e0b', 'pending': '#f59e0b', 'PENDING': '#f59e0b',
+                    'RUNNING': '#2563eb', 'COMPLETED': '#10b981',
+                    'failed': '#ef4444', 'FAILED': '#ef4444',
+                    'CANCELLED': '#6b7280', 'cancelled': '#6b7280'
+                };
+                var dotColor = statusColors[status] || '#9ca3af';
+                domConstruct.create('span', {
+                    innerHTML: '&#9679; ' + status,
+                    style: 'color: ' + dotColor + '; font-weight: 500;'
+                }, statusTd);
+
+                // Submitted time
+                var submittedText = '-';
+                var submitTime = job ? job.submit_time : entry.created_at;
+                if (submitTime) {
+                    var d = new Date(submitTime);
+                    submittedText = d.toLocaleDateString() + ' ' + d.toLocaleTimeString([], {hour: '2-digit', minute: '2-digit'});
+                }
+                domConstruct.create('td', { innerHTML: submittedText }, row);
+
+                // Action: link to output in workspace
+                var actionTd = domConstruct.create('td', {}, row);
+                if (job && job.parameters && job.parameters.output_path && job.parameters.output_file) {
+                    var outputPath = job.parameters.output_path + '/' + job.parameters.output_file;
+                    var link = domConstruct.create('a', {
+                        innerHTML: 'View Output',
+                        href: '/workspace' + outputPath,
+                        target: '_blank',
+                        'class': 'session-jobs-output-link'
+                    }, actionTd);
+                    on(link, 'click', function(evt) {
+                        evt.stopPropagation();
+                    });
+                }
+            });
         },
 
         /**

@@ -1035,174 +1035,9 @@ define([
             });
         },
 
-        /**
-         * Submits a workflow for execution directly to the workflow engine API
-         * Bypasses the MCP layer and talks directly to the workflow engine REST endpoint
-         * @param {Object} workflowJson - Complete workflow manifest to submit
-         * @returns {Promise} Promise that resolves with submission response
-         */
-        submitWorkflowForExecution: function(workflowJson) {
-            if (!this._checkLoggedIn()) return Promise.reject('Not logged in');
-
-            console.log('[CopilotApi] submitWorkflowForExecution called');
-            console.log('[CopilotApi] Workflow JSON:', workflowJson);
-
-            // Get GoWe workflow engine URL from config
-            var goweUrl = window.App.workflow_url || 'https://gowe.software-smithy.org/api/v1';
-            var normalizedInput = workflowJson || {};
-            var workflowId = normalizedInput.workflow_id ||
-                (normalizedInput.execution_metadata && normalizedInput.execution_metadata.workflow_id) ||
-                null;
-
-            // GoWe submission: POST /submissions with {workflow_id, inputs}
-            // The workflow must already be registered with GoWe (done by the service agent).
-            if (!workflowId) {
-                return Promise.reject(new Error(
-                    'No workflow_id found. The workflow must be planned and registered before submission.'
-                ));
-            }
-
-            var submissionsUrl = goweUrl + '/submissions';
-            console.log('[CopilotApi] Creating GoWe submission for workflow:', workflowId);
-
-            var submitPromise = request.post(submissionsUrl, {
-                data: JSON.stringify({
-                    workflow_id: workflowId,
-                    inputs: {}
-                }),
-                headers: {
-                    'Content-Type': 'application/json',
-                    'Authorization': (window.App.authorizationToken || '')
-                },
-                handleAs: 'json'
-            });
-
-            return submitPromise.then(function(response) {
-                console.log('[CopilotApi] GoWe submission response:', response);
-                // GoWe response envelope: {status, request_id, timestamp, data}
-                var data = response.data || response;
-                return {
-                    workflow_id: workflowId,
-                    submission_id: data.id || null,
-                    status: data.state || 'PENDING',
-                    message: 'Workflow submitted for execution via GoWe'
-                };
-            }).catch(function(error) {
-                console.error('[CopilotApi] Error submitting workflow:', error);
-
-                var errorMsg = 'Failed to submit workflow';
-                if (error.response) {
-                    if (error.response.data) {
-                        var errorData = error.response.data;
-                        if (typeof errorData === 'object') {
-                            // GoWe error envelope: {status: "error", error: {code, message, details}}
-                            var goweError = errorData.error || errorData;
-                            errorMsg = goweError.message || goweError.detail || JSON.stringify(goweError);
-                        } else {
-                            errorMsg = errorData;
-                        }
-                    } else if (error.message) {
-                        errorMsg = error.message;
-                    }
-                } else if (error.message) {
-                    errorMsg = error.message;
-                }
-
-                console.error('[CopilotApi] Extracted error message:', errorMsg);
-                throw new Error(errorMsg);
-            });
-        },
-
-        /**
-         * Retrieves the full workflow definition by ID from workflow engine.
-         * @param {string} workflowId Workflow identifier
-         * @returns {Promise} Promise resolving to workflow definition payload
-         */
-        getWorkflowById: function(workflowId) {
-            if (!this._checkLoggedIn()) return Promise.reject('Not logged in');
-            if (!workflowId) return Promise.reject(new Error('workflowId is required'));
-
-            var goweUrl = window.App.workflow_url || 'https://gowe.software-smithy.org/api/v1';
-            var workflowUrl = goweUrl + '/workflows/' + encodeURIComponent(workflowId);
-
-            return request.get(workflowUrl, {
-                headers: {
-                    'Accept': 'application/json',
-                    'Authorization': (window.App.authorizationToken || '')
-                },
-                handleAs: 'json'
-            }).then(function(response) {
-                // GoWe envelope: {status, data}
-                return response.data || response;
-            }).catch(function(error) {
-                console.error('[CopilotApi] Error fetching workflow by id:', error);
-                throw error;
-            });
-        },
-
-        /**
-         * Retrieves the latest submission status from GoWe.
-         * @param {string} submissionId GoWe submission identifier
-         * @returns {Promise} Promise resolving to submission status payload
-         */
-        getWorkflowStatus: function(submissionId) {
-            if (!this._checkLoggedIn()) return Promise.reject('Not logged in');
-            if (!submissionId) return Promise.reject(new Error('submissionId is required'));
-
-            var goweUrl = window.App.workflow_url || 'https://gowe.software-smithy.org/api/v1';
-            var statusUrl = goweUrl + '/submissions/' + encodeURIComponent(submissionId);
-
-            return request.get(statusUrl, {
-                headers: {
-                    'Accept': 'application/json',
-                    'Authorization': (window.App.authorizationToken || '')
-                },
-                handleAs: 'json'
-            }).then(function(response) {
-                // GoWe envelope: {status, data}
-                return response.data || response;
-            }).catch(function(error) {
-                console.error('[CopilotApi] Error fetching submission status:', error);
-                throw error;
-            });
-        },
-
-        /**
-         * Fetches batch workflow statuses from the workflow engine.
-         * @param {Array<string>} workflowIds Array of workflow IDs
-         * @returns {Promise<Object>} Promise resolving to { statuses: {id: statusObj}, not_found: [] }
-         */
-        getBatchWorkflowStatus: function(submissionIds) {
-            if (!this._checkLoggedIn()) return Promise.reject('Not logged in');
-            if (!submissionIds || !submissionIds.length) {
-                return Promise.resolve({ statuses: {}, not_found: [] });
-            }
-
-            // GoWe does not have a batch status endpoint.
-            // Fetch each submission individually and assemble the result.
-            var self = this;
-            var ids = submissionIds.slice(0, 20);
-            var promises = ids.map(function(id) {
-                return self.getWorkflowStatus(id).then(function(data) {
-                    return { id: id, status: data, found: true };
-                }).catch(function() {
-                    return { id: id, status: null, found: false };
-                });
-            });
-
-            return Promise.all(promises).then(function(results) {
-                var statuses = {};
-                var notFound = [];
-                results.forEach(function(r) {
-                    if (r.found) {
-                        statuses[r.id] = r.status;
-                    } else {
-                        notFound.push(r.id);
-                    }
-                });
-                return { statuses: statuses, not_found: notFound };
-            });
-        },
+        // submitWorkflowForExecution, getWorkflowById, getWorkflowStatus,
+        // getBatchWorkflowStatus removed — workflow cards have been deleted.
+        // Workflow monitoring is handled by the gateway workflow monitor service.
 
         /**
          * Replays a previously executed MCP tool call through the orchestrator API.
@@ -1475,6 +1310,25 @@ define([
          */
         checkWorkflowWatchStatus: function(submissionId) {
             return request(this.apiUrlBase + '/workflow-watch/' + encodeURIComponent(submissionId) + '/status', {
+                method: 'GET',
+                headers: {
+                    'Content-Type': 'application/json',
+                    Authorization: (window.App.authorizationToken || '')
+                },
+                handleAs: 'json'
+            });
+        },
+
+        /**
+         * Fetches all workflow watches for a chat session.
+         * Returns watch records with external_ids (BV-BRC job IDs).
+         *
+         * @param {string} sessionId - Chat session ID
+         * @returns {Promise} Resolves with {watches: [...], count: N}
+         */
+        getSessionWorkflowWatches: function(sessionId) {
+            if (!sessionId) return Promise.reject('sessionId is required');
+            return request(this.apiUrlBase + '/session/' + encodeURIComponent(sessionId) + '/workflow-watches', {
                 method: 'GET',
                 headers: {
                     'Content-Type': 'application/json',

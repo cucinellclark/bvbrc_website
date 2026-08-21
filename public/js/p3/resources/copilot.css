@@ -1011,18 +1011,7 @@
   text-decoration: underline;
 }
 
-/* Type modifiers (for type-specific overrides if needed) */
-.chat-card--workflow {
-  border-color: #e5e7eb;
-  background: #f9fafb;
-}
-
-.chat-card--workflow-error {
-  border-color: #fbbf24;
-  background: #fffbeb;
-  color: #b45309;
-  font-size: 13px;
-}
+/* .chat-card--workflow and .chat-card--workflow-error removed — workflow cards deleted */
 
 /* File metadata card - extends workspace-summary-card layout */
 .file-metadata-download {
@@ -1931,6 +1920,116 @@
   background-position: center;
   background-size: 14px 14px;
   padding: 0;
+}
+
+/* Scroll Card Jobs Button */
+.scrollCardJobs {
+  opacity: 0.7;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 14px;
+  cursor: pointer;
+  width: 25px;
+  height: 25px;
+  border-radius: 3px;
+  background-color: transparent;
+  color: #808080;
+  background-image: url("/public/icon_source/list-unordered.svg");
+  background-repeat: no-repeat;
+  background-position: center;
+  background-size: 14px 14px;
+  padding: 0;
+}
+
+/* ========== Session Jobs Panel ========== */
+.session-jobs-panel-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(15, 23, 42, 0.35);
+  z-index: 950;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+}
+
+.session-jobs-panel {
+  background: #fff;
+  width: min(640px, 90vw);
+  max-height: 70vh;
+  border-radius: 10px;
+  box-shadow: 0 16px 40px rgba(0, 0, 0, 0.2);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.session-jobs-panel-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 16px;
+  border-bottom: 1px solid #e5e7eb;
+  background: #f9fafb;
+}
+
+.session-jobs-panel-close {
+  padding: 2px 8px;
+  background: transparent;
+  border: none;
+  font-size: 20px;
+  cursor: pointer;
+  color: #6b7280;
+  line-height: 1;
+}
+
+.session-jobs-panel-close:hover {
+  color: #111827;
+}
+
+.session-jobs-panel-body {
+  overflow-y: auto;
+  flex: 1;
+}
+
+.session-jobs-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+}
+
+.session-jobs-table th {
+  text-align: left;
+  padding: 8px 12px;
+  font-weight: 600;
+  color: #6b7280;
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  border-bottom: 1px solid #e5e7eb;
+  background: #fafafa;
+}
+
+.session-jobs-table td {
+  padding: 8px 12px;
+  border-bottom: 1px solid #f3f4f6;
+  color: #374151;
+}
+
+.session-jobs-table tr:hover td {
+  background: #f9fafb;
+}
+
+.session-jobs-output-link {
+  color: #2563eb;
+  text-decoration: none;
+  font-size: 12px;
+  font-weight: 500;
+}
+
+.session-jobs-output-link:hover {
+  text-decoration: underline;
 }
 
 /* Scroll Card Delete Button */
@@ -3027,26 +3126,7 @@
   }
 }
 
-/* ========== Workflow Review Button ========== */
-.workflow-review-btn {
-  border: 1px solid #93c5fd;
-  background-color: #dbeafe;
-  color: #1e3a8a;
-  border-radius: 6px;
-  padding: 7px 16px;
-  font-size: 13px;
-  font-weight: 500;
-  cursor: pointer;
-  transition: background-color 0.15s ease;
-}
-
-.workflow-review-btn:hover {
-  background-color: #bfdbfe;
-}
-
-.workflow-review-btn:active {
-  background-color: #93c5fd;
-}
+/* .workflow-review-btn removed — workflow cards deleted */
 
 /* ========== Workflow Submission Status Messages ========== */
 .workflow-submission-status-container {
