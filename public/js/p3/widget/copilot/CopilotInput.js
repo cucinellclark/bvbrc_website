@@ -527,6 +527,12 @@ define([
         // Gateway-classified card
         if (toolMetadata.card && toolMetadata.card.card_type) {
           assistantMessage.card = toolMetadata.card;
+          // Bridge clarification card payload to clarificationData so
+          // ChatMessage.renderClarificationChips() can find the questions.
+          if (toolMetadata.card.card_type === 'clarification' && toolMetadata.card.card_payload) {
+            assistantMessage.clarificationData = toolMetadata.card.card_payload;
+            assistantMessage.isPlanClarification = true;
+          }
         }
 
         // Pass through original query for clarification flows
