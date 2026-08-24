@@ -52,7 +52,12 @@ define([
                 return;
             }
 
-            // Hide the floating chat button while this page is active
+            // Hide the floating chat button while this page is active.
+            // Set flag first so late-initializing widgets (ChatButton) can
+            // check it, then publish for any already-subscribed listeners.
+            if (window.App) {
+                window.App.copilotViewerActive = true;
+            }
             topic.publish('CopilotViewerActive');
 
             // Build the UI
@@ -241,6 +246,9 @@ define([
 
         destroy: function () {
             // Re-show the floating chat button
+            if (window.App) {
+                window.App.copilotViewerActive = false;
+            }
             topic.publish('CopilotViewerInactive');
             this.inherited(arguments);
         }

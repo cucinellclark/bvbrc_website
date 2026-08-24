@@ -60,6 +60,9 @@ define([
                         '<button class="scrollCardCogMenuItem" data-dojo-attach-point="folderButtonNode">' +
                             '<i class="fa icon-folder-open-o"></i> Open Folder' +
                         '</button>' +
+                        '<button class="scrollCardCogMenuItem" data-dojo-attach-point="reportIssueButtonNode">' +
+                            '<i class="fa icon-commenting-o"></i> Report Issue' +
+                        '</button>' +
                         '<button class="scrollCardCogMenuItem scrollCardCogMenuItem--danger" data-dojo-attach-point="deleteButtonNode">' +
                             '<i class="fa icon-trash"></i> Delete' +
                         '</button>' +
@@ -221,6 +224,13 @@ define([
                     evt.stopPropagation();
                     this._closeCogMenu();
                     this._showSessionJobsPanel();
+                })));
+
+                // Click handler for report issue button
+                this.own(on(this.reportIssueButtonNode, 'click', lang.hitch(this, function(evt) {
+                    evt.stopPropagation();
+                    this._closeCogMenu();
+                    topic.publish('openReportIssueDialog');
                 })));
 
                 // Container hover effects

@@ -114,6 +114,14 @@ define([
                 domStyle.set(this.domNode, 'display', '');
             }));
 
+            // If the full-page Copilot viewer is already active (e.g. page
+            // loaded directly on /view/Copilot), hide immediately. The topic
+            // would have fired before this widget was created.
+            if (window.App && window.App.copilotViewerActive) {
+                this._copilotViewerActive = true;
+                domStyle.set(this.domNode, 'display', 'none');
+            }
+
             // Initialize footer overlap detection
             this._initFooterOverlapDetection();
         },
