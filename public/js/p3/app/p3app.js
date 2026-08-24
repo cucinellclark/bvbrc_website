@@ -55,48 +55,7 @@ define([
           }).placeAt(document.body);
           this.chatButton = chatButton;
 
-          // Create blue rectangle button for showing chat button when hidden
-          var showChatRectButton = domConstruct.create('div', {
-            className: 'ShowChatRectButton',
-            innerHTML: '<span class="show-chat-plus">+</span>',
-            title: 'show copilot button',
-            style: {
-              display: 'none'
-            }
-          });
-          domConstruct.place(showChatRectButton, document.body);
 
-          // Function to get chat button visibility from localStorage
-          function getChatButtonVisibility() {
-            try {
-              if (window && window.localStorage) {
-                var stored = localStorage.getItem('copilot-chat-button-visible');
-                return stored !== null ? (stored === 'true') : true; // default to visible
-              }
-            } catch (e) {
-              console.warn('Unable to read chat button visibility from localStorage', e);
-            }
-            return true; // default to visible
-          }
-
-          // Initialize showChatRectButton visibility based on localStorage
-          var initialChatButtonVisible = getChatButtonVisibility();
-          if (!initialChatButtonVisible) {
-            domStyle.set(showChatRectButton, 'display', 'block');
-          }
-
-          // Add click handler for the rectangle button
-          on(showChatRectButton, 'click', function(evt) {
-            Topic.publish('showChatButton', true);
-          });
-
-          Topic.subscribe('hideChatButton', lang.hitch(this, function(checked) {
-            domStyle.set(showChatRectButton, 'display', 'block');
-          }));
-
-          Topic.subscribe('showChatButton', lang.hitch(this, function(checked) {
-            domStyle.set(showChatRectButton, 'display', 'none');
-          }));
         })
       }
 

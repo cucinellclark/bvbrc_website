@@ -103,42 +103,6 @@
   background-color: #e5e7eb;
 }
 
-/* Show Chat Rectangle Button */
-.ShowChatRectButton {
-  position: fixed;
-  bottom: 7vh;
-  right: 0px;
-  z-index: 9999;
-  background-color: var(--blue);
-  color: white;
-  border: none;
-  width: 20px;
-  height: 20px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  cursor: pointer;
-  transition: all 0.3s ease;
-  border-radius: 6px;
-  padding-left: 8px;
-  padding-top: 2px;
-}
-
-.ShowChatRectButton:hover {
-  background-color: #0056b3;
-  transform: scale(1.05);
-}
-
-.ShowChatRectButton .show-chat-plus {
-  font-size: 16px;
-  font-weight: bold;
-  line-height: 1;
-  user-select: none;
-  -webkit-user-select: none;
-  -moz-user-select: none;
-  -ms-user-select: none;
-}
-
 /* Chat Button Elements */
 .ChatButton .dijitButtonNode {
   width: 100%;
@@ -4255,4 +4219,35 @@ a.workspace-path-chip:hover {
 
 .plan-tracker-status-done {
   color: #16a34a;
+}
+
+/* ======================================================================
+   Full-Page Copilot Viewer  (/view/Copilot)
+   ====================================================================== */
+
+.CopilotFullPageViewer {
+  width: 100%;
+  height: 100%;
+  background: #fff;
+}
+
+/* Override default BorderContainer gutters inside the viewer */
+.CopilotFullPageViewer > .dijitBorderContainer {
+  padding: 0;
+}
+
+/* Sidebar left panel */
+.CopilotFullPageViewer > .dijitContentPane[widgetid*="dijit_layout_ContentPane"] {
+  border: 0;
+}
+
+/* Ensure the chat container fills its parent in the full-page view */
+.CopilotFullPageViewer .ChatSessionContainer {
+  width: 100% !important;
+  height: 100% !important;
+}
+
+/* Give the sidebar session list a subtle separator from the chat area */
+.CopilotFullPageViewer .optionsBottomSection {
+  border-top: 1px solid #e0e0e0;
 }

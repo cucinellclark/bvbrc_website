@@ -89,12 +89,29 @@ define([
             }));
 
             topic.subscribe('showChatPanel', lang.hitch(this, function(checked) {
+                if (this._copilotViewerActive) { return; }
                 this._showControllerPanel();
             }));
 
             // Subscribe to copilot service unavailable errors
             topic.subscribe('CopilotServiceUnavailable', lang.hitch(this, function(message) {
                 this.showErrorTooltip(message || 'The BV-BRC Copilot service is currently unavailable. Please try again later.');
+            }));
+
+            // Hide the floating chat button when the full-page Copilot viewer is active
+            topic.subscribe('CopilotViewerActive', lang.hitch(this, function () {
+                this._copilotViewerActive = true;
+                // Close the floating window if it is open
+                if (this.chatOpen) {
+                    this._hideControllerPanel();
+                    this.chatOpen = false;
+                }
+                domStyle.set(this.domNode, 'display', 'none');
+            }));
+
+            topic.subscribe('CopilotViewerInactive', lang.hitch(this, function () {
+                this._copilotViewerActive = false;
+                domStyle.set(this.domNode, 'display', '');
             }));
 
             // Initialize footer overlap detection
@@ -278,6 +295,11 @@ define([
         // Override onClick to show the controller panel
         onClick: function(evt) {
             this.inherited(arguments);
+            // Do nothing while the full-page Copilot viewer is active
+            if (this._copilotViewerActive) {
+                evt.stopPropagation();
+                return;
+            }
             if (!this.chatOpen) {
                 this._openSmallChat();
                 this.chatOpen = true;
