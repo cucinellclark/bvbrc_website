@@ -1866,44 +1866,82 @@
   right: 3px;
 }
 
-/* Scroll Card Folder Button */
-.scrollCardFolder {
-  opacity: 0.7;
+/* Scroll Card Cog (settings) Button & Menu */
+.scrollCardCogContainer {
+  position: relative;
   display: flex;
   align-items: center;
-  justify-content: center;
-  font-size: 14px;
-  cursor: pointer;
-  width: 25px;
-  height: 25px;
-  border-radius: 3px;
-  background-color: transparent;
-  color: #808080;
-  background-image: url("/public/icon_source/folder-open.svg");
-  background-repeat: no-repeat;
-  background-position: center;
-  background-size: 14px 14px;
-  padding: 0;
+  flex-shrink: 0;
 }
 
-/* Scroll Card Jobs Button */
-.scrollCardJobs {
-  opacity: 0.7;
+.scrollCardCogButton {
+  width: 25px;
+  height: 25px;
+  padding: 0;
+  border: 1px solid #cbd5e1;
+  border-radius: 6px;
+  background: #f8fafc;
+  color: #334155;
+  font-size: 13px;
+  cursor: pointer;
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: 14px;
+  transition: background-color 0.15s ease, color 0.15s ease;
+}
+
+.scrollCardCogButton:hover {
+  background: #eff6ff;
+  color: #1e40af;
+}
+
+.scrollCardCogMenu {
+  display: none;
+  position: absolute;
+  top: calc(100% + 4px);
+  right: 0;
+  min-width: 150px;
+  padding: 4px 0;
+  background: #fff;
+  border: 1px solid #cbd5e1;
+  border-radius: 8px;
+  box-shadow: 0 8px 20px rgba(15, 23, 42, 0.12);
+  z-index: 200;
+}
+
+.scrollCardCogMenuItem {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 7px 12px;
+  border: 0;
+  background: transparent;
+  color: #334155;
+  font-size: 12px;
+  text-align: left;
   cursor: pointer;
-  width: 25px;
-  height: 25px;
-  border-radius: 3px;
-  background-color: transparent;
-  color: #808080;
-  background-image: url("/public/icon_source/list-unordered.svg");
-  background-repeat: no-repeat;
-  background-position: center;
-  background-size: 14px 14px;
-  padding: 0;
+  white-space: nowrap;
+}
+
+.scrollCardCogMenuItem:hover {
+  background: #eff6ff;
+  color: #1e40af;
+}
+
+.scrollCardCogMenuItem .fa {
+  width: 14px;
+  color: #64748b;
+  font-size: 12px;
+}
+
+.scrollCardCogMenuItem--danger:hover {
+  background: #fef2f2;
+  color: #dc2626;
+}
+
+.scrollCardCogMenuItem--danger:hover .fa {
+  color: #dc2626;
 }
 
 /* ========== Session Jobs Panel ========== */
@@ -1994,26 +2032,6 @@
 
 .session-jobs-output-link:hover {
   text-decoration: underline;
-}
-
-/* Scroll Card Delete Button */
-.scrollCardDelete {
-  opacity: 0.7;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-size: 14px;
-  cursor: pointer;
-  width: 25px;
-  height: 25px;
-  border-radius: 3px;
-  background-color: transparent;
-  color: #808080;
-  background-image: url("/public/icon_source/trash.svg");
-  background-repeat: no-repeat;
-  background-position: center;
-  background-size: 15px 15px;
-  padding: 0;
 }
 
 /* Scroll Card Title */

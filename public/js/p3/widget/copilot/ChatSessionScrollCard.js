@@ -49,9 +49,22 @@ define([
         '<div class="session-title-container" style="display: flex; justify-content: space-between; align-items: center;">' +
             '<div class="session-title" data-dojo-attach-point="titleNode"></div>' +
             '<div class="scrollCardActions">' +
-                '<div class="jobs-button" data-dojo-attach-point="jobsButtonNode"></div>' +
-                '<div class="folder-button" data-dojo-attach-point="folderButtonNode"></div>' +
-                '<div class="delete-button" data-dojo-attach-point="deleteButtonNode"></div>' +
+                '<div class="scrollCardCogContainer" data-dojo-attach-point="cogContainerNode">' +
+                    '<div class="scrollCardCogButton" data-dojo-attach-point="cogButtonNode" title="Session actions">' +
+                        '<i class="fa icon-cog"></i>' +
+                    '</div>' +
+                    '<div class="scrollCardCogMenu" data-dojo-attach-point="cogMenuNode">' +
+                        '<button class="scrollCardCogMenuItem" data-dojo-attach-point="jobsButtonNode">' +
+                            '<i class="fa icon-list-unordered"></i> View Jobs' +
+                        '</button>' +
+                        '<button class="scrollCardCogMenuItem" data-dojo-attach-point="folderButtonNode">' +
+                            '<i class="fa icon-folder-open-o"></i> Open Folder' +
+                        '</button>' +
+                        '<button class="scrollCardCogMenuItem scrollCardCogMenuItem--danger" data-dojo-attach-point="deleteButtonNode">' +
+                            '<i class="fa icon-trash"></i> Delete' +
+                        '</button>' +
+                    '</div>' +
+                '</div>' +
             '</div>' +
         '</div>' +
         '<div class="session-date-container" style="display: flex; justify-content: space-between; align-items: center;">' +
@@ -90,14 +103,28 @@ define([
 
             // Apply CSS classes instead of inline styles
             this.containerNode.className += ' scrollCardContainer';
-            this.deleteButtonNode.className += ' scrollCardDelete';
-            this.folderButtonNode.className += ' scrollCardFolder';
-            this.jobsButtonNode.className += ' scrollCardJobs';
 
-            // Add tooltips
-            this.jobsButtonNode.title = 'View session jobs';
-            this.folderButtonNode.title = 'Open session folder in workspace';
-            this.deleteButtonNode.title = 'Delete chat session';
+            // Set up cog menu toggle
+            this._cogMenuOpen = false;
+            this.own(on(this.cogButtonNode, 'click', lang.hitch(this, function (evt) {
+                evt.stopPropagation();
+                this._toggleCogMenu();
+            })));
+
+            // Close the cog menu when clicking anywhere outside
+            this._docClickHandle = on(document, 'click', lang.hitch(this, function () {
+                if (this._cogMenuOpen) {
+                    this._closeCogMenu();
+                }
+            }));
+            this.own(this._docClickHandle);
+
+            // Close this card's cog menu when another card opens theirs
+            this.own(topic.subscribe('ScrollCardCogMenu:CloseAll', lang.hitch(this, function (sender) {
+                if (sender !== this) {
+                    this._closeCogMenu();
+                }
+            })));
 
             if (this.session) {
                 // Display formatted creation date
@@ -114,7 +141,8 @@ define([
 
                 // Click handler to load session messages
                 on(this.containerNode, 'click', lang.hitch(this, function(evt) {
-                    if (evt.target === this.deleteButtonNode || evt.target === this.folderButtonNode || evt.target === this.jobsButtonNode) {
+                    // Ignore clicks inside the cog menu area
+                    if (this.cogContainerNode && this.cogContainerNode.contains(evt.target)) {
                         return;
                     }
 
@@ -146,57 +174,17 @@ define([
                     }
                 }));
 
-                // Add hover effects for delete button (matching copilotChatCloseButton:hover)
-                this.own(on(this.deleteButtonNode, 'mouseenter', lang.hitch(this, function() {
-                    this.deleteButtonNode.style.opacity = '1';
-                    this.deleteButtonNode.style.backgroundColor = '#f0f0f0';
-                })));
-
-                this.own(on(this.deleteButtonNode, 'mouseleave', lang.hitch(this, function() {
-                    this.deleteButtonNode.style.opacity = '0.7';
-                    this.deleteButtonNode.style.backgroundColor = 'transparent';
-                })));
-
-                this.own(on(this.deleteButtonNode, 'mousedown', lang.hitch(this, function(evt) {
-                    evt.stopPropagation();
-                    this.deleteButtonNode.style.backgroundColor = '#e0e0e0';
-                })));
-
-                this.own(on(this.deleteButtonNode, 'mouseup', lang.hitch(this, function(evt) {
-                    evt.stopPropagation();
-                    this.deleteButtonNode.style.backgroundColor = '#f0f0f0';
-                })));
-
-                // Add click handler for delete
+                // Add click handler for delete (inside cog menu)
                 this.own(on(this.deleteButtonNode, 'click', lang.hitch(this, function(evt) {
                     evt.stopPropagation();
+                    this._closeCogMenu();
                     topic.publish('ChatSession:Delete', this.session.session_id);
-                })));
-
-                // Add hover effects for folder button
-                this.own(on(this.folderButtonNode, 'mouseenter', lang.hitch(this, function() {
-                    this.folderButtonNode.style.opacity = '1';
-                    this.folderButtonNode.style.backgroundColor = '#f0f0f0';
-                })));
-
-                this.own(on(this.folderButtonNode, 'mouseleave', lang.hitch(this, function() {
-                    this.folderButtonNode.style.opacity = '0.7';
-                    this.folderButtonNode.style.backgroundColor = 'transparent';
-                })));
-
-                this.own(on(this.folderButtonNode, 'mousedown', lang.hitch(this, function(evt) {
-                    evt.stopPropagation();
-                    this.folderButtonNode.style.backgroundColor = '#e0e0e0';
-                })));
-
-                this.own(on(this.folderButtonNode, 'mouseup', lang.hitch(this, function(evt) {
-                    evt.stopPropagation();
-                    this.folderButtonNode.style.backgroundColor = '#f0f0f0';
                 })));
 
                 // Add click handler for folder button - opens session workspace folder in new tab
                 this.own(on(this.folderButtonNode, 'click', lang.hitch(this, function(evt) {
                     evt.stopPropagation();
+                    this._closeCogMenu();
                     var userId = (window.App && window.App.user && window.App.user.id) ? window.App.user.id : null;
                     if (!userId) {
                         console.error('Cannot open session folder: user not logged in');
@@ -228,30 +216,10 @@ define([
                     );
                 })));
 
-                // Add hover effects for jobs button
-                this.own(on(this.jobsButtonNode, 'mouseenter', lang.hitch(this, function() {
-                    this.jobsButtonNode.style.opacity = '1';
-                    this.jobsButtonNode.style.backgroundColor = '#f0f0f0';
-                })));
-
-                this.own(on(this.jobsButtonNode, 'mouseleave', lang.hitch(this, function() {
-                    this.jobsButtonNode.style.opacity = '0.7';
-                    this.jobsButtonNode.style.backgroundColor = 'transparent';
-                })));
-
-                this.own(on(this.jobsButtonNode, 'mousedown', lang.hitch(this, function(evt) {
-                    evt.stopPropagation();
-                    this.jobsButtonNode.style.backgroundColor = '#e0e0e0';
-                })));
-
-                this.own(on(this.jobsButtonNode, 'mouseup', lang.hitch(this, function(evt) {
-                    evt.stopPropagation();
-                    this.jobsButtonNode.style.backgroundColor = '#f0f0f0';
-                })));
-
                 // Click handler for jobs button - shows session jobs panel
                 this.own(on(this.jobsButtonNode, 'click', lang.hitch(this, function(evt) {
                     evt.stopPropagation();
+                    this._closeCogMenu();
                     this._showSessionJobsPanel();
                 })));
 
@@ -276,6 +244,30 @@ define([
             }
 
             this.setupRating();
+        },
+
+        /**
+         * Toggles the cog dropdown menu open/closed.
+         */
+        _toggleCogMenu: function () {
+            if (this._cogMenuOpen) {
+                this._closeCogMenu();
+            } else {
+                // Close any other open cog menus first
+                topic.publish('ScrollCardCogMenu:CloseAll', this);
+                this.cogMenuNode.style.display = 'block';
+                this._cogMenuOpen = true;
+            }
+        },
+
+        /**
+         * Closes the cog dropdown menu.
+         */
+        _closeCogMenu: function () {
+            if (this.cogMenuNode) {
+                this.cogMenuNode.style.display = 'none';
+            }
+            this._cogMenuOpen = false;
         },
 
         /**
