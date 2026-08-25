@@ -425,11 +425,11 @@ define([
         }, row);
       }));
 
-      // Copy button for the whole widget.
-      var buttonContainer = domConstruct.create('div', {
-        class: 'user-message-button-container'
+      // Action buttons (copy + retry) below the widget.
+      var actionsBar = domConstruct.create('div', {
+        class: 'user-message-actions'
       }, messageDiv);
-      this.createUserMessageCopyButton(buttonContainer);
+      this.createUserMessageActionButtons(actionsBar);
 
       this.renderAttachments(messageDiv);
     },
@@ -490,13 +490,12 @@ define([
       }
 
       if (this.message.role === 'user' || this.message.role === 'user_clarification') {
-        // Create button container for user messages - positioned in bottom right
-        var buttonContainer = domConstruct.create('div', {
-          class: 'user-message-button-container'
+        // Create action bar below the bubble with copy + retry buttons
+        var actionsBar = domConstruct.create('div', {
+          class: 'user-message-actions'
         }, messageDiv);
 
-        // Add copy button for user messages
-        this.createUserMessageCopyButton(buttonContainer);
+        this.createUserMessageActionButtons(actionsBar);
       }
 
       this.renderAttachments(messageDiv);
@@ -671,18 +670,29 @@ define([
     },
 
     /**
-     * Creates copy button for user messages
+     * Creates copy + retry buttons for user messages.
+     * Placed in the action bar below the message bubble.
      */
-    createUserMessageCopyButton: function(buttonContainer) {
+    createUserMessageActionButtons: function(buttonContainer) {
       var copyButton = this.createButton('', 'copy-button', 'Copy message');
 
-      // Add click handler for copy button
       on(copyButton, 'click', lang.hitch(this, function(event) {
         topic.publish('copy-message', this.message.content);
         event.stopPropagation();
       }));
 
+      var retryButton = this.createButton('<i class="icon-refresh"></i>', 'retry-button', 'Retry this message');
+
+      on(retryButton, 'click', lang.hitch(this, function(event) {
+        var content = this.message.content;
+        if (content && typeof content === 'string' && content.trim()) {
+          topic.publish('RetryUserMessage', content);
+        }
+        event.stopPropagation();
+      }));
+
       domConstruct.place(copyButton, buttonContainer);
+      domConstruct.place(retryButton, buttonContainer);
     },
 
     /**

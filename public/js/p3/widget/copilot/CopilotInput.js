@@ -940,6 +940,14 @@ define([
           }
         })));
 
+        // Retry a user message — sets the textarea and immediately submits
+        this._topicHandles.push(topic.subscribe('RetryUserMessage', lang.hitch(this, function(messageContent) {
+          if (this.isSubmitting) { return; }
+          if (!messageContent || typeof messageContent !== 'string') { return; }
+          this._setInputTextValue(messageContent);
+          this._handleSubmitStream();
+        })));
+
         // ==================== Planning Agent Topic Subscribers ====================
 
         // 0. CopilotPlanClarificationAnswered — remove the ask_questions chip UI message

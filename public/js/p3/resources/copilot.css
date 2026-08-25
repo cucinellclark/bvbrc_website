@@ -820,7 +820,7 @@
   max-width: 60%;
   display: inline-block;
   margin-top: 10px;
-  position: relative; /* For absolute positioning of button */
+  margin-bottom: 0;
 }
 
 .message.user_clarification {
@@ -834,7 +834,7 @@
   max-width: 68%;
   display: inline-block;
   margin-top: 10px;
-  position: relative;
+  margin-bottom: 0;
 }
 
 .message.user_clarification .markdown-content {
@@ -852,27 +852,19 @@
   margin-bottom: 2px;
 }
 
-/* User message button container - positioned in bottom right corner */
-.user-message-button-container {
-  position: absolute;
-  bottom: 2px;
-  right: 2px;
+/* User message action buttons — below the bubble, right-aligned */
+.user-message-actions {
   display: flex;
+  justify-content: flex-end;
   gap: 4px;
+  margin-top: 2px;
   opacity: 0;
   transition: opacity 0.2s ease;
 }
 
-/* Show button when hovering over user message */
-.message.user:hover .user-message-button-container {
-  opacity: 1;
-}
-
-.message.user_clarification:hover .user-message-button-container {
-  opacity: 1;
-}
-
-.message.answered-questions:hover .user-message-button-container {
+/* Show action buttons when hovering over the user message */
+.message.user:hover .user-message-actions,
+.message.user_clarification:hover .user-message-actions {
   opacity: 1;
 }
 
@@ -1178,6 +1170,20 @@
 }
 
 .message-action-button.copy-button:hover {
+  background-color: #e0f2fe;
+  border-color: #0284c7;
+  color: #0c4a6e;
+}
+
+.message-action-button.retry-button {
+  height: 25px;
+  width: 25px;
+  background-color: transparent;
+  font-size: 13px;
+  color: #64748b;
+}
+
+.message-action-button.retry-button:hover {
   background-color: #e0f2fe;
   border-color: #0284c7;
   color: #0c4a6e;
@@ -4007,11 +4013,9 @@ a.workspace-path-chip:hover {
   color: #111827;
 }
 
-/* Ensure the copy button sits nicely on this card */
-.message.answered-questions .user-message-button-container {
-  position: absolute;
-  bottom: 6px;
-  right: 8px;
+/* Ensure the action buttons sit nicely below this card */
+.message.answered-questions .user-message-actions {
+  margin-top: 4px;
 }
 
 /* ============================================================
