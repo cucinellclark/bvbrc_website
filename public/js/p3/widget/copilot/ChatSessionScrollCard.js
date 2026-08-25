@@ -54,6 +54,9 @@ define([
                         '<i class="fa icon-cog"></i>' +
                     '</div>' +
                     '<div class="scrollCardCogMenu" data-dojo-attach-point="cogMenuNode">' +
+                        '<button class="scrollCardCogMenuItem" data-dojo-attach-point="editTitleButtonNode">' +
+                            '<i class="fa icon-pencil"></i> Edit Title' +
+                        '</button>' +
                         '<button class="scrollCardCogMenuItem" data-dojo-attach-point="jobsButtonNode">' +
                             '<i class="fa icon-list-unordered"></i> View Jobs' +
                         '</button>' +
@@ -217,6 +220,13 @@ define([
                             );
                         }
                     );
+                })));
+
+                // Click handler for edit title button
+                this.own(on(this.editTitleButtonNode, 'click', lang.hitch(this, function(evt) {
+                    evt.stopPropagation();
+                    this._closeCogMenu();
+                    topic.publish('editSessionTitle', this.session.session_id);
                 })));
 
                 // Click handler for jobs button - shows session jobs panel

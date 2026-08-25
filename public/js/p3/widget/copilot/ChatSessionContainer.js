@@ -262,6 +262,15 @@ define([
             topic.subscribe('copy-message', lang.hitch(this, this._handleCopyMessage));
             topic.subscribe('rate-message', lang.hitch(this, this._handleRateMessage));
             topic.subscribe('openReportIssueDialog', lang.hitch(this, this._handleOpenReportIssueDialog));
+            topic.subscribe('editSessionTitle', lang.hitch(this, function(sessionId) {
+                if (sessionId && sessionId === this.sessionId && this.titleWidget) {
+                    if (this.titleWidget.isEditing) {
+                        this.titleWidget.saveTitleEditor();
+                    } else {
+                        this.titleWidget.startEditing();
+                    }
+                }
+            }));
             topic.subscribe('chatTextSizeChanged', lang.hitch(this, this._handleChatTextSizeChanged));
             topic.subscribe('setStatePrompt', lang.hitch(this, this._handleSetStatePrompt));
             topic.subscribe('CopilotSessionFileCreated', lang.hitch(this, this._handleSessionFileCreated));
@@ -414,23 +423,6 @@ define([
             });
             this.titleBarWrapper.addChild(this.titleWidget);
 
-            // Edit title button on the right side
-            this.editTitleButton = domConstruct.create('button', {
-                type: 'button',
-                'class': 'chat-session-edit-title-btn',
-                innerHTML: '\u270E',
-                title: 'Edit session title'
-            }, this.titleBarWrapper.containerNode);
-
-            on(this.editTitleButton, 'click', lang.hitch(this, function() {
-                if (this.titleWidget) {
-                    if (this.titleWidget.isEditing) {
-                        this.titleWidget.saveTitleEditor();
-                    } else {
-                        this.titleWidget.startEditing();
-                    }
-                }
-            }));
         },
 
         /**
