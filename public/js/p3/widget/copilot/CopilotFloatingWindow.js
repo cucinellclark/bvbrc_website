@@ -177,19 +177,6 @@ define([
                 }
             }));
 
-            // Add Report Issue button
-            var reportIssueButton = domConstruct.create('div', {
-                className: 'copilotChatReportIssueButton',
-                innerHTML: '<i class="fa icon-commenting-o"></i>',
-                title: 'Report an issue with the chat session'
-            }, leftButtonContainer);
-
-            // Add click handler for report issue button
-            on(reportIssueButton, 'click', lang.hitch(this, function() {
-                topic.publish('openReportIssueDialog');
-                domClass.add(reportIssueButton, 'active');
-            }));
-
             if (this.showModelSelector) {
                 // Add model selector button
                 this.modelSelectorButton = domConstruct.create('div', {
