@@ -888,14 +888,6 @@
   justify-content: flex-end;
   gap: 4px;
   margin-top: 2px;
-  opacity: 0;
-  transition: opacity 0.2s ease;
-}
-
-/* Show action buttons when hovering over the user message */
-.message.user:hover .user-message-actions,
-.message.user_clarification:hover .user-message-actions {
-  opacity: 1;
 }
 
 .message.assistant {
@@ -1208,9 +1200,12 @@
 .message-action-button.retry-button {
   height: 25px;
   width: 25px;
+  padding: 0;
   background-color: transparent;
-  font-size: 13px;
-  color: #64748b;
+  background-image: url("/public/icon_source/repeat.svg");
+  background-size: 13px 13px;
+  background-repeat: no-repeat;
+  background-position: center;
 }
 
 .message-action-button.retry-button:hover {

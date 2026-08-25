@@ -697,7 +697,7 @@ define([
         event.stopPropagation();
       }));
 
-      var retryButton = this.createButton('<i class="icon-refresh"></i>', 'retry-button', 'Retry this message');
+      var retryButton = this.createButton('', 'retry-button', 'Retry this message');
 
       on(retryButton, 'click', lang.hitch(this, function(event) {
         var content = this.message.content;
