@@ -1201,11 +1201,21 @@
   height: 25px;
   width: 25px;
   padding: 0;
+  position: relative;
   background-color: transparent;
+  background-image: none;
+}
+
+.message-action-button.retry-button::after {
+  content: "";
+  position: absolute;
+  inset: 0;
   background-image: url("/public/icon_source/repeat.svg");
   background-size: 13px 13px;
   background-repeat: no-repeat;
   background-position: center;
+  opacity: 0.5;
+  pointer-events: none;
 }
 
 .message-action-button.retry-button:hover {
