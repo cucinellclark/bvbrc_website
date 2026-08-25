@@ -464,6 +464,29 @@ define([
     // format_plan_review_ready removed — review steps are no longer used.
 
     /**
+     * Formats 'plan_step_needs_input' event.
+     * The delegated agent called ask_clarification — it needs user input
+     * before it can finish the current step.  Pauses plan execution.
+     */
+    format_plan_step_needs_input: function(data) {
+      topic.publish('CopilotPlanStepUpdate', {
+        event: 'needs_input',
+        plan_id: data.plan_id,
+        step_id: data.step_id,
+        step_index: data.step_index,
+        question: data.question,
+        agent: data.agent
+      });
+
+      return {
+        role: 'status',
+        type: 'plan_step_needs_input',
+        content: '',
+        should_remove: false
+      };
+    },
+
+    /**
      * Formats 'plan_step_failed' event
      */
     format_plan_step_failed: function(data) {

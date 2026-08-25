@@ -36,6 +36,9 @@ define([
 
       statePrompt: null,
 
+      /** Plan step context waiting for user input (set by needs_input event) */
+      _pendingPlanStepInput: null,
+
       // Widget styling
       style: 'padding: 0 5px 5px 5px; border: 0; height: 20%; overflow: visible;',
 
@@ -887,6 +890,7 @@ define([
         this._topicHandles.push(topic.subscribe('ChatSession:Selected', lang.hitch(this, function(data) {
             this._closeAttachMenu();
             this._clearAttachedImage();
+            this._pendingPlanStepInput = null;
 
             this.selectedWorkspaceItems = [];
             this._renderWorkspaceSelectionIndicator();
@@ -1103,6 +1107,17 @@ define([
                   } else if (data.event === 'completed') {
                     planData.steps[j].status = 'completed';
                     planData.steps[j].result_summary = data.result_summary || '';
+                  } else if (data.event === 'needs_input') {
+                    planData.steps[j].status = 'needs_input';
+                    planData.steps[j].question = data.question || '';
+                    // Track the plan context so _handleSubmitStream can
+                    // intercept the user's reply and re-execute this step.
+                    this._pendingPlanStepInput = {
+                      plan: planData,
+                      stepIndex: data.step_index,
+                      sessionId: this.sessionId,
+                      completedResults: this._getCompletedResultsFromPlan(planData)
+                    };
                   } else if (data.event === 'failed') {
                     planData.steps[j].status = 'failed';
                   }
@@ -1276,6 +1291,7 @@ define([
       startNewChat: function() {
         this.new_chat = true;
         this.session_registered = false;
+        this._pendingPlanStepInput = null;
         this._setInputTextValue('');
 
         // If an SSE stream was in progress, reset the submit state so the
@@ -1684,6 +1700,22 @@ define([
       },
 
       /**
+       * Build a completedResults map from a plan object's step data.
+       * Used when resuming a paused needs_input step.
+       */
+      _getCompletedResultsFromPlan: function(planData) {
+        var results = {};
+        if (!planData || !planData.steps) { return results; }
+        for (var i = 0; i < planData.steps.length; i++) {
+          var s = planData.steps[i];
+          if (s.status === 'completed' && s.result_summary) {
+            results[s.step_id] = { result_summary: s.result_summary };
+          }
+        }
+        return results;
+      },
+
+      /**
        * Finalizes creation of a brand-new chat after the first successful response.
        * Session registration/list updates are handled earlier; this now marks the
        * chat as initialized and triggers title generation.
@@ -1703,6 +1735,49 @@ define([
     _handleSubmitStream: function() {
       var inputText = this.textArea.get('value');
       var _self = this;
+
+      // --- Plan step needs_input intercept ---
+      // If a plan step is paused waiting for user input, redirect the
+      // user's message to re-execute that same step.  The user's answer
+      // becomes the query text, and recent_messages (which now include
+      // the agent's question + user's answer) provide the context the
+      // planning agent needs to reformulate the step query.
+      if (this._pendingPlanStepInput && inputText && inputText.trim()) {
+        var pending = this._pendingPlanStepInput;
+        this._pendingPlanStepInput = null;  // Clear before re-submit
+
+        // Show user message in chat before submitting
+        var userMessage = this._buildUserMessageForSubmit(inputText, null);
+        this.chatStore.addMessage(userMessage);
+        this.displayWidget.showMessages(this.chatStore.query());
+        this._setInputTextValue('');
+
+        // Reset the step to pending so the planning agent re-executes it
+        if (pending.plan && pending.plan.steps && pending.plan.steps[pending.stepIndex]) {
+          pending.plan.steps[pending.stepIndex].status = 'pending';
+          delete pending.plan._needsInputStepIndex;
+        }
+
+        // Publish so PlanCard can update its UI (step back to pending, unpause)
+        topic.publish('CopilotPlanStepUpdate', {
+          event: 'started',
+          plan_id: pending.plan.plan_id,
+          step_id: pending.plan.steps[pending.stepIndex].step_id,
+          step_index: pending.stepIndex
+        });
+
+        this._submitPlanAction(
+          inputText,
+          pending.sessionId,
+          {
+            plan: pending.plan,
+            plan_action: 'execute_next',
+            current_step_index: pending.stepIndex,
+            completed_step_results: pending.completedResults || {}
+          }
+        );
+        return;
+      }
       var uploadedImagePayload = this._getUploadedImagePayload();
       var hasUploadedImage = !!(uploadedImagePayload && Array.isArray(uploadedImagePayload.images) && uploadedImagePayload.images.length > 0 && this._modelSupportsImage(this.model));
       var uploadedFilesPayload = this._getUploadedFilesPayload();

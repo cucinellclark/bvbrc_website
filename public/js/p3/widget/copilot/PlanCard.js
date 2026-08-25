@@ -42,6 +42,7 @@ define([
     pending: '\u25CB',     // ○
     running: '\u23F3',     // ⏳
     completed: '\u2705',   // ✅
+    needs_input: '\u270B', // ✋
     failed: '\u274C',      // ❌
     skipped: '\u2298'      // ⊘
   };
@@ -64,6 +65,7 @@ define([
     _waitingStepId: null,     // step_id of the step that submitted workflow(s)
     _waitingStepIndex: null,  // step_index of the step that submitted workflow(s)
     _workflowPollInterval: null, // setInterval handle for polling workflow status
+    _needsInputStepIndex: null, // step_index of a step paused for user input
 
     constructor: function (params) {
       this.plan = params.plan || {};
@@ -98,6 +100,12 @@ define([
       }
       this._workflowPollInterval = null;
 
+      // Restore needs_input state from persisted plan data.
+      if (this.plan._needsInputStepIndex != null) {
+        this._needsInputStepIndex = this.plan._needsInputStepIndex;
+        this._paused = true;
+      }
+
       // Infer initial mode from persisted plan/step statuses.
       // On page reload, steps may already be completed/failed/skipped.
       var planStatus = this.plan.status || 'draft';
@@ -105,9 +113,9 @@ define([
         this._mode = 'display';
       } else if (planStatus === 'executing' || planStatus === 'approved') {
         // Plan was mid-execution when page was reloaded.
-        // Check if any steps are still pending/running.
+        // Check if any steps are still pending/running/needs_input.
         var hasActive = (this.plan.steps || []).some(function (s) {
-          return s.status === 'pending' || s.status === 'running';
+          return s.status === 'pending' || s.status === 'running' || s.status === 'needs_input';
         });
         // If a step was 'running' at persist time, it was interrupted by
         // the reload -- revert it to 'pending' so it can be re-executed.
@@ -378,6 +386,15 @@ define([
         }, resultDiv);
       }
 
+      // Waiting for user input (for needs_input steps)
+      if (step.status === 'needs_input') {
+        domConstruct.create('div', {
+          'class': 'plan-step-needs-input',
+          innerHTML: 'Waiting for your reply in the chat below...',
+          style: 'color: #b45309; font-size: 12px; margin-top: 4px; font-style: italic;'
+        }, stepNode);
+      }
+
       // Error message (for failed steps)
       if (step.status === 'failed') {
         var errorDiv = domConstruct.create('div', {
@@ -631,13 +648,26 @@ define([
           }
           break;
 
+        case 'needs_input':
+          step.status = 'needs_input';
+          step.question = data.question || '';
+          // Pause auto-advancement — we need the user's answer.
+          // The question text appears as a normal chat message (via
+          // synthesis).  The user replies in the chat input, which
+          // triggers re-execution of this same step.
+          this._paused = true;
+          this._needsInputStepIndex = data.step_index;
+          // Persist on plan object so it survives page reload
+          this.plan._needsInputStepIndex = data.step_index;
+          break;
+
         case 'failed':
           step.status = 'failed';
           step.error_message = data.error || 'Step failed';
           break;
       }
 
-      // Check if all steps are done
+      // Check if all steps are done (needs_input is NOT done)
       var allDone = this.plan.steps.every(function (s) {
         return s.status === 'completed' || s.status === 'skipped' || s.status === 'failed';
       });
