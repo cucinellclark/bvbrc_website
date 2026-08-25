@@ -98,6 +98,13 @@ define([
                 this.sessionsStore = new ChatSessionsMemoryStore();
             }
 
+            // Whether this container should react to global topic events.
+            // Set to false when the floating window is hidden because the
+            // full-page Copilot viewer is active, preventing duplicate
+            // topic handling (e.g. double session creation, wrong title
+            // generation) from two live ChatSessionContainer instances.
+            this._active = true;
+
             this.sessionFilesPageSize = 20;
             this._sessionFilesRequestToken = 0;
             this._sessionFilesState = SessionFilesStore.createInitialState(this.sessionId, this.sessionFilesPageSize);
@@ -173,11 +180,15 @@ define([
                 this.resize();
             }), 0);
 
-            // Set up topic subscriptions for various events
-
+            // Set up topic subscriptions for various events.
+            // Every handler checks this._active so that a hidden floating-
+            // window container does not react to topics intended for the
+            // full-page viewer (and vice-versa).  Subscriptions are
+            // registered with this.own() for automatic cleanup on destroy.
 
             // Handle creating new chat sessions
-            topic.subscribe('createNewChatSession', lang.hitch(this, function() {
+            this.own(topic.subscribe('createNewChatSession', lang.hitch(this, function() {
+                if (!this._active) { return; }
                 this.copilotApi.createAndRegisterSession('New Chat').then(lang.hitch(this, function(result) {
                     var sessionId = result && result.session_id ? result.session_id : null;
                     if (!sessionId) {
@@ -200,9 +211,10 @@ define([
                 })).catch(function(error) {
                     console.error('Error creating/registering new chat session:', error);
                 });
-            }));
+            })));
 
-            topic.subscribe('RefreshSession', lang.hitch(this, function(sessionId, scrollToBottom = true) {
+            this.own(topic.subscribe('RefreshSession', lang.hitch(this, function(sessionId, scrollToBottom = true) {
+                if (!this._active) { return; }
                 this.copilotApi.getSessionMessages(sessionId).then(lang.hitch(this, function(res) {
                     console.log('[DEBUG] RefreshSession - Full response:', res);
                     console.log('[DEBUG] RefreshSession - res.workflow_ids:', res.workflow_ids);
@@ -218,10 +230,11 @@ define([
                     this.displayWidget.showMessages(messages, scrollToBottom);
                     this._applySessionWorkflowContext(res);
                 }));
-            }));
+            })));
 
             // Handle selecting existing chat sessions
-            topic.subscribe('ChatSession:Selected', lang.hitch(this, function(data) {
+            this.own(topic.subscribe('ChatSession:Selected', lang.hitch(this, function(data) {
+                if (!this._active) { return; }
                 console.log('[DEBUG] ChatSession:Selected - Full data:', data);
                 console.log('[DEBUG] ChatSession:Selected - data.workflow_ids:', data.workflow_ids);
                 this.changeSessionId(data.sessionId);
@@ -229,10 +242,11 @@ define([
                 this.displayWidget.showMessages(data.messages);
                 this.inputWidget.new_chat = false;
                 this._applySessionWorkflowContext(data);
-            }));
+            })));
 
             // Handle chat title changes
-            topic.subscribe('ChatSessionTitleChanged', lang.hitch(this, function(data) {
+            this.own(topic.subscribe('ChatSessionTitleChanged', lang.hitch(this, function(data) {
+                if (!this._active) { return; }
                 // Update title in message store if current session
                 if (data.sessionId === this.sessionId) {
                     this.chatStore.updateSessionTitle(data.sessionId, data.title);
@@ -240,11 +254,15 @@ define([
 
                 // Always update title in sessions store
                 this.sessionsStore.updateSessionTitle(data.sessionId, data.title);
-            }));
+            })));
 
             // Handle various chat configuration changes
-            topic.subscribe('UpdateSessionTitleError', lang.hitch(this, this._handleUpdateSessionTitleError));
-            topic.subscribe('ChatModel', lang.hitch(this, function(model) {
+            this.own(topic.subscribe('UpdateSessionTitleError', lang.hitch(this, function() {
+                if (!this._active) { return; }
+                this._handleUpdateSessionTitleError.apply(this, arguments);
+            })));
+            this.own(topic.subscribe('ChatModel', lang.hitch(this, function(model) {
+                if (!this._active) { return; }
                 this.selectedModel = model;
                 if (window && window.App) {
                     window.App.copilotSelectedModel = model;
@@ -252,17 +270,37 @@ define([
                 if (this.inputWidget) {
                     this.inputWidget.setModel(model);
                 }
-            }));
-            topic.subscribe('ChatSystemPrompt', lang.hitch(this, function(systemPrompt) {
+            })));
+            this.own(topic.subscribe('ChatSystemPrompt', lang.hitch(this, function(systemPrompt) {
+                if (!this._active) { return; }
                 this.inputWidget.setSystemPrompt(systemPrompt);
-            }));
-            topic.subscribe('generateSessionTitle', lang.hitch(this, this._handleGenerateSessionTitle));
-            topic.subscribe('ChatSession:Delete', lang.hitch(this, this._handleChatSessionDelete));
-            topic.subscribe('SetConversationRating', lang.hitch(this, this._handleSetConversationRating));
-            topic.subscribe('copy-message', lang.hitch(this, this._handleCopyMessage));
-            topic.subscribe('rate-message', lang.hitch(this, this._handleRateMessage));
-            topic.subscribe('openReportIssueDialog', lang.hitch(this, this._handleOpenReportIssueDialog));
-            topic.subscribe('editSessionTitle', lang.hitch(this, function(sessionId) {
+            })));
+            this.own(topic.subscribe('generateSessionTitle', lang.hitch(this, function() {
+                if (!this._active) { return; }
+                this._handleGenerateSessionTitle.apply(this, arguments);
+            })));
+            this.own(topic.subscribe('ChatSession:Delete', lang.hitch(this, function() {
+                if (!this._active) { return; }
+                this._handleChatSessionDelete.apply(this, arguments);
+            })));
+            this.own(topic.subscribe('SetConversationRating', lang.hitch(this, function() {
+                if (!this._active) { return; }
+                this._handleSetConversationRating.apply(this, arguments);
+            })));
+            this.own(topic.subscribe('copy-message', lang.hitch(this, function() {
+                if (!this._active) { return; }
+                this._handleCopyMessage.apply(this, arguments);
+            })));
+            this.own(topic.subscribe('rate-message', lang.hitch(this, function() {
+                if (!this._active) { return; }
+                this._handleRateMessage.apply(this, arguments);
+            })));
+            this.own(topic.subscribe('openReportIssueDialog', lang.hitch(this, function() {
+                if (!this._active) { return; }
+                this._handleOpenReportIssueDialog.apply(this, arguments);
+            })));
+            this.own(topic.subscribe('editSessionTitle', lang.hitch(this, function(sessionId) {
+                if (!this._active) { return; }
                 if (sessionId && sessionId === this.sessionId && this.titleWidget) {
                     if (this.titleWidget.isEditing) {
                         this.titleWidget.saveTitleEditor();
@@ -270,14 +308,27 @@ define([
                         this.titleWidget.startEditing();
                     }
                 }
-            }));
-            topic.subscribe('chatTextSizeChanged', lang.hitch(this, this._handleChatTextSizeChanged));
-            topic.subscribe('setStatePrompt', lang.hitch(this, this._handleSetStatePrompt));
-            topic.subscribe('CopilotSessionFileCreated', lang.hitch(this, this._handleSessionFileCreated));
-            topic.subscribe('CopilotSessionWorkflowCreated', lang.hitch(this, this._handleSessionWorkflowCreated));
+            })));
+            this.own(topic.subscribe('chatTextSizeChanged', lang.hitch(this, function() {
+                if (!this._active) { return; }
+                this._handleChatTextSizeChanged.apply(this, arguments);
+            })));
+            this.own(topic.subscribe('setStatePrompt', lang.hitch(this, function() {
+                if (!this._active) { return; }
+                this._handleSetStatePrompt.apply(this, arguments);
+            })));
+            this.own(topic.subscribe('CopilotSessionFileCreated', lang.hitch(this, function() {
+                if (!this._active) { return; }
+                this._handleSessionFileCreated.apply(this, arguments);
+            })));
+            this.own(topic.subscribe('CopilotSessionWorkflowCreated', lang.hitch(this, function() {
+                if (!this._active) { return; }
+                this._handleSessionWorkflowCreated.apply(this, arguments);
+            })));
             // CopilotWorkflowCardStatusUpdated subscription removed — workflow cards have been deleted
             // Subscribe to message submission to switch back to Messages tab and close file previews
-            topic.subscribe('ChatMessageSubmitted', lang.hitch(this, function() {
+            this.own(topic.subscribe('ChatMessageSubmitted', lang.hitch(this, function() {
+                if (!this._active) { return; }
                 this._setActiveTab('messages');
                 // Close any expanded file previews so they don't appear during agent SSE updates
                 var expanded = document.querySelectorAll('.file-preview-expanded');
@@ -289,7 +340,7 @@ define([
                     if (toggle) { toggle.style.display = ''; }
                     if (content) { content.style.display = 'none'; }
                 }
-            }));
+            })));
 
             // Start path monitoring
             this._startPathMonitoring();
@@ -1138,6 +1189,17 @@ define([
                 clearInterval(this._pathMonitorInterval);
                 this._pathMonitorInterval = null;
             }
+        },
+
+        /**
+         * Activate or deactivate this container's topic subscriptions.
+         * When deactivated, all global topic handlers become no-ops,
+         * preventing a hidden floating-window container from reacting
+         * to events intended for the full-page viewer (and vice-versa).
+         * @param {boolean} active
+         */
+        setActive: function(active) {
+            this._active = !!active;
         },
 
         /**

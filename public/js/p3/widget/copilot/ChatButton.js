@@ -98,7 +98,10 @@ define([
                 this.showErrorTooltip(message || 'The BV-BRC Copilot service is currently unavailable. Please try again later.');
             }));
 
-            // Hide the floating chat button when the full-page Copilot viewer is active
+            // Hide the floating chat button when the full-page Copilot viewer is active.
+            // Also deactivate the floating window's ChatSessionContainer so its
+            // topic subscriptions become no-ops, preventing duplicate handling
+            // (e.g. double session creation, wrong title generation).
             topic.subscribe('CopilotViewerActive', lang.hitch(this, function () {
                 this._copilotViewerActive = true;
                 // Close the floating window if it is open
@@ -106,11 +109,19 @@ define([
                     this._hideControllerPanel();
                     this.chatOpen = false;
                 }
+                // Deactivate the floating container's topic handlers
+                if (this.controllerPanel && this.controllerPanel.setActive) {
+                    this.controllerPanel.setActive(false);
+                }
                 domStyle.set(this.domNode, 'display', 'none');
             }));
 
             topic.subscribe('CopilotViewerInactive', lang.hitch(this, function () {
                 this._copilotViewerActive = false;
+                // Re-activate the floating container's topic handlers
+                if (this.controllerPanel && this.controllerPanel.setActive) {
+                    this.controllerPanel.setActive(true);
+                }
                 domStyle.set(this.domNode, 'display', '');
             }));
 
