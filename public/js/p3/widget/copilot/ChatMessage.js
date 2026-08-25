@@ -436,6 +436,16 @@ define([
 
     renderUserOrAssistantMessage: function(messageDiv) {
       // Always render assistant/user text first, then append any tool UI widgets below.
+      var isUser = this.message.role === 'user' || this.message.role === 'user_clarification';
+      var contentParent = messageDiv;
+      if (isUser) {
+        // Bubble holds text + attachments; action buttons stay outside so they
+        // sit below the colored background rather than inside it.
+        contentParent = domConstruct.create('div', {
+          class: 'user-message-bubble'
+        }, messageDiv);
+      }
+
       var contentToRender = '';
       if (this.message.content) {
         if (typeof this.message.content === 'string') {
@@ -456,11 +466,15 @@ define([
           innerHTML: this.md.render(contentToRender),
           class: 'markdown-content',
           style: 'font-size: ' + this.fontSize + 'px;'
-        }, messageDiv);
+        }, contentParent);
         this._decorateWorkspacePaths(markdownContainer);
 
         // Process code blocks to make large ones collapsible
         this.makeLargeCodeBlocksCollapsible(markdownContainer);
+      }
+
+      if (isUser) {
+        this.renderAttachments(contentParent);
       }
 
       // --- Card dispatch ---
@@ -489,7 +503,7 @@ define([
         this.createMessageActionButtons(buttonContainer);
       }
 
-      if (this.message.role === 'user' || this.message.role === 'user_clarification') {
+      if (isUser) {
         // Create action bar below the bubble with copy + retry buttons
         var actionsBar = domConstruct.create('div', {
           class: 'user-message-actions'
@@ -498,7 +512,9 @@ define([
         this.createUserMessageActionButtons(actionsBar);
       }
 
-      this.renderAttachments(messageDiv);
+      if (!isUser) {
+        this.renderAttachments(messageDiv);
+      }
     },
 
     renderAttachments: function(messageDiv) {
