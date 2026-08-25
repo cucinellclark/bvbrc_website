@@ -846,7 +846,12 @@ define([
      */
     renderPlanCard: function (parentNode) {
       try {
-        var planData = this.message.planData;
+        // During live SSE, _applyToolMetadataToAssistantMessage sets planData.
+        // When restoring from MongoDB, the plan lives under message.plan or
+        // message.card.card_payload instead.  Fall back through all three.
+        var planData = this.message.planData
+          || this.message.plan
+          || (this.message.card && this.message.card.card_payload);
         if (!planData || !planData.steps) {
           console.warn('[ChatMessage] renderPlanCard called without valid planData');
           return;
