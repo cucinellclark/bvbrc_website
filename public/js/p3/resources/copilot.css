@@ -811,16 +811,20 @@
 
 /* Message Type Variants */
 .message.user {
-  background-color: transparent;
+  background: transparent;
+  border: none;
+  box-shadow: none;
   margin-left: auto;
+  margin-right: 0;
   float: right;
   clear: both;
   padding: 0;
   border-radius: 0;
   max-width: 60%;
-  display: inline-flex;
+  width: fit-content;
+  display: flex;
   flex-direction: column;
-  align-items: flex-end;
+  align-items: stretch;
   margin-top: 10px;
   margin-bottom: 0;
 }
@@ -830,20 +834,25 @@
   padding: 10px;
   border-radius: 5px;
   max-width: 100%;
+  width: fit-content;
+  box-sizing: border-box;
 }
 
 .message.user_clarification {
-  background-color: transparent;
-  border: 0;
+  background: transparent;
+  border: none;
+  box-shadow: none;
   margin-left: auto;
+  margin-right: 0;
   float: right;
   clear: both;
   padding: 0;
   border-radius: 0;
   max-width: 68%;
-  display: inline-flex;
+  width: fit-content;
+  display: flex;
   flex-direction: column;
-  align-items: flex-end;
+  align-items: stretch;
   margin-top: 10px;
   margin-bottom: 0;
 }
@@ -854,6 +863,8 @@
   padding: 10px 12px;
   border-radius: 8px;
   max-width: 100%;
+  width: fit-content;
+  box-sizing: border-box;
 }
 
 .message.user_clarification .markdown-content {
@@ -3989,15 +4000,18 @@ a.workspace-path-chip:hover {
 
 .message.answered-questions {
   background: transparent;
-  border: 0;
+  border: none;
+  box-shadow: none;
   padding: 0;
   margin-left: auto;
+  margin-right: 0;
   float: right;
   clear: both;
   max-width: 68%;
-  display: inline-flex;
+  width: fit-content;
+  display: flex;
   flex-direction: column;
-  align-items: flex-end;
+  align-items: stretch;
   position: relative;
 }
 
