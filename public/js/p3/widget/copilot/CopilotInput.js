@@ -764,26 +764,32 @@ define([
       /**
        * Sets up the widget UI after DOM creation
        * Implementation:
-       * - Creates flex container layout
+       * - Creates a unified composer bar (attach + textarea + send)
        * - Adds auto-expanding textarea
-       * - Adds submit button
-       * - Creates model/RAG selection UI
        * - Sets up event handlers
        */
       postCreate: function() {
         // Create main wrapper with flex layout
         var wrapperDiv = domConstruct.create('div', {
-            style: 'display: flex; flex-direction: column; justify-content: center; align-items: center; width: 100%; height: 100%; padding-top: 2px; border: 0; overflow: visible;'
+            className: 'copilotInputWrapper'
         }, this.containerNode);
 
-        // Container for input elements with flex layout
-        var inputContainer = domConstruct.create('div', {
-            style: 'display: flex; justify-content: center; align-items: flex-start; width: 100%;'
+        var composer = domConstruct.create('div', {
+            className: 'copilotComposer'
         }, wrapperDiv);
+
+        this.workspacePathTokenEditorNode = domConstruct.create('div', {
+            className: 'workspacePathTokenEditor',
+            style: 'display: none;'
+        }, composer);
+
+        var composerRow = domConstruct.create('div', {
+            className: 'copilotComposerRow'
+        }, composer);
 
         var toggleContainer = domConstruct.create('div', {
             className: 'copilotAttachButtonContainer'
-        }, inputContainer);
+        }, composerRow);
 
         this.imageActionNode = domConstruct.create('button', {
             type: 'button',
@@ -841,26 +847,21 @@ define([
         on(this.imageUploadInput, 'change', lang.hitch(this, this._handleImageUploadChange));
 
         var textAreaWrapper = domConstruct.create('div', {
-            className: 'copilotTextAreaWrapper',
-            style: 'width: 60%; position: relative; margin-right: 10px;'
-        }, inputContainer);
+            className: 'copilotTextAreaWrapper'
+        }, composerRow);
 
         this.textArea = new Textarea({
-            style: 'width: 100%; min-height: 50px; max-height: 100%; resize: none; overflow-y: hidden; border-radius: 5px;',
-            rows: 3,
+            'class': 'copilotComposerTextarea',
+            rows: 1,
             maxLength: 10000,
-            placeholder: 'Enter your text here...'
+            placeholder: 'Ask anything...'
         });
         this.textArea.placeAt(textAreaWrapper);
 
-        this.workspacePathTokenEditorNode = domConstruct.create('div', {
-            className: 'workspacePathTokenEditor',
-            style: 'display: none;'
-        }, textAreaWrapper);
-
         this.submitButton = new Button({
-            label: 'Submit',
-            style: 'height: 30px; margin-right: 10px;',
+            label: '<i class="fa icon-arrow-up"></i>',
+            title: 'Send',
+            'class': 'copilotSendButton',
             onClick: lang.hitch(this, function() {
             if (this.isSubmitting) return;
             if (!this.copilotApi) {
@@ -871,18 +872,17 @@ define([
             })
         });
 
-        // Add button to container
-        this.submitButton.placeAt(inputContainer);
+        this.submitButton.placeAt(composerRow);
 
         this.abortButton = new Button({
             label: 'Abort',
-            style: 'height: 30px; margin-right: 10px;',
+            'class': 'copilotAbortButton',
             disabled: true,
             onClick: lang.hitch(this, function() {
                 this._handleAbortClick();
             })
         });
-        this.abortButton.placeAt(inputContainer);
+        this.abortButton.placeAt(composerRow);
 
         this._topicHandles.push(topic.subscribe('ChatSession:Selected', lang.hitch(this, function(data) {
             this._closeAttachMenu();
@@ -896,19 +896,22 @@ define([
         })));
 
         // Maximum height for textarea before scrolling
-        const maxHeight = 200; // ~9 rows
+        const maxHeight = 160;
 
         // Handle textarea auto-expansion on input
         on(this.textArea, 'input', function() {
-            this.textArea.style.height = 'auto'; // Reset height
-            this.textArea.style.height = (this.textArea.scrollHeight) + 'px'; // Expand to content
+            var node = this.textArea.domNode || this.textArea.textbox;
+            if (!node) {
+              return;
+            }
+            node.style.height = 'auto';
+            node.style.height = node.scrollHeight + 'px';
 
-            // Enable scrolling if content exceeds max height
-            if (this.textArea.scrollHeight > maxHeight) {
-            this.textArea.style.height = maxHeight + 'px';
-            this.textArea.style.overflowY = 'auto';
+            if (node.scrollHeight > maxHeight) {
+              node.style.height = maxHeight + 'px';
+              node.style.overflowY = 'auto';
             } else {
-            this.textArea.style.overflowY = 'hidden';
+              node.style.overflowY = 'hidden';
             }
             this._renderAttachmentChips();
         }.bind(this));

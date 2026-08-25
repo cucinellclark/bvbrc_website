@@ -492,7 +492,7 @@ define([
             this.inputWidget = new CopilotInput({
                 region: 'bottom',
                 splitter: true,
-                style: 'height: 15%; padding: 0 5px 5px 20px; border: 0; overflow: visible; z-index: 20;',
+                style: 'height: 15%; padding: 8px 12px 12px 12px; border: 0; overflow: visible; z-index: 20;',
                 copilotApi: this.copilotApi,
                 chatStore: this.chatStore,
                 displayWidget: this.displayWidget,
