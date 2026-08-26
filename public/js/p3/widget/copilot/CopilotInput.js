@@ -1320,6 +1320,7 @@ define([
       setSessionId: function(sessionId) {
         this.sessionId = sessionId;
         this.session_registered = false;
+        this.new_chat = false;
 
         // If an SSE stream was in progress for a different session, reset the
         // submit state so the input is re-enabled for the new session.
