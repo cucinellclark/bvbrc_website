@@ -838,6 +838,11 @@
   box-sizing: border-box;
 }
 
+.message.user .user-plain-text {
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
 .message.user_clarification {
   background: transparent;
   border: none;

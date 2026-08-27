@@ -462,15 +462,25 @@ define([
       }
 
       if (contentToRender) {
-        var markdownContainer = domConstruct.create('div', {
-          innerHTML: this.md.render(contentToRender),
-          class: 'markdown-content',
-          style: 'font-size: ' + this.fontSize + 'px;'
-        }, contentParent);
-        this._decorateWorkspacePaths(markdownContainer);
-
-        // Process code blocks to make large ones collapsible
-        this.makeLargeCodeBlocksCollapsible(markdownContainer);
+        var contentContainer;
+        if (isUser) {
+          // Render user messages as plain text so characters like '>'
+          // (FASTA headers) are not consumed by the markdown parser.
+          contentContainer = domConstruct.create('div', {
+            innerHTML: this.escapeHtml(contentToRender),
+            class: 'markdown-content user-plain-text',
+            style: 'font-size: ' + this.fontSize + 'px;'
+          }, contentParent);
+        } else {
+          contentContainer = domConstruct.create('div', {
+            innerHTML: this.md.render(contentToRender),
+            class: 'markdown-content',
+            style: 'font-size: ' + this.fontSize + 'px;'
+          }, contentParent);
+          // Process code blocks to make large ones collapsible
+          this.makeLargeCodeBlocksCollapsible(contentContainer);
+        }
+        this._decorateWorkspacePaths(contentContainer);
       }
 
       if (isUser) {
