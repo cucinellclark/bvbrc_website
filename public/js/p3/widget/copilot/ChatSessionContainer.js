@@ -348,6 +348,27 @@ define([
                 }
             })));
 
+            // When a turn starts on the submitting tab, also start a
+            // lightweight Mongo fallback poll.  If the live SSE stream
+            // delivers events normally the poll is a harmless no-op
+            // (stopped by TurnEnded).  If SSE is buffered or dead, the
+            // poll detects active_job_id clearing and refreshes the
+            // chat from Mongo so the answer appears without a reload.
+            this.own(topic.subscribe('ChatSession:TurnStarted', lang.hitch(this, function(data) {
+                if (!this._active) { return; }
+                if (data && data.sessionId && data.sessionId === this.sessionId) {
+                    this._startFallbackPoll(data.sessionId);
+                }
+            })));
+            this.own(topic.subscribe('ChatSession:TurnEnded', lang.hitch(this, function(data) {
+                if (!this._active) { return; }
+                // SSE stream delivered successfully — cancel the fallback
+                // poll since it is no longer needed.
+                if (data && data.sessionId && data.sessionId === this.sessionId) {
+                    this._stopFallbackPoll();
+                }
+            })));
+
             // Start path monitoring
             this._startPathMonitoring();
         },
@@ -592,11 +613,18 @@ define([
             this.sessionId = sessionId;
             // Do not add the session to the sessions store here; it will be added after the first successful message.
 
-            // Abort any in-flight SSE stream from the previous session so its
+            // Abort any in-flight SSE stream from the *previous* session so its
             // callbacks cannot inject stale data into the newly-active session.
+            // Skip the abort when re-entering the same session (e.g. path
+            // change, topic re-fire) to avoid killing the live SSE stream
+            // that is still painting the current turn's response.
             if (this.copilotApi && typeof this.copilotApi.abortActiveStream === 'function') {
-                this.copilotApi.abortActiveStream();
+                var previousSessionId = this._previousSessionId || null;
+                if (previousSessionId && previousSessionId !== sessionId) {
+                    this.copilotApi.abortActiveStream();
+                }
             }
+            this._previousSessionId = sessionId;
 
             // Persist the current session ID so it can be restored the next time the chat opens
             try {
@@ -1209,6 +1237,76 @@ define([
         },
 
         /**
+         * Lightweight Mongo fallback poll that runs alongside the live
+         * SSE stream.  Does NOT change any UI state (no disabling
+         * buttons, no showing/hiding the loading indicator) — the SSE
+         * stream's callbacks handle all of that.
+         *
+         * If SSE works normally, onEnd fires, TurnEnded publishes, and
+         * _stopFallbackPoll cleans this up as a no-op.  If SSE is
+         * buffered/dead, this poll detects active_job_id clearing and
+         * refreshes messages from Mongo so the answer appears without
+         * a manual reload.
+         *
+         * @param {string} sessionId
+         */
+        _startFallbackPoll: function(sessionId) {
+            this._stopFallbackPoll();
+
+            var _self = this;
+            var pollCount = 0;
+            var MAX_POLLS = 120; // 120 * 3s = 6 minutes max
+            // Delay first poll to give SSE time to connect and deliver
+            // the initial events.  If SSE works, TurnEnded will cancel
+            // this poll before it even fires.
+            var INITIAL_DELAY = 6000; // 6 seconds
+
+            this._fallbackPollTimeout = setTimeout(function() {
+                _self._fallbackPollTimeout = null;
+                _self._fallbackPollInterval = setInterval(function() {
+                    pollCount++;
+                    if (!_self._active || _self.sessionId !== sessionId || pollCount > MAX_POLLS) {
+                        _self._stopFallbackPoll();
+                        return;
+                    }
+
+                    _self.copilotApi.getSessionMessages(sessionId).then(function(res) {
+                        if (_self.sessionId !== sessionId) return;
+                        if (!res.active_job_id) {
+                            // Turn finished but SSE did not deliver — refresh
+                            _self._stopFallbackPoll();
+                            _self.displayWidget.hideLoadingIndicator();
+                            // Re-enable input in case SSE onEnd never fired
+                            if (_self.inputWidget) {
+                                _self.inputWidget.isSubmitting = false;
+                                _self.inputWidget.submitButton.set('disabled', false);
+                                _self.inputWidget._updateStopButtonState();
+                            }
+                            topic.publish('RefreshSession', sessionId);
+                            topic.publish('ChatSession:TurnEnded', { sessionId: sessionId });
+                        }
+                    }).catch(function() {
+                        // Ignore — retry next interval
+                    });
+                }, 3000);
+            }, INITIAL_DELAY);
+        },
+
+        /**
+         * Stops the fallback Mongo poll if one is running.
+         */
+        _stopFallbackPoll: function() {
+            if (this._fallbackPollTimeout) {
+                clearTimeout(this._fallbackPollTimeout);
+                this._fallbackPollTimeout = null;
+            }
+            if (this._fallbackPollInterval) {
+                clearInterval(this._fallbackPollInterval);
+                this._fallbackPollInterval = null;
+            }
+        },
+
+        /**
          * Poll getSessionMessages until active_job_id clears, then
          * refresh the chat display from Mongo.  Called when the user
          * returns to a session that has an in-flight turn.
@@ -1285,6 +1383,7 @@ define([
          */
         destroy: function() {
             this._stopPathMonitoring();
+            this._stopFallbackPoll();
             if (this._busyPollInterval) {
                 clearInterval(this._busyPollInterval);
                 this._busyPollInterval = null;

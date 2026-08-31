@@ -666,7 +666,7 @@ define([
         this.submitButton.set('disabled', true);
         this._updateStopButtonState();
 
-        this.displayWidget.showLoadingIndicator();
+        this.displayWidget.showLoadingIndicator('Processing\u2026');
 
         var assistantMessage = null;
         var statusMessageId = null;
@@ -1290,13 +1290,17 @@ define([
        * @param {string} sessionId - New session ID
        */
       setSessionId: function(sessionId) {
+        var previousSessionId = this.sessionId;
         this.sessionId = sessionId;
         this.session_registered = false;
         this.new_chat = false;
 
-        // If an SSE stream was in progress for a different session, reset the
-        // submit state so the input is re-enabled for the new session.
-        if (this.isSubmitting) {
+        // Only reset submit state when actually switching to a different
+        // session.  Re-entering the same session (e.g. path change topic
+        // re-fire) must NOT clear isSubmitting, or the live SSE stream's
+        // UI state (disabled send, visible Stop, loading indicator) gets
+        // prematurely unlocked.
+        if (this.isSubmitting && previousSessionId && previousSessionId !== sessionId) {
             this.isSubmitting = false;
             this.isQueryProgressActive = false;
             this.submitButton.set('disabled', false);
@@ -1793,7 +1797,7 @@ define([
       // Notify sidebar so the busy dot can update immediately
       topic.publish('ChatSession:TurnStarted', { sessionId: submitSessionId });
 
-      this.displayWidget.showLoadingIndicator();
+      this.displayWidget.showLoadingIndicator('Processing\u2026');
 
       var systemPrompt = 'You are a helpful scientist website assistant for the website BV-BRC, the Bacterial and Viral Bioinformatics Resource Center.\\n\\n';
       if (this.systemPrompt) {

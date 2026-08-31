@@ -580,10 +580,15 @@ define([
 
                 function pump() {
                     // If the session changed since this stream was started,
-                    // stop reading and let the stream die silently.
+                    // stop reading and call onEnd so the UI unlocks (hide
+                    // loading indicator, re-enable send button, etc.).
                     if (_self.activeStreamSessionId !== streamSessionId) {
                         console.log('[CopilotApi] Stopping pump for stale session', streamSessionId);
                         reader.cancel();
+                        _self.currentAbortController = null;
+                        _self.currentActiveToolId = null;
+                        _self.currentJobId = null;
+                        if (onEnd) onEnd();
                         return;
                     }
 
@@ -641,7 +646,9 @@ define([
 
                 // Provide a more user-friendly error message for common issues
                 if (err.name === 'AbortError') {
-                    // User cancelled, don't show error
+                    // User cancelled — still call onEnd so the UI unlocks
+                    // (hide loading indicator, re-enable send button).
+                    if (onEnd) onEnd();
                     return;
                 }
 
