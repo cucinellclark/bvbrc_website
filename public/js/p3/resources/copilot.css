@@ -1971,13 +1971,7 @@
   line-height: 18px;
   white-space: nowrap;
   pointer-events: none;          /* display-only — don't steal card click */
-  animation: scrollCardChipPulse 2s ease-in-out infinite;
   flex-shrink: 0;
-}
-
-@keyframes scrollCardChipPulse {
-  0%, 100% { opacity: 1; }
-  50% { opacity: 0.55; }
 }
 
 /* Rating stars inside the cog dropdown menu */
