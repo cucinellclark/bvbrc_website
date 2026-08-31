@@ -46,9 +46,9 @@ define([
          * - Date container with date and delete button
          */
         templateString: '<div class="chat-session-card" data-dojo-attach-point="containerNode">' +
+        '<span class="scrollCardBusyDot" data-dojo-attach-point="busyDotNode" title="Processing..."></span>' +
         '<div class="session-title-container" style="display: flex; justify-content: space-between; align-items: center;">' +
             '<div class="session-title" data-dojo-attach-point="titleNode"></div>' +
-            '<span class="scrollCardBusyDot" data-dojo-attach-point="busyDotNode" title="Processing..."></span>' +
             '<div class="scrollCardActions">' +
                 '<div class="scrollCardCogContainer" data-dojo-attach-point="cogContainerNode">' +
                     '<div class="scrollCardCogButton" data-dojo-attach-point="cogButtonNode" title="Session actions">' +

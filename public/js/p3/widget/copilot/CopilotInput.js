@@ -1708,6 +1708,9 @@ define([
     _handleSubmitStream: function() {
       var inputText = this.textArea.get('value');
       var _self = this;
+      // Capture session ID at submit time so TurnEnded publishes the
+      // correct ID even if the user switches sessions mid-turn.
+      var submitSessionId = this.sessionId;
 
       // --- Plan step needs_input intercept ---
       // If a plan step is paused waiting for user input, redirect the
@@ -1788,7 +1791,7 @@ define([
       this._updateStopButtonState();
 
       // Notify sidebar so the busy dot can update immediately
-      topic.publish('ChatSession:TurnStarted', { sessionId: this.sessionId });
+      topic.publish('ChatSession:TurnStarted', { sessionId: submitSessionId });
 
       this.displayWidget.showLoadingIndicator();
 
@@ -1871,7 +1874,7 @@ define([
               this.isQueryProgressActive = false;
               this.submitButton.set('disabled', false);
               this._updateStopButtonState();
-              topic.publish('ChatSession:TurnEnded', { sessionId: _self.sessionId });
+              topic.publish('ChatSession:TurnEnded', { sessionId: submitSessionId });
           },
           (error) => {
               topic.publish('CopilotApiError', { error: error });
@@ -1880,22 +1883,9 @@ define([
               this.isQueryProgressActive = false;
               this.submitButton.set('disabled', false);
               this._updateStopButtonState();
-              topic.publish('ChatSession:TurnEnded', { sessionId: _self.sessionId });
+              topic.publish('ChatSession:TurnEnded', { sessionId: submitSessionId });
           },
-          (progressInfo) => {
-              switch(progressInfo.type) {
-                  case 'queued':
-                      break;
-                  case 'started':
-                      break;
-                  case 'progress':
-                      console.log(`Processing: ${progressInfo.percentage}% (Iteration ${progressInfo.iteration}/${progressInfo.max_iterations})`);
-                      if (progressInfo.tool) {
-                          console.log(`Using tool: ${progressInfo.tool}`);
-                      }
-                      break;
-              }
-          },
+          null, // onProgress — agent progress is handled via statusMessage callback above
           (statusMessage) => {
               if (statusMessage.should_remove) {
                   this.chatStore.removeMessage(statusMessage.message_id);

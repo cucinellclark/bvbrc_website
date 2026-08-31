@@ -1958,15 +1958,19 @@
   flex-shrink: 0;
 }
 
-/* Busy dot — pulsing indicator for sessions with an in-flight turn */
+/* Busy dot — pulsing indicator for sessions with an in-flight turn.
+   Positioned as an absolute badge on the left edge of the card so it
+   is visible regardless of the cog button position. */
 .scrollCardBusyDot {
   display: none;
   width: 8px;
   height: 8px;
   border-radius: 50%;
   background: #3b82f6;
-  flex-shrink: 0;
-  margin-right: 4px;
+  position: absolute;
+  top: 8px;
+  left: -1px;
+  z-index: 2;
   animation: scrollCardBusyPulse 1.4s ease-in-out infinite;
 }
 
