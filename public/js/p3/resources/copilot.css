@@ -1958,25 +1958,47 @@
   flex-shrink: 0;
 }
 
-/* Busy dot — pulsing indicator for sessions with an in-flight turn.
-   Positioned as an absolute badge on the left edge of the card so it
-   is visible regardless of the cog button position. */
-.scrollCardBusyDot {
+/* Running chip — compact pill shown in the date row while a session
+   has an in-flight turn.  Hidden by default; shown via JS. */
+.scrollCardRunningChip {
   display: none;
-  width: 8px;
-  height: 8px;
-  border-radius: 50%;
+  padding: 1px 8px;
+  border-radius: 9999px;
   background: #3b82f6;
-  position: absolute;
-  top: 8px;
-  left: -1px;
-  z-index: 2;
-  animation: scrollCardBusyPulse 1.4s ease-in-out infinite;
+  color: #fff;
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 18px;
+  white-space: nowrap;
+  pointer-events: none;          /* display-only — don't steal card click */
+  animation: scrollCardChipPulse 2s ease-in-out infinite;
+  flex-shrink: 0;
 }
 
-@keyframes scrollCardBusyPulse {
-  0%, 100% { opacity: 1; transform: scale(1); }
-  50% { opacity: 0.4; transform: scale(0.8); }
+@keyframes scrollCardChipPulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.55; }
+}
+
+/* Rating stars inside the cog dropdown menu */
+.scrollCardCogMenuItem--rate {
+  cursor: default;               /* row itself isn't a button */
+}
+
+.scrollCardRateStars {
+  display: inline-flex;
+  align-items: center;
+  gap: 1px;
+  margin-left: 4px;
+}
+
+.scrollCardRateStar {
+  cursor: pointer;
+  font-size: 14px;
+  color: #ccc;
+  transition: color 0.15s ease;
+  user-select: none;
+  line-height: 1;
 }
 
 .scrollCardCogButton {

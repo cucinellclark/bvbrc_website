@@ -97,6 +97,10 @@ define([
       }
 
       this.sessionCards = {};
+
+      // Local set of session IDs known to have an in-flight turn.
+      // Survives card re-renders (renderSessions destroys/rebuilds cards).
+      this._busySessionIds = {};
     },
 
     /**
@@ -160,14 +164,20 @@ define([
         }
       }));
 
-      // Update the busy dot on individual cards when a turn starts or ends
+      // Track busy state in _busySessionIds and propagate to cards.
+      // Also mark the store object so rebuilt cards pick up the state.
       topic.subscribe('ChatSession:TurnStarted', lang.hitch(this, function(data) {
         if (!data || !data.sessionId) { return; }
+        this._busySessionIds[data.sessionId] = true;
+        // Mark the store object so any future renderSessions picks it up
+        this._setStoreBusy(data.sessionId, true);
         var card = this.sessionCards && this.sessionCards[data.sessionId];
         if (card) { card._updateBusyState(true); }
       }));
       topic.subscribe('ChatSession:TurnEnded', lang.hitch(this, function(data) {
         if (!data || !data.sessionId) { return; }
+        delete this._busySessionIds[data.sessionId];
+        this._setStoreBusy(data.sessionId, false);
         var card = this.sessionCards && this.sessionCards[data.sessionId];
         if (card) { card._updateBusyState(false); }
       }));
@@ -212,6 +222,10 @@ define([
           // Store reference to the card widget keyed by session ID
           this.sessionCards[session.session_id] = sessionCard;
       }, this);
+
+      // Restore busy state on rebuilt cards from the local _busySessionIds set
+      // (covers the case where renderSessions is triggered by New Chat / title regen / delete)
+      this._restoreBusyStates();
 
       // Ensure the load-more button visibility/state is updated after rendering
       this._renderLoadMoreButton();
@@ -399,6 +413,38 @@ define([
         }
       } catch (e) {
         console.warn('Unable to access localStorage for current session id', e);
+      }
+    },
+
+    /**
+     * Mark or clear the active_job_id on the in-memory store session object
+     * so that future card rebuilds see the busy flag.
+     * @param {string} sessionId
+     * @param {boolean} busy
+     */
+    _setStoreBusy: function(sessionId, busy) {
+      if (!this.sessionsStore) { return; }
+      var session = this.sessionsStore.get(sessionId);
+      if (session) {
+        if (busy) {
+          session.active_job_id = session.active_job_id || 'local';
+        } else {
+          delete session.active_job_id;
+        }
+      }
+    },
+
+    /**
+     * After renderSessions rebuilds all cards, re-apply busy state from
+     * _busySessionIds (local tracking) and session.active_job_id (API data).
+     */
+    _restoreBusyStates: function() {
+      for (var id in this.sessionCards) {
+        var card = this.sessionCards[id];
+        var isBusy = !!(this._busySessionIds[id] || (card.session && card.session.active_job_id));
+        if (isBusy) {
+          card._updateBusyState(true);
+        }
       }
     }
   });

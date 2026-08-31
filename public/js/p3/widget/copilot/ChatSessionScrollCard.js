@@ -46,7 +46,6 @@ define([
          * - Date container with date and delete button
          */
         templateString: '<div class="chat-session-card" data-dojo-attach-point="containerNode">' +
-        '<span class="scrollCardBusyDot" data-dojo-attach-point="busyDotNode" title="Processing..."></span>' +
         '<div class="session-title-container" style="display: flex; justify-content: space-between; align-items: center;">' +
             '<div class="session-title" data-dojo-attach-point="titleNode"></div>' +
             '<div class="scrollCardActions">' +
@@ -58,6 +57,10 @@ define([
                         '<button class="scrollCardCogMenuItem" data-dojo-attach-point="editTitleButtonNode">' +
                             '<i class="fa icon-pencil"></i> Edit Title' +
                         '</button>' +
+                        '<div class="scrollCardCogMenuItem scrollCardCogMenuItem--rate" data-dojo-attach-point="rateMenuItemNode">' +
+                            '<i class="fa icon-star-o"></i> Rate' +
+                            '<span class="scrollCardRateStars" data-dojo-attach-point="rateStarsNode"></span>' +
+                        '</div>' +
                         '<button class="scrollCardCogMenuItem" data-dojo-attach-point="jobsButtonNode">' +
                             '<i class="fa icon-list-unordered"></i> View Jobs' +
                         '</button>' +
@@ -76,7 +79,7 @@ define([
         '</div>' +
         '<div class="session-date-container" style="display: flex; justify-content: space-between; align-items: center;">' +
             '<div class="session-date" data-dojo-attach-point="dateNode"></div>' +
-            '<div class="rating-container" data-dojo-attach-point="ratingContainerNode"></div>' +
+            '<span class="scrollCardRunningChip" data-dojo-attach-point="runningChipNode">Running</span>' +
         '</div>' + '</div>',
 
         /** CSS class for root node styling */
@@ -294,12 +297,12 @@ define([
         },
 
         /**
-         * Show or hide the busy dot indicator on this card.
+         * Show or hide the Running chip indicator on this card.
          * @param {boolean} busy
          */
         _updateBusyState: function (busy) {
-            if (this.busyDotNode) {
-                this.busyDotNode.style.display = busy ? 'inline-block' : 'none';
+            if (this.runningChipNode) {
+                this.runningChipNode.style.display = busy ? 'inline-block' : 'none';
             }
         },
 
@@ -581,87 +584,71 @@ define([
         },
 
         /**
-         * Creates and configures the rating container with 5-star rating system
-         * Override to use smaller stars for the small window
-         * @returns {HTMLElement} The rating container element
+         * Creates the 5-star rating widget inside the cog menu Rate row.
+         * Stars are placed into rateStarsNode; clicks call stopPropagation
+         * so they don't close the menu or select the session.
          */
-        createRatingContainer: function() {
-            // Create rating container
-            var ratingContainer = domConstruct.create('div', {
-                style: 'display: flex; justify-content: center; align-items: center; gap: 1px;'
-            });
+        setupRating: function() {
+            if (!this.rateStarsNode) { return; }
 
-            // Create 5 star rating buttons
+            // Build 5 star elements inside rateStarsNode
             for (var i = 1; i <= 5; i++) {
-                var star = domConstruct.create('div', {
-                    innerHTML: '☆', // Empty star
-                    style: 'cursor: pointer; font-size: 14px; color: #ccc; transition: color 0.2s ease; user-select: none;',
+                var star = domConstruct.create('span', {
+                    innerHTML: '&#9734;', // ☆
+                    'class': 'scrollCardRateStar',
                     'data-rating': i
-                }, ratingContainer);
+                }, this.rateStarsNode);
 
-                // Add click handler
                 this.own(on(star, 'click', lang.hitch(this, function(event) {
+                    event.stopPropagation(); // keep menu open
                     var rating = parseInt(event.target.getAttribute('data-rating'));
-
-                    // Update stars to show selected rating
-                    var stars = event.target.parentNode.children;
-                    for (var k = 0; k < stars.length; k++) {
-                        if (k < rating) {
-                            stars[k].style.color = 'var(--main-blue)';
-                            stars[k].innerHTML = '★';
-                        } else {
-                            stars[k].style.color = '#ccc';
-                            stars[k].innerHTML = '☆';
-                        }
-                    }
-
-                    // Publish topic for setting conversation rating
-                    topic.publish('SetConversationRating', {
-                        sessionId: this.session ? this.session.session_id : null,
-                        rating: rating
-                    });
-
-                    // Store the rating for this session
-                    if (this.session) {
-                        this.session.rating = rating;
-                    }
-
-                    event.stopPropagation();
+                    this._applyRating(rating);
                 })));
             }
 
-            return ratingContainer;
-        },
+            // Prevent the entire Rate row from closing the menu on click
+            this.own(on(this.rateMenuItemNode, 'click', function(evt) {
+                evt.stopPropagation();
+            }));
 
-        /**
-         * Initializes the rating container and adds it to the ratingContainerNode
-         */
-        setupRating: function() {
-            if (this.ratingContainerNode) {
-                var ratingContainer = this.createRatingContainer();
-                domConstruct.place(ratingContainer, this.ratingContainerNode);
-
-                // If session has an existing rating, display it
-                if (this.session && this.session.rating) {
-                    this.updateStarDisplay(ratingContainer, this.session.rating);
-                }
+            // If session already has a saved rating, display it
+            if (this.session && this.session.rating) {
+                this._applyStarDisplay(this.session.rating);
             }
         },
 
         /**
-         * Updates the star display to show the specified rating
-         * @param {HTMLElement} ratingContainer - The container holding the star elements
-         * @param {number} rating - The rating value (1-5) to display
+         * Applies a rating: updates the star display, publishes the topic,
+         * and stores the value on the session object.
+         * @param {number} rating - 1-5
          */
-        updateStarDisplay: function(ratingContainer, rating) {
-            var stars = ratingContainer.children;
+        _applyRating: function(rating) {
+            this._applyStarDisplay(rating);
+
+            topic.publish('SetConversationRating', {
+                sessionId: this.session ? this.session.session_id : null,
+                rating: rating
+            });
+
+            if (this.session) {
+                this.session.rating = rating;
+            }
+        },
+
+        /**
+         * Updates the star display inside rateStarsNode to show the given rating.
+         * @param {number} rating - 1-5
+         */
+        _applyStarDisplay: function(rating) {
+            if (!this.rateStarsNode) { return; }
+            var stars = this.rateStarsNode.children;
             for (var i = 0; i < stars.length; i++) {
                 if (i < rating) {
                     stars[i].style.color = 'var(--main-blue)';
-                    stars[i].innerHTML = '★';
+                    stars[i].innerHTML = '&#9733;'; // ★
                 } else {
                     stars[i].style.color = '#ccc';
-                    stars[i].innerHTML = '☆';
+                    stars[i].innerHTML = '&#9734;'; // ☆
                 }
             }
         }
