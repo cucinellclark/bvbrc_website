@@ -706,8 +706,7 @@ define([
 
             var payload = {
                 user_id: opts.user_id || this.user_id,
-                scopes: Array.isArray(opts.scopes) && opts.scopes.length > 0 ? opts.scopes : ['query_tools'],
-                reason: opts.reason || 'Aborted from chat UI'
+                reason: opts.reason || 'Stopped from chat UI'
             };
 
             return request.post(this.apiUrlBase + '/job/' + encodeURIComponent(jobId) + '/abort', {

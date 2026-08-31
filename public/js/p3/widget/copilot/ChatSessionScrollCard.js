@@ -48,6 +48,7 @@ define([
         templateString: '<div class="chat-session-card" data-dojo-attach-point="containerNode">' +
         '<div class="session-title-container" style="display: flex; justify-content: space-between; align-items: center;">' +
             '<div class="session-title" data-dojo-attach-point="titleNode"></div>' +
+            '<span class="scrollCardBusyDot" data-dojo-attach-point="busyDotNode" title="Processing..."></span>' +
             '<div class="scrollCardActions">' +
                 '<div class="scrollCardCogContainer" data-dojo-attach-point="cogContainerNode">' +
                     '<div class="scrollCardCogButton" data-dojo-attach-point="cogButtonNode" title="Session actions">' +
@@ -145,6 +146,9 @@ define([
                     this.titleNode.className += ' scrollCardTitle';
                 }
 
+                // Show busy dot if the session has an in-flight turn
+                this._updateBusyState(!!this.session.active_job_id);
+
                 // Click handler to load session messages
                 on(this.containerNode, 'click', lang.hitch(this, function(evt) {
                     // Ignore clicks inside the cog menu area
@@ -155,8 +159,6 @@ define([
                     if (this.copilotApi) {
                         var _self = this;
                         this.copilotApi.getSessionMessages(_self.session.session_id).then(function(res) {
-                            console.log('[DEBUG] ChatSessionScrollCard - Full response:', res);
-                            console.log('[DEBUG] ChatSessionScrollCard - res.workflow_ids:', res.workflow_ids);
                             var messages = [];
                             if (Array.isArray(res.messages)) {
                                 if (res.messages.length > 0 && Array.isArray(res.messages[0] && res.messages[0].messages)) {
@@ -169,7 +171,8 @@ define([
                                 sessionId: _self.session.session_id,
                                 messages: messages,
                                 workflow_ids: res.workflow_ids || _self.session.workflow_ids || null,
-                                workflow_grid: res.workflow_grid || null
+                                workflow_grid: res.workflow_grid || null,
+                                active_job_id: res.active_job_id || null
                             });
                             topic.publish('ChatSessionTitleUpdated', _self.session.title);
                         }).catch(function(error) {
@@ -288,6 +291,16 @@ define([
                 this.cogMenuNode.style.display = 'none';
             }
             this._cogMenuOpen = false;
+        },
+
+        /**
+         * Show or hide the busy dot indicator on this card.
+         * @param {boolean} busy
+         */
+        _updateBusyState: function (busy) {
+            if (this.busyDotNode) {
+                this.busyDotNode.style.display = busy ? 'inline-block' : 'none';
+            }
         },
 
         /**

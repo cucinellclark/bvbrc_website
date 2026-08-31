@@ -1209,6 +1209,11 @@ define([
                             }
                             this.controllerPanel.chatStore.addMessages(messages);
                             this.controllerPanel.displayWidget.showMessages(messages);
+
+                            // If the session has an in-flight turn, start polling
+                            if (res.active_job_id && this.controllerPanel._pollUntilTurnComplete) {
+                                this.controllerPanel._pollUntilTurnComplete(options.currentSessionId);
+                            }
                         }));
 
                         // Set the title if available

@@ -215,6 +215,8 @@ define([
 
             this.own(topic.subscribe('RefreshSession', lang.hitch(this, function(sessionId, scrollToBottom = true) {
                 if (!this._active) { return; }
+                // Only refresh if the published session matches our current session
+                if (sessionId && this.sessionId && sessionId !== this.sessionId) { return; }
                 this.copilotApi.getSessionMessages(sessionId).then(lang.hitch(this, function(res) {
                     console.log('[DEBUG] RefreshSession - Full response:', res);
                     console.log('[DEBUG] RefreshSession - res.workflow_ids:', res.workflow_ids);
@@ -235,13 +237,17 @@ define([
             // Handle selecting existing chat sessions
             this.own(topic.subscribe('ChatSession:Selected', lang.hitch(this, function(data) {
                 if (!this._active) { return; }
-                console.log('[DEBUG] ChatSession:Selected - Full data:', data);
-                console.log('[DEBUG] ChatSession:Selected - data.workflow_ids:', data.workflow_ids);
                 this.changeSessionId(data.sessionId);
                 this.chatStore.addMessages(data.messages);
                 this.displayWidget.showMessages(data.messages);
                 this.inputWidget.new_chat = false;
                 this._applySessionWorkflowContext(data);
+
+                // If the session has an in-flight turn, start polling
+                // until it finishes, then refresh messages from Mongo.
+                if (data.active_job_id) {
+                    this._pollUntilTurnComplete(data.sessionId);
+                }
             })));
 
             // Handle chat title changes
@@ -1203,10 +1209,86 @@ define([
         },
 
         /**
+         * Poll getSessionMessages until active_job_id clears, then
+         * refresh the chat display from Mongo.  Called when the user
+         * returns to a session that has an in-flight turn.
+         *
+         * Does NOT open a second SSE — tokens from the original tab
+         * are not replayed.  The user simply sees the final messages.
+         *
+         * @param {string} sessionId
+         */
+        _pollUntilTurnComplete: function(sessionId) {
+            // Show loading indicator so the user knows something is happening
+            this.displayWidget.showLoadingIndicator('Waiting for response...');
+
+            // Disable input while a background turn is in flight to prevent
+            // overlapping submissions on the same session.
+            if (this.inputWidget) {
+                this.inputWidget.isSubmitting = true;
+                this.inputWidget.submitButton.set('disabled', true);
+                this.inputWidget._updateStopButtonState();
+            }
+
+            // Clear any previous poll for a different session
+            if (this._busyPollInterval) {
+                clearInterval(this._busyPollInterval);
+                this._busyPollInterval = null;
+            }
+
+            var _self = this;
+            var pollCount = 0;
+            var MAX_POLLS = 120; // 120 * 3s = 6 minutes max
+
+            this._busyPollInterval = setInterval(function() {
+                pollCount++;
+                // Stop if we switched sessions, are inactive, or exceeded max
+                if (!_self._active || _self.sessionId !== sessionId || pollCount > MAX_POLLS) {
+                    clearInterval(_self._busyPollInterval);
+                    _self._busyPollInterval = null;
+                    if (pollCount > MAX_POLLS) {
+                        _self.displayWidget.hideLoadingIndicator();
+                    }
+                    // Re-enable input
+                    if (_self.inputWidget) {
+                        _self.inputWidget.isSubmitting = false;
+                        _self.inputWidget.submitButton.set('disabled', false);
+                        _self.inputWidget._updateStopButtonState();
+                    }
+                    return;
+                }
+
+                _self.copilotApi.getSessionMessages(sessionId).then(function(res) {
+                    if (_self.sessionId !== sessionId) return; // session changed
+                    if (!res.active_job_id) {
+                        // Turn finished — refresh display
+                        clearInterval(_self._busyPollInterval);
+                        _self._busyPollInterval = null;
+                        _self.displayWidget.hideLoadingIndicator();
+                        // Re-enable input
+                        if (_self.inputWidget) {
+                            _self.inputWidget.isSubmitting = false;
+                            _self.inputWidget.submitButton.set('disabled', false);
+                            _self.inputWidget._updateStopButtonState();
+                        }
+                        topic.publish('RefreshSession', sessionId);
+                        topic.publish('ChatSession:TurnEnded', { sessionId: sessionId });
+                    }
+                }).catch(function() {
+                    // Ignore poll errors — will retry next interval
+                });
+            }, 3000);
+        },
+
+        /**
          * Cleanup when widget is destroyed
          */
         destroy: function() {
             this._stopPathMonitoring();
+            if (this._busyPollInterval) {
+                clearInterval(this._busyPollInterval);
+                this._busyPollInterval = null;
+            }
             this.inherited(arguments);
         }
     });

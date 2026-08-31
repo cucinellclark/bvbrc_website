@@ -206,6 +206,11 @@ define([
                         }
                         this._chatContainer.chatStore.addMessages(messages);
                         this._chatContainer.displayWidget.showMessages(messages);
+
+                        // If the session has an in-flight turn, start polling
+                        if (res.active_job_id && this._chatContainer._pollUntilTurnComplete) {
+                            this._chatContainer._pollUntilTurnComplete(savedSessionId);
+                        }
                     }));
 
                     this._copilotApi.getSessionTitle(savedSessionId).then(lang.hitch(this, function (titleRes) {

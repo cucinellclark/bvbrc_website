@@ -1958,6 +1958,23 @@
   flex-shrink: 0;
 }
 
+/* Busy dot — pulsing indicator for sessions with an in-flight turn */
+.scrollCardBusyDot {
+  display: none;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #3b82f6;
+  flex-shrink: 0;
+  margin-right: 4px;
+  animation: scrollCardBusyPulse 1.4s ease-in-out infinite;
+}
+
+@keyframes scrollCardBusyPulse {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50% { opacity: 0.4; transform: scale(0.8); }
+}
+
 .scrollCardCogButton {
   width: 25px;
   height: 25px;
@@ -3578,23 +3595,38 @@ a.workspace-path-chip:hover {
   color: #ffffff !important;
 }
 
-.claro .copilotComposer .copilotAbortButton.dijitButton,
-.copilotComposer .copilotAbortButton.dijitButton {
+/* Stop Generation Button */
+.claro .copilotComposer .copilotStopButton.dijitButton,
+.copilotComposer .copilotStopButton.dijitButton {
   margin: 0 2px 2px 0 !important;
   flex-shrink: 0;
 }
 
-.claro .copilotComposer .copilotAbortButton .dijitButtonNode,
-.copilotComposer .copilotAbortButton .dijitButtonNode {
-  border: none !important;
-  background: #f1f5f9 !important;
+.claro .copilotComposer .copilotStopButton .dijitButtonNode,
+.copilotComposer .copilotStopButton .dijitButtonNode {
+  border: 1px solid #e2e8f0 !important;
+  background: #ffffff !important;
   background-image: none !important;
-  color: #334155 !important;
+  color: #dc2626 !important;
   border-radius: 16px !important;
-  padding: 6px 10px !important;
+  padding: 5px 12px !important;
   box-shadow: none !important;
   font-size: 12px;
   line-height: 1.2;
+  cursor: pointer;
+  transition: background 0.12s ease, border-color 0.12s ease;
+}
+
+.claro .copilotComposer .copilotStopButton .dijitButtonNode:hover,
+.copilotComposer .copilotStopButton .dijitButtonNode:hover {
+  background: #fef2f2 !important;
+  border-color: #fca5a5 !important;
+}
+
+.claro .copilotComposer .copilotStopButton .fa,
+.copilotComposer .copilotStopButton .fa {
+  font-size: 10px;
+  margin-right: 3px;
 }
 
 .copilotComposer .workspacePathTokenEditor {

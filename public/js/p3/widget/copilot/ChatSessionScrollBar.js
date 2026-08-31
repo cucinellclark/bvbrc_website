@@ -160,6 +160,18 @@ define([
         }
       }));
 
+      // Update the busy dot on individual cards when a turn starts or ends
+      topic.subscribe('ChatSession:TurnStarted', lang.hitch(this, function(data) {
+        if (!data || !data.sessionId) { return; }
+        var card = this.sessionCards && this.sessionCards[data.sessionId];
+        if (card) { card._updateBusyState(true); }
+      }));
+      topic.subscribe('ChatSession:TurnEnded', lang.hitch(this, function(data) {
+        if (!data || !data.sessionId) { return; }
+        var card = this.sessionCards && this.sessionCards[data.sessionId];
+        if (card) { card._updateBusyState(false); }
+      }));
+
       // When a brand-new chat is started, nothing should be highlighted yet
       topic.subscribe('createNewChatSession', lang.hitch(this, function() {
         this._highlightAfterReload = null;

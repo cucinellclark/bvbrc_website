@@ -25,7 +25,7 @@ define([
       /** Flag to prevent multiple simultaneous submissions */
       isSubmitting: false,
 
-      /** True only when query pagination progress is active; controls abort button visibility */
+      /** @deprecated No longer used — Stop button is always visible during submission. */
       isQueryProgressActive: false,
 
       /** Custom system prompt to prepend to queries */
@@ -664,7 +664,7 @@ define([
         this.isSubmitting = true;
         this.isQueryProgressActive = false;
         this.submitButton.set('disabled', true);
-        this._updateAbortButtonState();
+        this._updateStopButtonState();
 
         this.displayWidget.showLoadingIndicator();
 
@@ -727,7 +727,7 @@ define([
             _self.isSubmitting = false;
             _self.isQueryProgressActive = false;
             _self.submitButton.set('disabled', false);
-            _self._updateAbortButtonState();
+            _self._updateStopButtonState();
           },
           function(error) {
             // onError
@@ -736,15 +736,13 @@ define([
             _self.isSubmitting = false;
             _self.isQueryProgressActive = false;
             _self.submitButton.set('disabled', false);
-            _self._updateAbortButtonState();
+            _self._updateStopButtonState();
           },
           function(progressInfo) {
             // onProgress — silent for plan actions
           },
           function(statusMessage) {
             // onStatusMessage — same pattern as _handleSubmitStream
-            _self._handleAbortStatusMessageEvent(statusMessage);
-
             if (statusMessage.should_remove) {
               _self.chatStore.removeMessage(statusMessage.message_id);
               if (statusMessageId === statusMessage.message_id) {
@@ -877,15 +875,16 @@ define([
 
         this.submitButton.placeAt(composerRow);
 
-        this.abortButton = new Button({
-            label: 'Abort',
-            'class': 'copilotAbortButton',
-            disabled: true,
+        this.stopButton = new Button({
+            label: '<i class="fa icon-stop"></i> Stop',
+            'class': 'copilotStopButton',
             onClick: lang.hitch(this, function() {
-                this._handleAbortClick();
+                this._handleStopClick();
             })
         });
-        this.abortButton.placeAt(composerRow);
+        this.stopButton.placeAt(composerRow);
+        // Hidden by default — shown only while isSubmitting
+        this.stopButton.domNode.style.display = 'none';
 
         this._topicHandles.push(topic.subscribe('ChatSession:Selected', lang.hitch(this, function(data) {
             this._closeAttachMenu();
@@ -1165,81 +1164,54 @@ define([
         this._renderWorkspaceSelectionIndicator();
         this._renderJobsSelectionIndicator();
         this._updateImageCapabilityUI();
-        this._updateAbortButtonState();
+        this._updateStopButtonState();
         this._renderAttachmentChips();
       },
 
-      _isAbortableQueryTool: function(toolId) {
-        if (!toolId || typeof toolId !== 'string') return false;
-        var normalized = toolId.split('.').pop();
-        return normalized === 'bvbrc_query_collection' ||
-          normalized === 'query_collection' ||
-          normalized === 'bvbrc_global_data_search' ||
-          normalized === 'bvbrc_search_data';
-      },
-
-      _updateAbortButtonState: function() {
-        if (!this.abortButton) return;
-        var streamState = this.copilotApi && this.copilotApi.getCurrentStreamState
-          ? this.copilotApi.getCurrentStreamState()
-          : null;
-        var activeToolId = streamState ? streamState.tool_id : null;
-        var hasAbortableTool = !activeToolId || this._isAbortableQueryTool(activeToolId);
-        var hasJobId = !!(streamState && streamState.job_id);
-        var shouldShow = !!this.isQueryProgressActive;
-        var shouldEnable = !!this.isSubmitting && shouldShow && hasJobId && hasAbortableTool;
-
-        if (this.abortButton.domNode) {
-          this.abortButton.domNode.style.display = shouldShow ? '' : 'none';
-        }
-        this.abortButton.set('disabled', !shouldEnable);
-      },
-
-      _handleAbortStatusMessageEvent: function(statusMessage) {
-        if (!statusMessage || !statusMessage.event_type) return;
-        if (statusMessage.event_type === 'query_progress') {
-          this.isQueryProgressActive = true;
-          this._updateAbortButtonState();
-          return;
-        }
-
-        if (statusMessage.event_type === 'query_aborted' ||
-            statusMessage.event_type === 'done' ||
-            statusMessage.event_type === 'error') {
-          this.isQueryProgressActive = false;
-          this._updateAbortButtonState();
+      /**
+       * Show/hide the Stop button based on isSubmitting state.
+       * Stop is visible and enabled whenever a turn is in flight.
+       */
+      _updateStopButtonState: function() {
+        if (!this.stopButton) return;
+        if (this.stopButton.domNode) {
+          this.stopButton.domNode.style.display = this.isSubmitting ? '' : 'none';
         }
       },
 
-      _handleAbortClick: function() {
+      /**
+       * Handle Stop button click.
+       * - Calls abort POST so the backend sets the Redis cancel flag
+       * - Closes the local SSE stream
+       * - Unlocks the input immediately so the user can send again
+       * - Keeps the assistant bubble (partial tokens already rendered)
+       */
+      _handleStopClick: function() {
         if (!this.copilotApi || !this.isSubmitting) return;
 
-        var streamState = this.copilotApi.getCurrentStreamState ? this.copilotApi.getCurrentStreamState() : null;
-        var activeToolId = streamState ? streamState.tool_id : null;
-        if (activeToolId && !this._isAbortableQueryTool(activeToolId)) {
-          topic.publish('CopilotApiError', {
-            error: new Error('Abort currently supports active data query tools only.')
-          });
-          return;
-        }
-
-        this.abortButton.set('disabled', true);
-        this.abortButton.set('label', 'Aborting...');
-
+        // 1. Fire-and-forget abort POST (backend sets Redis cancel flag).
+        //    This is the primary cancel mechanism. The SSE close (step 2)
+        //    only disconnects the local stream; the backend only stops when
+        //    the Redis flag is polled.  If currentJobId is not yet set
+        //    (Stop pressed before the first SSE event), the POST will fail
+        //    and the backend turn runs to completion.
         this.copilotApi.abortActiveQueryJob({
           user_id: this.copilotApi.user_id,
-          scopes: ['query_tools'],
-          reason: 'Aborted from copilot input button'
-        }).then(lang.hitch(this, function() {
-          // Keep disabled while backend finishes processing abort request.
-          this.abortButton.set('label', 'Abort');
-          // Keep disabled while backend finishes processing abort request.
-          this.abortButton.set('disabled', true);
-        })).catch(lang.hitch(this, function(error) {
-          this.abortButton.set('label', 'Abort');
-          this._updateAbortButtonState();
-          topic.publish('CopilotApiError', { error: error });
-        }));
+          reason: 'Stopped from chat UI'
+        }).catch(function(err) {
+          console.warn('[CopilotInput] Stop abort POST failed:', err.message);
+        });
+
+        // 2. Close the SSE stream
+        this.copilotApi.abortActiveStream();
+
+        // 3. Unlock immediately — user can send a new message
+        this.displayWidget.hideLoadingIndicator();
+        this.isSubmitting = false;
+        this.isQueryProgressActive = false;
+        this.submitButton.set('disabled', false);
+        this._updateStopButtonState();
+        topic.publish('ChatSession:TurnEnded', { sessionId: this.sessionId });
       },
 
       _renderWorkspaceSelectionIndicator: function() {
@@ -1300,7 +1272,7 @@ define([
             this.isSubmitting = false;
             this.isQueryProgressActive = false;
             this.submitButton.set('disabled', false);
-            this._updateAbortButtonState();
+            this._updateStopButtonState();
         }
 
         this._closeAttachMenu();
@@ -1328,7 +1300,7 @@ define([
             this.isSubmitting = false;
             this.isQueryProgressActive = false;
             this.submitButton.set('disabled', false);
-            this._updateAbortButtonState();
+            this._updateStopButtonState();
         }
 
         this._closeAttachMenu();
@@ -1813,7 +1785,10 @@ define([
       this.isSubmitting = true;
       this.isQueryProgressActive = false;
       this.submitButton.set('disabled', true);
-      this._updateAbortButtonState();
+      this._updateStopButtonState();
+
+      // Notify sidebar so the busy dot can update immediately
+      topic.publish('ChatSession:TurnStarted', { sessionId: this.sessionId });
 
       this.displayWidget.showLoadingIndicator();
 
@@ -1895,7 +1870,8 @@ define([
               this.isSubmitting = false;
               this.isQueryProgressActive = false;
               this.submitButton.set('disabled', false);
-              this._updateAbortButtonState();
+              this._updateStopButtonState();
+              topic.publish('ChatSession:TurnEnded', { sessionId: _self.sessionId });
           },
           (error) => {
               topic.publish('CopilotApiError', { error: error });
@@ -1903,7 +1879,8 @@ define([
               this.isSubmitting = false;
               this.isQueryProgressActive = false;
               this.submitButton.set('disabled', false);
-              this._updateAbortButtonState();
+              this._updateStopButtonState();
+              topic.publish('ChatSession:TurnEnded', { sessionId: _self.sessionId });
           },
           (progressInfo) => {
               switch(progressInfo.type) {
@@ -1920,8 +1897,6 @@ define([
               }
           },
           (statusMessage) => {
-              this._handleAbortStatusMessageEvent(statusMessage);
-
               if (statusMessage.should_remove) {
                   this.chatStore.removeMessage(statusMessage.message_id);
                   if (statusMessageId === statusMessage.message_id) {
