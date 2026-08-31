@@ -1269,6 +1269,13 @@ define([
             // this poll before it even fires.
             var INITIAL_DELAY = 6000; // 6 seconds
 
+            // Null-race guard: setSessionActiveJob (chatRunner.js:187) races the
+            // first poll. Trust a null active_job_id only after we've seen it
+            // non-null once, or after ~14s total elapsed (initial + 8s window).
+            var startedAt = Date.now();
+            var sawActiveJobId = false;
+            var MIN_ELAPSED_BEFORE_TRUSTING_NULL_MS = INITIAL_DELAY + 8000;
+
             this._fallbackPollTimeout = setTimeout(function() {
                 _self._fallbackPollTimeout = null;
                 _self._fallbackPollInterval = setInterval(function() {
@@ -1280,19 +1287,27 @@ define([
 
                     _self.copilotApi.getSessionMessages(sessionId).then(function(res) {
                         if (_self.sessionId !== sessionId) return;
-                        if (!res.active_job_id) {
-                            // Turn finished but SSE did not deliver — refresh
-                            _self._stopFallbackPoll();
-                            _self.displayWidget.hideLoadingIndicator();
-                            // Re-enable input in case SSE onEnd never fired
-                            if (_self.inputWidget) {
-                                _self.inputWidget.isSubmitting = false;
-                                _self.inputWidget.submitButton.set('disabled', false);
-                                _self.inputWidget._updateStopButtonState();
-                            }
-                            topic.publish('RefreshSession', sessionId);
-                            topic.publish('ChatSession:TurnEnded', { sessionId: sessionId });
+                        if (res && res.active_job_id) {
+                            sawActiveJobId = true;
+                            return;
                         }
+                        // active_job_id is null — apply the guard before
+                        // treating it as "done".
+                        var elapsed = Date.now() - startedAt;
+                        if (!sawActiveJobId && elapsed < MIN_ELAPSED_BEFORE_TRUSTING_NULL_MS) {
+                            return;
+                        }
+                        // Turn finished but SSE did not deliver — refresh
+                        _self._stopFallbackPoll();
+                        _self.displayWidget.hideLoadingIndicator();
+                        // Re-enable input in case SSE onEnd never fired
+                        if (_self.inputWidget) {
+                            _self.inputWidget.isSubmitting = false;
+                            _self.inputWidget.submitButton.set('disabled', false);
+                            _self.inputWidget._updateStopButtonState();
+                        }
+                        topic.publish('RefreshSession', sessionId);
+                        topic.publish('ChatSession:TurnEnded', { sessionId: sessionId });
                     }).catch(function() {
                         // Ignore — retry next interval
                     });

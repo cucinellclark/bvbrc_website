@@ -1212,7 +1212,10 @@ define([
         this.isQueryProgressActive = false;
         this.submitButton.set('disabled', false);
         this._updateStopButtonState();
-        topic.publish('ChatSession:TurnEnded', { sessionId: this.sessionId });
+        // Do NOT publish TurnEnded here. Stop just requests cancellation; the
+        // gateway needs a moment to observe the Redis flag, unwind agent tasks,
+        // and clear active_job_id in Mongo. The sidebar's per-session poll
+        // (ChatSessionScrollBar) will hide the chip once the gateway confirms.
       },
 
       _renderWorkspaceSelectionIndicator: function() {
@@ -1870,7 +1873,7 @@ define([
                   this.displayWidget.showMessages(this.chatStore.query());
               }
           },
-          () => {
+          (info) => {
               this.displayWidget.hideLoadingIndicator();
               if (_self.new_chat) {
                   _self._finishNewChat();
@@ -1879,7 +1882,14 @@ define([
               this.isQueryProgressActive = false;
               this.submitButton.set('disabled', false);
               this._updateStopButtonState();
-              topic.publish('ChatSession:TurnEnded', { sessionId: submitSessionId });
+              // Only publish TurnEnded when the stream truly ended (server 'done'
+              // or normal close). On abort (session switch / Stop), the gateway
+              // keeps running the turn — the sidebar chip must persist until
+              // ChatSessionScrollBar's per-session poll observes active_job_id
+              // clearing in Mongo.
+              if (!info || info.reason !== 'aborted') {
+                  topic.publish('ChatSession:TurnEnded', { sessionId: submitSessionId });
+              }
           },
           (error) => {
               topic.publish('CopilotApiError', { error: error });
@@ -1888,6 +1898,13 @@ define([
               this.isQueryProgressActive = false;
               this.submitButton.set('disabled', false);
               this._updateStopButtonState();
+              // Errors that pre-empt the turn locally shouldn't clear the chip.
+              // The gateway may still be running; the poll is the source of truth.
+              if (error && error.isStreamDisconnect) {
+                  // Connection interrupted — do not publish TurnEnded; poll will
+                  // detect real completion or the user can reload the session.
+                  return;
+              }
               topic.publish('ChatSession:TurnEnded', { sessionId: submitSessionId });
           },
           null, // onProgress — agent progress is handled via statusMessage callback above

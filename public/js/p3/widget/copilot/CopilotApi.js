@@ -428,7 +428,7 @@ define([
                                         onStatusMessage({ ...statusMessage, should_remove: true });
                                     }
 
-                                    if (onEnd) onEnd(parsed);
+                                    if (onEnd) onEnd({ reason: 'done', data: parsed });
                                     break;
 
                                 case 'error':
@@ -590,7 +590,7 @@ define([
                         _self.currentAbortController = null;
                         _self.currentActiveToolId = null;
                         _self.currentJobId = null;
-                        if (onEnd) onEnd();
+                        if (onEnd) onEnd({ reason: 'aborted' });
                         return;
                     }
 
@@ -605,7 +605,7 @@ define([
                             _self.currentAbortController = null;
                             _self.currentActiveToolId = null;
                             _self.currentJobId = null;
-                            if (onEnd) onEnd();
+                            if (onEnd) onEnd({ reason: 'done' });
                             return;
                         }
 
@@ -633,7 +633,7 @@ define([
                             if (onError) onError(disconnectError);
                         } else if (onEnd) {
                             // User aborted, just end gracefully
-                            onEnd();
+                            onEnd({ reason: 'aborted' });
                         }
                     });
                 }
@@ -650,7 +650,7 @@ define([
                 if (err.name === 'AbortError') {
                     // User cancelled — still call onEnd so the UI unlocks
                     // (hide loading indicator, re-enable send button).
-                    if (onEnd) onEnd();
+                    if (onEnd) onEnd({ reason: 'aborted' });
                     return;
                 }
 

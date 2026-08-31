@@ -101,6 +101,12 @@ define([
       // Local set of session IDs known to have an in-flight turn.
       // Survives card re-renders (renderSessions destroys/rebuilds cards).
       this._busySessionIds = {};
+
+      // Per-session background pollers that watch Mongo's active_job_id
+      // for a switched-away busy session. Keyed by sessionId; each value
+      // is { intervalHandle, startedAt, sawActiveJobId, pollCount }.
+      // Started on ChatSession:TurnStarted, stopped on ChatSession:TurnEnded.
+      this._sessionPollers = {};
     },
 
     /**
@@ -173,6 +179,11 @@ define([
         this._setStoreBusy(data.sessionId, true);
         var card = this.sessionCards && this.sessionCards[data.sessionId];
         if (card) { card._updateBusyState(true); }
+        // Start a background poll so the chip clears when the gateway
+        // finishes the turn — even if the user switches sessions and the
+        // local SSE stream is aborted (CopilotInput no longer publishes
+        // TurnEnded on abort, so this poll is the only completion signal).
+        this._startSessionPoller(data.sessionId);
       }));
       topic.subscribe('ChatSession:TurnEnded', lang.hitch(this, function(data) {
         if (!data || !data.sessionId) { return; }
@@ -180,6 +191,7 @@ define([
         this._setStoreBusy(data.sessionId, false);
         var card = this.sessionCards && this.sessionCards[data.sessionId];
         if (card) { card._updateBusyState(false); }
+        this._stopSessionPoller(data.sessionId);
       }));
 
       // When a brand-new chat is started, nothing should be highlighted yet
@@ -446,6 +458,84 @@ define([
           card._updateBusyState(true);
         }
       }
+    },
+
+    /**
+     * Start a background poll for `sessionId` that watches Mongo's
+     * active_job_id and publishes ChatSession:TurnEnded when it clears.
+     *
+     * Fires every 5s. Caps at ~6 minutes (72 polls).
+     *
+     * False-positive guard: on the first tick, active_job_id may still be
+     * null because setSessionActiveJob (chatRunner.js:187) races the poll.
+     * Require either one non-null observation OR ≥ 8s elapsed before
+     * treating a null as "done".
+     *
+     * Idempotent: calling again for a session that already has a poller
+     * is a no-op.
+     *
+     * @param {string} sessionId
+     */
+    _startSessionPoller: function(sessionId) {
+      if (!sessionId || this._sessionPollers[sessionId]) { return; }
+
+      var _self = this;
+      var state = {
+        startedAt: Date.now(),
+        sawActiveJobId: false,
+        pollCount: 0,
+        intervalHandle: null
+      };
+      var POLL_INTERVAL_MS = 5000;
+      var MAX_POLLS = 72; // ~6 minutes
+      var MIN_ELAPSED_BEFORE_TRUSTING_NULL_MS = 8000;
+
+      state.intervalHandle = setInterval(function() {
+        state.pollCount++;
+        if (state.pollCount > MAX_POLLS) {
+          console.warn('[ChatSessionScrollBar] Session poller cap reached, stopping', { sessionId: sessionId });
+          topic.publish('ChatSession:TurnEnded', { sessionId: sessionId });
+          return;
+        }
+        if (!_self.copilotApi || typeof _self.copilotApi.getSessionMessages !== 'function') {
+          return;
+        }
+        _self.copilotApi.getSessionMessages(sessionId).then(function(res) {
+          // Poller may have been cancelled between request and response.
+          if (!_self._sessionPollers[sessionId]) { return; }
+          var jobId = res && res.active_job_id;
+          if (jobId) {
+            state.sawActiveJobId = true;
+            return;
+          }
+          // active_job_id is null. Trust it only if we've either seen it
+          // non-null once or waited past the false-positive window.
+          var elapsed = Date.now() - state.startedAt;
+          if (state.sawActiveJobId || elapsed >= MIN_ELAPSED_BEFORE_TRUSTING_NULL_MS) {
+            topic.publish('ChatSession:TurnEnded', { sessionId: sessionId });
+            // If the user happens to be viewing this session, refresh it
+            // so the newly-persisted assistant message appears.
+            topic.publish('RefreshSession', sessionId);
+          }
+        }).catch(function() {
+          // Ignore transient errors; try again next tick.
+        });
+      }, POLL_INTERVAL_MS);
+
+      this._sessionPollers[sessionId] = state;
+    },
+
+    /**
+     * Stop and remove the background poller for `sessionId` (if any).
+     * @param {string} sessionId
+     */
+    _stopSessionPoller: function(sessionId) {
+      var state = this._sessionPollers[sessionId];
+      if (!state) { return; }
+      if (state.intervalHandle) {
+        clearInterval(state.intervalHandle);
+      }
+      delete this._sessionPollers[sessionId];
     }
   });
 });
