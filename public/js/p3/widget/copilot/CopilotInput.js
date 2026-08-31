@@ -1203,6 +1203,7 @@ define([
         });
 
         // 2. Close the SSE stream
+        console.log('[CopilotInput] _handleStopClick: closing SSE stream');
         this.copilotApi.abortActiveStream();
 
         // 3. Unlock immediately — user can send a new message

@@ -226,9 +226,10 @@ define([
             }
 
             // Abort any previously-active stream before starting a new one
+            console.log('[CopilotApi] submitCopilotQueryStream: aborting previous stream (if any) before new stream for session', params.sessionId);
             this.abortActiveStream();
 
-            console.log('Session ID:', params.sessionId);
+            console.log('[CopilotApi] submitCopilotQueryStream: starting new stream for session', params.sessionId);
             var _self = this;
             this.currentJobId = null;
             this.currentActiveToolId = null;
@@ -343,7 +344,8 @@ define([
                         // Session guard: if the user switched sessions since this
                         // stream was started, discard all remaining events silently.
                         if (_self.activeStreamSessionId !== streamSessionId) {
-                            console.log('[CopilotApi] Discarding SSE event for stale session', streamSessionId);
+                            console.warn('[CopilotApi] Discarding SSE event for stale session',
+                                streamSessionId, '(active:', _self.activeStreamSessionId, ', event:', currentEvent, ')');
                             return;
                         }
 
@@ -690,11 +692,14 @@ define([
          */
         abortActiveStream: function() {
             if (this.currentAbortController) {
-                console.log('[CopilotApi] Aborting active SSE stream');
+                console.warn('[CopilotApi] Aborting active SSE stream — STACK TRACE:');
+                console.trace('[CopilotApi] abortActiveStream caller');
                 this.currentAbortController.abort();
                 this.currentAbortController = null;
                 this.currentActiveToolId = null;
                 this.currentJobId = null;
+            } else {
+                console.log('[CopilotApi] abortActiveStream called but no active controller');
             }
             // Clear the active stream session so that any in-flight pump()
             // iterations that survive the abort also see the mismatch and

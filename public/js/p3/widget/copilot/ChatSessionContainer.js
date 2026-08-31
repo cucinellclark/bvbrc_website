@@ -610,6 +610,11 @@ define([
          * @param {string} sessionId New session identifier
          */
         changeSessionId: function(sessionId) {
+            console.warn('[ChatSessionContainer] changeSessionId called',
+                { newSessionId: sessionId, previousSessionId: this._previousSessionId || null,
+                  hasActiveStream: !!(this.copilotApi && this.copilotApi.currentAbortController),
+                  isSubmitting: !!(this.inputWidget && this.inputWidget.isSubmitting) });
+            console.trace('[ChatSessionContainer] changeSessionId caller');
             this.sessionId = sessionId;
             // Do not add the session to the sessions store here; it will be added after the first successful message.
 
@@ -621,7 +626,10 @@ define([
             if (this.copilotApi && typeof this.copilotApi.abortActiveStream === 'function') {
                 var previousSessionId = this._previousSessionId || null;
                 if (previousSessionId && previousSessionId !== sessionId) {
+                    console.warn('[ChatSessionContainer] changeSessionId: ABORTING stream (session changed from', previousSessionId, 'to', sessionId, ')');
                     this.copilotApi.abortActiveStream();
+                } else {
+                    console.log('[ChatSessionContainer] changeSessionId: skipping abort (same session or first call)');
                 }
             }
             this._previousSessionId = sessionId;
