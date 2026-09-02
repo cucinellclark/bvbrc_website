@@ -1460,7 +1460,7 @@ define([
 
         var maxAttachments = 3;
         var maxImageBytes = 6 * 1024 * 1024;    // 6 MB for images
-        var maxFileBytes = 100 * 1024;           // 100 KB for text files
+        var maxFileBytes = 10 * 1024 * 1024;     // 10 MB for text files
         var currentCount = this.attachedImages.length + this.attachedFiles.length + this.attachedPdfs.length;
         var remainingSlots = Math.max(0, maxAttachments - currentCount);
 
@@ -1565,7 +1565,7 @@ define([
         textFiles.forEach(lang.hitch(this, function(file) {
           readPromises.push(new Promise(lang.hitch(this, function(resolve, reject) {
             if (file.size > maxFileBytes) {
-              reject(new Error('File "' + (file.name || 'file') + '" is larger than 100 KB.'));
+              reject(new Error('File "' + (file.name || 'file') + '" is larger than 10 MB.'));
               return;
             }
             var reader = new FileReader();
