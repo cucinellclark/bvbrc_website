@@ -51,6 +51,7 @@ define([
       selectedWorkflows: [],
       attachedImages: [],
       attachedFiles: [],    // text file attachments [{id, name, content, size, mimeType}]
+      attachedPdfs: [],     // PDF attachments [{id, name, content, size, mimeType}]
       imageUploadInput: null,
       imageActionNode: null,
       imageActionMenuNode: null,
@@ -1435,7 +1436,7 @@ define([
         var maxAttachments = 3;
         var maxImageBytes = 6 * 1024 * 1024;    // 6 MB for images
         var maxFileBytes = 100 * 1024;           // 100 KB for text files
-        var currentCount = this.attachedImages.length + this.attachedFiles.length;
+        var currentCount = this.attachedImages.length + this.attachedFiles.length + this.attachedPdfs.length;
         var remainingSlots = Math.max(0, maxAttachments - currentCount);
 
         if (remainingSlots <= 0) {
@@ -1453,11 +1454,14 @@ define([
 
         var imageFiles = [];
         var textFiles = [];
+        var pdfFiles = [];
         var modelSupportsImage = this._modelSupportsImage(this.model);
 
         acceptedFiles.forEach(function(file) {
           if (/^image\/(png|jpeg|jpg)$/i.test(file.type || '')) {
             imageFiles.push(file);
+          } else if (/^application\/pdf$/i.test(file.type || '') || /\.pdf$/i.test(file.name || '')) {
+            pdfFiles.push(file);
           } else {
             textFiles.push(file);
           }
@@ -1495,6 +1499,38 @@ define([
             };
             reader.onerror = function() {
               reject(new Error('Unable to read image "' + (file.name || 'image') + '".'));
+            };
+            reader.readAsDataURL(file);
+          })));
+        }));
+
+        // Process PDF files — read as data URL (binary), NOT gated on model image support
+        var maxPdfBytes = 10 * 1024 * 1024; // 10 MB
+        pdfFiles.forEach(lang.hitch(this, function(file) {
+          readPromises.push(new Promise(lang.hitch(this, function(resolve, reject) {
+            if (file.size > maxPdfBytes) {
+              reject(new Error('PDF "' + (file.name || 'file') + '" is larger than 10 MB.'));
+              return;
+            }
+            var reader = new FileReader();
+            reader.onload = function(loadEvt) {
+              resolve({
+                fileType: 'pdf',
+                id: 'pdf-' + Date.now() + '-' + Math.floor(Math.random() * 1000000),
+                content: loadEvt && loadEvt.target ? loadEvt.target.result : null,
+                name: file.name || 'document.pdf',
+                size: file.size,
+                mimeType: 'application/pdf',
+                attachment: {
+                  type: 'pdf',
+                  source: 'upload',
+                  name: file.name || 'Attached PDF',
+                  size: file.size
+                }
+              });
+            };
+            reader.onerror = function() {
+              reject(new Error('Unable to read PDF "' + (file.name || 'file') + '".'));
             };
             reader.readAsDataURL(file);
           })));
@@ -1539,10 +1575,12 @@ define([
 
         Promise.all(readPromises).then(lang.hitch(this, function(results) {
           results.forEach(lang.hitch(this, function(entry) {
-            var total = this.attachedImages.length + this.attachedFiles.length;
+            var total = this.attachedImages.length + this.attachedFiles.length + this.attachedPdfs.length;
             if (total >= maxAttachments) return;
             if (entry.fileType === 'image' && entry.image) {
               this.attachedImages.push(entry);
+            } else if (entry.fileType === 'pdf' && entry.content) {
+              this.attachedPdfs.push(entry);
             } else if (entry.fileType === 'text' && entry.content !== undefined) {
               this.attachedFiles.push(entry);
             }
@@ -1559,6 +1597,7 @@ define([
       _clearAttachedImage: function() {
         this.attachedImages = [];
         this.attachedFiles = [];
+        this.attachedPdfs = [];
         if (this.imageUploadInput) {
           this.imageUploadInput.value = '';
         }
@@ -1658,6 +1697,30 @@ define([
         };
       },
 
+      _getUploadedPdfsPayload: function() {
+        if (!Array.isArray(this.attachedPdfs) || this.attachedPdfs.length === 0) {
+          return null;
+        }
+        return {
+          pdfs: this.attachedPdfs.map(function(entry) {
+            return {
+              name: entry.name || 'document.pdf',
+              content: entry.content,
+              mime_type: 'application/pdf',
+              size: entry.size || 0
+            };
+          }),
+          attachments: this.attachedPdfs.map(function(entry) {
+            return {
+              type: 'pdf',
+              source: 'upload',
+              name: entry.name || 'Attached PDF',
+              size: entry.size || 0
+            };
+          })
+        };
+      },
+
       /**
        * Updates model selection UI text
        */
@@ -1702,13 +1765,14 @@ define([
        * chat as initialized and triggers title generation.
        * @param {boolean} generateTitleImmediately – if false, skip title generation (default true)
        */
-      _finishNewChat: function(generateTitleImmediately = true) {
+      _finishNewChat: function(generateTitleImmediately, sessionId) {
+        if (typeof generateTitleImmediately === 'undefined') { generateTitleImmediately = true; }
         this.new_chat = false;
         this.session_registered = true;
 
-        if (generateTitleImmediately) {
+        if (generateTitleImmediately && sessionId) {
           setTimeout(function() {
-            topic.publish('generateSessionTitle');
+            topic.publish('generateSessionTitle', { sessionId: sessionId });
           }, 100);
         }
       },
@@ -1716,9 +1780,11 @@ define([
     _handleSubmitStream: function() {
       var inputText = this.textArea.get('value');
       var _self = this;
-      // Capture session ID at submit time so TurnEnded publishes the
-      // correct ID even if the user switches sessions mid-turn.
+      // Capture session ID and new-chat flag at submit time so title
+      // generation and TurnEnded publish the correct values even if the
+      // user switches sessions mid-turn.
       var submitSessionId = this.sessionId;
+      var submitWasNewChat = this.new_chat;
 
       // --- Plan step needs_input intercept ---
       // If a plan step is paused waiting for user input, redirect the
@@ -1766,6 +1832,8 @@ define([
       var hasUploadedImage = !!(uploadedImagePayload && Array.isArray(uploadedImagePayload.images) && uploadedImagePayload.images.length > 0 && this._modelSupportsImage(this.model));
       var uploadedFilesPayload = this._getUploadedFilesPayload();
       var hasUploadedFiles = !!(uploadedFilesPayload && Array.isArray(uploadedFilesPayload.files) && uploadedFilesPayload.files.length > 0);
+      var uploadedPdfsPayload = this._getUploadedPdfsPayload();
+      var hasUploadedPdfs = !!(uploadedPdfsPayload && Array.isArray(uploadedPdfsPayload.pdfs) && uploadedPdfsPayload.pdfs.length > 0);
       var hasScreenshot = hasUploadedImage && (uploadedImagePayload.attachments || []).some(function(att) {
         return att && att.source === 'screenshot';
       });
@@ -1781,6 +1849,9 @@ define([
       if (hasUploadedFiles) {
         allAttachments = allAttachments.concat(uploadedFilesPayload.attachments);
       }
+      if (hasUploadedPdfs) {
+        allAttachments = allAttachments.concat(uploadedPdfsPayload.attachments);
+      }
       var userMessage = this._buildUserMessageForSubmit(
           inputText,
           allAttachments.length > 0 ? allAttachments : null
@@ -1789,7 +1860,7 @@ define([
       this.chatStore.addMessage(userMessage);
       this.displayWidget.showMessages(this.chatStore.query());
       this._setInputTextValue('');
-      if (hasUploadedImage || hasUploadedFiles) {
+      if (hasUploadedImage || hasUploadedFiles || hasUploadedPdfs) {
         this._clearAttachedImage();
       }
 
@@ -1836,6 +1907,9 @@ define([
       if (hasUploadedFiles) {
         params.files = uploadedFilesPayload.files;
       }
+      if (hasUploadedPdfs) {
+        params.pdfs = uploadedPdfsPayload.pdfs;
+      }
       this._appendWorkspaceSelectionToStreamParams(params);
 
       this._submitCopilotQueryStreamWithRegistration(params,
@@ -1875,8 +1949,12 @@ define([
           },
           (info) => {
               this.displayWidget.hideLoadingIndicator();
-              if (_self.new_chat) {
-                  _self._finishNewChat();
+              // Use the captured submit-time new-chat flag + session ID so
+              // title generation targets the originating session even when
+              // the user has already switched to another session.
+              if (submitWasNewChat) {
+                  submitWasNewChat = false; // prevent double-fire
+                  _self._finishNewChat(true, submitSessionId);
               }
               this.isSubmitting = false;
               this.isQueryProgressActive = false;

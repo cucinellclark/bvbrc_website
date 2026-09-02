@@ -545,6 +545,13 @@ define([
             class: 'message-attachment-chip',
             innerHTML: '<i class="fa icon-image"></i> ' + this.escapeHtml(label)
           }, container);
+        } else if (attachment.type === 'pdf') {
+          var pdfLabel = attachment.name || 'Attached PDF';
+          var pdfSizeStr = attachment.size ? ' (' + this._formatFileSize(attachment.size) + ')' : '';
+          domConstruct.create('div', {
+            class: 'message-attachment-chip',
+            innerHTML: '<i class="fa icon-file-pdf-o"></i> ' + this.escapeHtml(pdfLabel) + pdfSizeStr
+          }, container);
         } else if (attachment.type === 'file') {
           var fileLabel = attachment.name || 'Attached file';
           var sizeStr = attachment.size ? ' (' + this._formatFileSize(attachment.size) + ')' : '';

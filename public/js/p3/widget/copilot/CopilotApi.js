@@ -271,6 +271,9 @@ define([
             if (Array.isArray(params.files) && params.files.length > 0) {
                 data.files = params.files;
             }
+            if (Array.isArray(params.pdfs) && params.pdfs.length > 0) {
+                data.pdfs = params.pdfs;
+            }
             // Planning agent routing — passed by plan topic subscribers
             if (params.target_agent) {
                 data.target_agent = params.target_agent;

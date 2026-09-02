@@ -217,7 +217,16 @@ define([
      * Overrides parent method to use small window version of cards
      */
     renderSessions: function() {
-      // Clear existing content
+      // Destroy existing card widgets to prevent topic/event handler leaks
+      if (this.sessionCards) {
+        for (var id in this.sessionCards) {
+          if (this.sessionCards[id] && typeof this.sessionCards[id].destroyRecursive === 'function') {
+            this.sessionCards[id].destroyRecursive();
+          }
+        }
+      }
+
+      // Clear existing DOM content
       domConstruct.empty(this.scrollContainer);
 
       // Reset session cards map
@@ -284,6 +293,24 @@ define([
     },
 
     /**
+     * @method _highlightInPlace
+     * Applies highlight styling to a session card without scrolling.
+     * Used after re-render triggered by events that should not move the viewport
+     * (e.g. title change, Load More).
+     * @param {string} sessionId - ID of session to highlight
+     */
+    _highlightInPlace: function(sessionId) {
+      this.currentHighlighted = sessionId || null;
+      if (!sessionId || !this.sessionCards) { return; }
+      this.clearHighlight();
+      var sessionCard = this.sessionCards[sessionId];
+      if (sessionCard && sessionCard.containerNode) {
+        sessionCard.containerNode.style.backgroundColor = '#e6f7ff';
+        sessionCard.containerNode.style.borderLeft = '3px solid #1890ff';
+      }
+    },
+
+    /**
      * @method clearHighlight
      * Clears highlighting from all session cards, resetting them to default state
      */
@@ -318,39 +345,48 @@ define([
       // Ensure the load-more button visibility/state is updated after rendering
       this._renderLoadMoreButton();
 
-      // If there's a session to highlight after reload, do it now
+      // If there's a session to highlight after reload, do it now.
+      // Skip scrollIntoView when appending via Load More — the caller
+      // restores scrollTop itself.
       if (this._highlightAfterReload) {
         // Use setTimeout to ensure the DOM is updated before highlighting
+        var hlId = this._highlightAfterReload;
+        this._highlightAfterReload = null;
         setTimeout(lang.hitch(this, function() {
-          this.highlightSession(this._highlightAfterReload);
-          this._highlightAfterReload = null; // Clear the pending highlight
+          this.highlightSession(hlId);
         }), 300);
-      } else if (this.currentHighlighted) {
-        // Re-apply existing highlight after rerender
+      } else if (this.currentHighlighted && !this._isLoadMore) {
+        // Re-apply existing highlight after rerender (not on Load More)
         setTimeout(lang.hitch(this, function() {
-          this.highlightSession(this.currentHighlighted);
+          this._highlightInPlace(this.currentHighlighted);
         }), 0);
       }
     },
 
     _refreshSessions: function() {
-      // Reset pagination state on a full refresh
-      this.offset = 0;
-
       var storeData = this.sessionsStore.query();
 
-      // If we already have sessions cached, use them directly (but still honour pagination)
+      // If we already have sessions cached, re-render from the store.
+      // Do NOT reset the pagination cursor — it must stay in sync with
+      // how many pages have been fetched from the API.
       if (storeData && storeData.length > 0) {
+        // Sync local pagination state from the shared store
+        this.offset = this.sessionsStore.paginationOffset;
+        this.hasMore = this.sessionsStore.paginationHasMore;
         this.setSessions(storeData);
         this._highlightSavedSession();
         return;
       }
 
       // Load first page from API
-      this.copilotApi.getUserSessions(this.pageSize, this.offset).then(lang.hitch(this, function(res) {
+      this.copilotApi.getUserSessions(this.pageSize, 0).then(lang.hitch(this, function(res) {
         var sessions = res.sessions || [];
         this.hasMore = res.has_more;
-        this.offset += sessions.length;
+        this.offset = sessions.length;
+
+        // Persist pagination state on the shared store
+        this.sessionsStore.paginationOffset = this.offset;
+        this.sessionsStore.paginationHasMore = this.hasMore;
 
         this.sessionsStore.setSessions(sessions);
         this.setSessions(sessions);
@@ -365,23 +401,28 @@ define([
       if (!this.hasMore) { return; }
 
       // Capture the current scroll position so we can restore it after the list re-renders.
-      // Using the absolute scrollTop value (distance from the top) avoids the previous
-      // behaviour where the view jumped to the bottom after new sessions were appended.
       var prevScrollTop = this.scrollContainer.scrollTop;
 
       this.copilotApi.getUserSessions(this.pageSize, this.offset).then(lang.hitch(this, function(res) {
         var newSessions = res.sessions || [];
         this.hasMore = res.has_more;
+        // Advance offset by the API page size (what we asked for), not
+        // the unique count, so the next page picks up where this one left off.
         this.offset += newSessions.length;
 
-        // Merge with existing list without duplicates
-        var combined = this.sessions_list.concat(newSessions);
-        this.sessionsStore.setSessions(combined);
-        this.setSessions(combined);
+        // Persist pagination state on the shared store
+        this.sessionsStore.paginationOffset = this.offset;
+        this.sessionsStore.paginationHasMore = this.hasMore;
 
-        // Using a timeout ensures the DOM has finished re-rendering before we attempt to restore the scroll position.
+        // Merge, deduplicating by session_id (existing entries win)
+        this.sessionsStore.mergeSessions(newSessions);
+        // Re-render from the canonical store data
+        this._isLoadMore = true;
+        this.setSessions(this.sessionsStore.query());
+        this._isLoadMore = false;
+
+        // Restore scroll position after DOM update
         setTimeout(lang.hitch(this, function() {
-          // Restore the previous scroll position so the user’s viewport remains stable.
           this.scrollContainer.scrollTop = prevScrollTop;
         }), 0);
       }));

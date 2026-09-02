@@ -238,6 +238,10 @@ define([
             this.own(topic.subscribe('ChatSession:Selected', lang.hitch(this, function(data) {
                 if (!this._active) { return; }
                 this.changeSessionId(data.sessionId);
+                // Set the title on the header widget from the selected session
+                if (data.title && this.titleWidget) {
+                    this.titleWidget.setSessionId(data.sessionId, data.title);
+                }
                 this.chatStore.addMessages(data.messages);
                 this.displayWidget.showMessages(data.messages);
                 this.inputWidget.new_chat = false;
@@ -281,9 +285,9 @@ define([
                 if (!this._active) { return; }
                 this.inputWidget.setSystemPrompt(systemPrompt);
             })));
-            this.own(topic.subscribe('generateSessionTitle', lang.hitch(this, function() {
+            this.own(topic.subscribe('generateSessionTitle', lang.hitch(this, function(payload) {
                 if (!this._active) { return; }
-                this._handleGenerateSessionTitle.apply(this, arguments);
+                this._handleGenerateSessionTitle(payload);
             })));
             this.own(topic.subscribe('ChatSession:Delete', lang.hitch(this, function() {
                 if (!this._active) { return; }
@@ -412,34 +416,78 @@ define([
         },
 
         /**
-         * Generates a title for the chat session based on message history
-         * Uses AI model to analyze messages and create relevant title
+         * Generates a title for a chat session based on its message history.
+         * Bound to the originating session ID so switching sessions mid-flight
+         * does not write the title onto the wrong session.
+         * @param {Object} [payload] - { sessionId } identifying the target session
          */
-        _handleGenerateSessionTitle: function() {
-            // Only auto-generate a title when the session still has the default
-            // placeholder title.  If the user (or a previous generation) has
-            // already set a custom title, we do *not* want to overwrite it.
-            var currentTitle = this.titleWidget && this.titleWidget.getTitle ? this.titleWidget.getTitle() : 'New Chat';
+        _handleGenerateSessionTitle: function(payload) {
+            var targetSessionId = (payload && payload.sessionId) || this.sessionId;
 
-            if (currentTitle && currentTitle !== 'New Chat') {
-                // Title has already been set to something meaningful – abort.
+            // Guard: skip if the target session already has a non-default title.
+            // When we are still viewing the target session, use the title widget;
+            // otherwise check the sessions store.
+            var existingTitle = 'New Chat';
+            if (this.sessionId === targetSessionId && this.titleWidget && this.titleWidget.getTitle) {
+                existingTitle = this.titleWidget.getTitle();
+            } else if (this.sessionsStore) {
+                var storeEntry = this.sessionsStore.get(targetSessionId);
+                if (storeEntry && storeEntry.title) {
+                    existingTitle = storeEntry.title;
+                }
+            }
+            if (existingTitle && existingTitle !== 'New Chat') {
                 return;
             }
 
-            var messages = this.chatStore.query().map(x => x.content);
+            // Source messages: use the live chat store only when we are still
+            // viewing the target session.  Otherwise fall back to the API.
+            var _self = this;
             var model = this.inputWidget.getModel();
-            this.copilotApi.generateTitleFromMessages(messages, model).then(lang.hitch(this, function(title) {
-                if (title.startsWith('"') && title.endsWith('"')) {
-                    title = title.substring(1, title.length - 1);
-                }
-                this.titleWidget.updateTitle(title);
-                this.titleWidget.saveTitle();
-                setTimeout(lang.hitch(this, function() {
-                    topic.publish('reloadUserSessions', {
-                        highlightSessionId: this.sessionId
+
+            var generateFromMessages = function(messages) {
+                _self.copilotApi.generateTitleFromMessages(messages, model).then(function(title) {
+                    if (title.startsWith('"') && title.endsWith('"')) {
+                        title = title.substring(1, title.length - 1);
+                    }
+                    // Persist directly via API — never call titleWidget.saveTitle()
+                    // because that method uses the widget's live sessionId.
+                    _self.copilotApi.updateSessionTitle(targetSessionId, title).then(function() {
+                        topic.publish('ChatSessionTitleChanged', {
+                            sessionId: targetSessionId,
+                            title: title
+                        });
+                    }, function(err) {
+                        console.log('Error persisting auto-generated title', err);
                     });
-                }), 100);
-            }));
+
+                    // Update the header widget only if we are still viewing
+                    // the target session.
+                    if (_self.sessionId === targetSessionId && _self.titleWidget) {
+                        _self.titleWidget.updateTitle(title);
+                    }
+                });
+            };
+
+            if (this.sessionId === targetSessionId) {
+                var msgs = this.chatStore.query().map(function(x) { return x.content; });
+                generateFromMessages(msgs);
+            } else {
+                // Switched away — fetch messages from the API
+                this.copilotApi.getSessionMessages(targetSessionId).then(function(res) {
+                    var messages = [];
+                    if (Array.isArray(res.messages)) {
+                        if (res.messages.length > 0 && Array.isArray(res.messages[0] && res.messages[0].messages)) {
+                            messages = res.messages[0].messages;
+                        } else {
+                            messages = res.messages;
+                        }
+                    }
+                    generateFromMessages(messages.map(function(m) { return m.content; }));
+                }).catch(function(err) {
+                    console.warn('Could not fetch messages for title generation', err);
+                });
+            }
         },
 
         /**
