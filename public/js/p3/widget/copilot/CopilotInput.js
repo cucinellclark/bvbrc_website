@@ -322,6 +322,14 @@ define([
         this._renderAttachmentChips();
       },
 
+      _removeAttachedPdfById: function(id) {
+        this.attachedPdfs = (this.attachedPdfs || []).filter(function(entry) {
+          return entry && entry.id !== id;
+        });
+        this._renderAttachmentChips();
+        this._emitImageAttachmentsChanged();
+      },
+
       _appendAttachmentChip: function(parentNode, options) {
         var chip = domConstruct.create('div', {
           className: 'copilotAttachmentChip'
@@ -369,8 +377,9 @@ define([
 
         var images = Array.isArray(this.attachedImages) ? this.attachedImages : [];
         var files = Array.isArray(this.attachedFiles) ? this.attachedFiles : [];
+        var pdfs = Array.isArray(this.attachedPdfs) ? this.attachedPdfs : [];
         var matches = WorkspacePathUtils.findPathMatches(this._getInputValue());
-        var hasChips = images.length > 0 || files.length > 0 || matches.length > 0;
+        var hasChips = images.length > 0 || files.length > 0 || pdfs.length > 0 || matches.length > 0;
 
         if (!hasChips) {
           this.workspacePathTokenEditorNode.style.display = 'none';
@@ -413,6 +422,22 @@ define([
             removeTitle: 'Remove this file',
             onRemove: lang.hitch(this, function() {
               this._removeAttachedFileById(entry.id);
+            })
+          });
+        }));
+
+        pdfs.forEach(lang.hitch(this, function(entry) {
+          if (!entry) {
+            return;
+          }
+          var label = entry.name || 'Attached PDF';
+          this._appendAttachmentChip(tokenListNode, {
+            iconClass: 'icon-file-pdf-o',
+            label: label,
+            title: label,
+            removeTitle: 'Remove this PDF',
+            onRemove: lang.hitch(this, function() {
+              this._removeAttachedPdfById(entry.id);
             })
           });
         }));
