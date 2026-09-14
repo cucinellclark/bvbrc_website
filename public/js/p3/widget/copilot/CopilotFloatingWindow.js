@@ -1216,22 +1216,13 @@ define([
                             }
                         }));
 
-                        // Set the title and restore new_chat flags so that
-                        // still-unnamed sessions get title generation on the
-                        // next send.
+                        // Set the title if available
                         options.copilotApi.getSessionTitle(options.currentSessionId).then(lang.hitch(this, function(title_response) {
-                            var title = null;
                             if (title_response.title && title_response.title.length > 0) {
-                                title = title_response.title[0].title;
-                            }
-                            if (this.controllerPanel) {
-                                this.controllerPanel.applyRestoredSessionTitle(title);
-                            }
-                        })).catch(lang.hitch(this, function() {
-                            // Fetch failed — assume unnamed so next send can
-                            // trigger registration + title generation.
-                            if (this.controllerPanel) {
-                                this.controllerPanel.applyRestoredSessionTitle(null);
+                                var title = title_response.title[0].title;
+                                if (this.controllerPanel.titleWidget) {
+                                    this.controllerPanel.titleWidget.updateTitle(title);
+                                }
                             }
                         }));
                     }
