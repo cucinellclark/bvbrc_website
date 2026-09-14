@@ -214,11 +214,16 @@ define([
                     }));
 
                     this._copilotApi.getSessionTitle(savedSessionId).then(lang.hitch(this, function (titleRes) {
+                        var title = null;
                         if (titleRes.title && titleRes.title.length > 0) {
-                            var title = titleRes.title[0].title;
-                            if (this._chatContainer.titleWidget) {
-                                this._chatContainer.titleWidget.updateTitle(title);
-                            }
+                            title = titleRes.title[0].title;
+                        }
+                        if (this._chatContainer) {
+                            this._chatContainer.applyRestoredSessionTitle(title);
+                        }
+                    })).catch(lang.hitch(this, function () {
+                        if (this._chatContainer) {
+                            this._chatContainer.applyRestoredSessionTitle(null);
                         }
                     }));
                 }), 500);

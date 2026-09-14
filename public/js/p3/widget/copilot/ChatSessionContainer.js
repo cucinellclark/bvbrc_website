@@ -160,6 +160,8 @@ define([
                     this._createInputWidget();
                     this._getPathState();
                     this.changeSessionId(sessionId);
+                    // Fresh id, not yet in Mongo — first send must register it
+                    this._applyNewChatFlags('New Chat', false);
                     this._initialized.resolve();
                 })).catch(lang.hitch(this, function(error) {
                     // Handle initialization error
@@ -198,8 +200,8 @@ define([
                     this.displayWidget.startNewChat();
                     this.titleWidget.startNewChat(sessionId);
                     this.changeSessionId(sessionId);
-                    this.inputWidget.new_chat = true;
-                    this.inputWidget.session_registered = true;
+                    // Already registered via createAndRegisterSession
+                    this._applyNewChatFlags('New Chat', true);
                     if (window && window.App && window.App.chatSessionsStore) {
                         window.App.chatSessionsStore.addSession({
                             session_id: sessionId,
@@ -244,7 +246,10 @@ define([
                 }
                 this.chatStore.addMessages(data.messages);
                 this.displayWidget.showMessages(data.messages);
-                this.inputWidget.new_chat = false;
+                // Session exists in Mongo; set new_chat based on whether the
+                // title is still a placeholder (so an Untitled session gets
+                // title generation on the next send).
+                this._applyNewChatFlags(data.title, true);
                 this._applySessionWorkflowContext(data);
 
                 // If the session has an in-flight turn, start polling
@@ -425,8 +430,7 @@ define([
             var targetSessionId = (payload && payload.sessionId) || this.sessionId;
 
             // Guard: skip if the target session already has a non-default title.
-            // When we are still viewing the target session, use the title widget;
-            // otherwise check the sessions store.
+            // Default/placeholder titles: missing, blank, "New Chat", "Untitled".
             var existingTitle = 'New Chat';
             if (this.sessionId === targetSessionId && this.titleWidget && this.titleWidget.getTitle) {
                 existingTitle = this.titleWidget.getTitle();
@@ -436,7 +440,7 @@ define([
                     existingTitle = storeEntry.title;
                 }
             }
-            if (existingTitle && existingTitle !== 'New Chat') {
+            if (!this._isDefaultSessionTitle(existingTitle)) {
                 return;
             }
 
@@ -446,9 +450,17 @@ define([
             var model = this.inputWidget.getModel();
 
             var generateFromMessages = function(messages) {
+                // Skip LLM call when there are no messages to summarize
+                if (!messages || messages.length === 0) {
+                    return;
+                }
                 _self.copilotApi.generateTitleFromMessages(messages, model).then(function(title) {
                     if (title.startsWith('"') && title.endsWith('"')) {
                         title = title.substring(1, title.length - 1);
+                    }
+                    // Ignore LLM output that is empty or still a placeholder
+                    if (_self._isDefaultSessionTitle(title)) {
+                        return;
                     }
                     // Persist directly via API — never call titleWidget.saveTitle()
                     // because that method uses the widget's live sessionId.
@@ -509,7 +521,8 @@ define([
                             this.displayWidget.startNewChat();
                             this.titleWidget.startNewChat(newSessionId);
                             this.changeSessionId(newSessionId);
-                            this.inputWidget.new_chat = true;
+                            // Fresh id, not yet in Mongo — first send must register it
+                            this._applyNewChatFlags('New Chat', false);
                         })).catch(lang.hitch(this, function(error) {
                             console.error('Error creating new session after delete:', error);
                         }));
@@ -1447,6 +1460,51 @@ define([
                     // Ignore poll errors — will retry next interval
                 });
             }, 3000);
+        },
+
+        /**
+         * Returns true when the title is a placeholder that still needs
+         * LLM-generated replacement (missing, blank, "New Chat", "Untitled").
+         */
+        _isDefaultSessionTitle: function(title) {
+            if (!title || !String(title).trim()) { return true; }
+            var t = String(title).trim();
+            return t === 'New Chat' || t === 'Untitled';
+        },
+
+        /**
+         * Sets new_chat / session_registered on the input widget based on
+         * whether the session title is still a placeholder.
+         *
+         * @param {string} title - The session's current title
+         * @param {boolean} sessionExists - true when the session row already
+         *   exists in Mongo (sidebar click, restore); false when the id was
+         *   just minted and no registerSession call has been made yet.
+         */
+        _applyNewChatFlags: function(title, sessionExists) {
+            if (!this.inputWidget) { return; }
+            this.inputWidget.new_chat = this._isDefaultSessionTitle(title);
+            this.inputWidget.session_registered = !!sessionExists;
+        },
+
+        /**
+         * Called by restore paths (floating window, full-page viewer) after
+         * the session title has been fetched from the gateway.  Updates the
+         * header widget and sets the correct new_chat / session_registered
+         * flags so that still-unnamed sessions get title generation on the
+         * next send.
+         *
+         * @param {string|null} title - Fetched title, or null on error
+         */
+        applyRestoredSessionTitle: function(title) {
+            if (title && this.titleWidget) {
+                this.titleWidget.updateTitle(title);
+            }
+            // sessionExists is true whenever we have any non-empty title
+            // string (the row is already in Mongo). On fetch error (null),
+            // assume the row exists but is unnamed — new_chat=true so the
+            // next send triggers title generation.
+            this._applyNewChatFlags(title, !!(title && String(title).trim()));
         },
 
         /**
