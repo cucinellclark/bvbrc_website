@@ -238,7 +238,7 @@ define([
             // Initialize copilotApi if it doesn't exist
             if (!this.copilotApi) {
                 this.copilotApi = new CopilotAPI({
-                    user_id: window.App.user.l_id
+                    user_id: window.App.user.id
                 });
             }
 

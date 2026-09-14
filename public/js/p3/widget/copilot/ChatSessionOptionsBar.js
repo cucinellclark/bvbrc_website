@@ -233,7 +233,7 @@ define([
             // Initialize CopilotAPI if not provided
             if (!this.copilotApi) {
                 this.copilotApi = new CopilotAPI({
-                    user_id: window.App.user ? window.App.user.l_id : null
+                    user_id: window.App.user ? window.App.user.id : null
                 });
             }
             if ((!this.modelList || this.modelList.length === 0) && window.App && Array.isArray(window.App.copilotModelList)) {

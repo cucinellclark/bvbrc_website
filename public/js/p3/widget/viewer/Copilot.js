@@ -93,7 +93,7 @@ define([
          */
         _initUI: function () {
             this._copilotApi = new CopilotAPI({
-                user_id: window.App.user.l_id
+                user_id: window.App.user.id
             });
 
             // Fetch model list then build layout (mirrors ChatButton flow)
