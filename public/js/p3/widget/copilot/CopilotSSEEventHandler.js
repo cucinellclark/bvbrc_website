@@ -139,7 +139,9 @@ define([
       if (!this.config.showQueuedStatus) return null;
 
       this.agentState.status = 'queued';
-      var content = 'Request queued...';
+      var content = (data && data.message)
+        ? data.message
+        : 'High usage \u2014 responses will be slower.';
 
       return this.createStatusMessage(content, 'queued');
     },
