@@ -206,24 +206,24 @@ define([
                         console.error('Cannot open session folder: user not logged in');
                         return;
                     }
-                    var chatsFolder = '/' + userId + '/home/.chats';
+                    var chatsFolder = '/' + userId + '/home/chats';
                     var sessionFolder = chatsFolder + '/' + this.session.session_id;
                     var workspaceUrl = '/workspace' + sessionFolder;
 
-                    // Ensure the .chats folder exists before opening
+                    // Ensure the chats folder exists before opening
                     WorkspaceManager.getObject(chatsFolder, true).then(
                         function() {
-                            // .chats folder already exists - open directly
+                            // chats folder already exists - open directly
                             window.open(workspaceUrl, '_blank');
                         },
                         function() {
-                            // .chats folder does not exist - create it, then open
+                            // chats folder does not exist - create it, then open
                             WorkspaceManager.createFolder(chatsFolder).then(
                                 function() {
                                     window.open(workspaceUrl, '_blank');
                                 },
                                 function(err) {
-                                    console.error('Failed to create .chats folder:', err);
+                                    console.error('Failed to create chats folder:', err);
                                     // Try opening anyway in case the error is benign
                                     window.open(workspaceUrl, '_blank');
                                 }
@@ -391,14 +391,14 @@ define([
 
             // Fetch from two sources in parallel:
             //  1. Workflow watches (MongoDB) — has GoWe-level pending state
-            //  2. AppService jobs whose output_path is under .chats/<sessionId>
+            //  2. AppService jobs whose output_path is under chats/<sessionId>
             var watchesPromise = copilotApi.getSessionWorkflowWatches(sessionId)
                 .then(function(result) { return (result && result.watches) || []; })
                 .catch(function() { return []; });
 
             var appServicePromise;
             if (window.App && window.App.api && window.App.api.service) {
-                var sessionPathFragment = '.chats/' + sessionId;
+                var sessionPathFragment = 'chats/' + sessionId;
                 appServicePromise = window.App.api.service(
                     'AppService.enumerate_tasks_filtered', [0, 50, { sort_field: 'submit_time', sort_order: 'desc' }]
                 ).then(function(res) {
