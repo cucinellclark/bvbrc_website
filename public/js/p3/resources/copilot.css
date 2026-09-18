@@ -4104,6 +4104,18 @@ a.workspace-path-chip:hover {
   border-color: #16a34a;
 }
 
+.execution-blocked-note {
+  font-size: 11px;
+  color: #78350f;
+}
+
+/* One-shot execute marker on a user message */
+.message-attachment-chip--execute {
+  background: #fef3c7;
+  border-color: #f59e0b;
+  color: #92400e;
+}
+
 .plan-card-btn-danger {
   background: #fff;
   color: #dc2626;

@@ -287,6 +287,11 @@ define([
             if (params.execution_mode === 'plan' || params.execution_mode === 'execute') {
                 data.execution_mode = params.execution_mode;
             }
+            // One-shot execute: this turn runs in execute mode; the stored
+            // session mode is left untouched.
+            if (params.execute_once === true) {
+                data.execute_once = true;
+            }
             var streamEndpoint = this.apiUrlBase + '/copilot-agent';
 
             // Create abort controller for this request
@@ -531,7 +536,7 @@ define([
 
                                 case 'execution_blocked':
                                     // A gated tool was refused in plan mode.  The
-                                    // card renders "Switch to Execute mode and run".
+                                    // card renders a one-shot "Submit this job" button (execute_once).
                                     if (parsed.card && onData) {
                                         onData('', { card: parsed.card });
                                     }

@@ -1063,11 +1063,12 @@ define([
           );
         })));
 
-        // CopilotExecutionModeRun — the "Switch to Execute mode and run"
-        // button on an execution_blocked card.  Persist execute mode,
-        // then send a canned follow-up pinned to the agent that was
-        // blocked so the router cannot send it elsewhere.  The prepared
-        // inputs are already in the conversation history.
+        // CopilotExecutionModeRun — the run button on an execution_blocked
+        // card.  Runs ONE turn in execute mode (execute_once) without
+        // changing the session's Plan/Execute toggle — "allow once", not
+        // "allow always".  The canned follow-up is pinned to the agent
+        // that was blocked so the router cannot send it elsewhere; the
+        // prepared inputs are already in the conversation history.
         this._topicHandles.push(topic.subscribe('CopilotExecutionModeRun', lang.hitch(this, function(data) {
           if (!data) { return; }
           if (data.sessionId && this.sessionId && data.sessionId !== this.sessionId) { return; }
@@ -1075,13 +1076,8 @@ define([
             console.warn('[CopilotInput] CopilotExecutionModeRun: already submitting, ignoring');
             return;
           }
-          var _self = this;
-          this.setExecutionMode('execute').then(function() {
-            _self._setInputTextValue(_self._buildExecuteRunMessage(data.blocked_actions));
-            _self._handleSubmitStream({ target_agent: data.agent || null });
-          }).catch(function(err) {
-            console.error('[CopilotInput] Could not switch to Execute mode', err);
-          });
+          this._setInputTextValue(this._buildExecuteRunMessage(data.blocked_actions));
+          this._handleSubmitStream({ target_agent: data.agent || null, execute_once: true });
         })));
 
         // 3. CopilotPlanExecuteNext — execute the next step in plan
@@ -1567,12 +1563,12 @@ define([
         var hasSubmit = !!tools.submit_gowe_job;
         var hasGroup = !!tools.create_group;
         if (hasSubmit && hasGroup) {
-          return 'Execute mode is on. Submit the job and create the group exactly as you prepared them above.';
+          return 'Execute mode is on for this message. Submit the job and create the group exactly as you prepared them above.';
         }
         if (hasGroup) {
-          return 'Execute mode is on. Create the group exactly as you prepared it above.';
+          return 'Execute mode is on for this message. Create the group exactly as you prepared it above.';
         }
-        return 'Execute mode is on. Submit the job exactly as you prepared it above.';
+        return 'Execute mode is on for this message. Submit the job exactly as you prepared it above.';
       },
 
       /**
@@ -2006,6 +2002,8 @@ define([
      * @param {Object} [submitOpts]
      * @param {string} [submitOpts.target_agent] - Force routing to an agent
      *   (used by the execution_blocked card's run button).
+     * @param {boolean} [submitOpts.execute_once] - Run this one turn in
+     *   execute mode without changing the session toggle.
      */
     _handleSubmitStream: function(submitOpts) {
       submitOpts = submitOpts || {};
@@ -2083,6 +2081,10 @@ define([
       if (hasUploadedPdfs) {
         allAttachments = allAttachments.concat(uploadedPdfsPayload.attachments);
       }
+      if (submitOpts.execute_once) {
+        // Mirrors the chip the gateway persists on the stored message.
+        allAttachments = allAttachments.concat([{ type: 'execution', source: 'once', name: 'Execute mode (this message only)' }]);
+      }
       var userMessage = this._buildUserMessageForSubmit(
           inputText,
           allAttachments.length > 0 ? allAttachments : null
@@ -2133,6 +2135,9 @@ define([
       };
       if (submitOpts.target_agent) {
         params.target_agent = submitOpts.target_agent;
+      }
+      if (submitOpts.execute_once) {
+        params.execute_once = true;
       }
 
       if (hasUploadedImage) {

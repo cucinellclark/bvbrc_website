@@ -13,7 +13,7 @@ define([
   './WorkspacePathUtils',
   './PlanCard', // Plan card widget for planning agent
   './ClarificationChips', // Clarification chips for planning agent questions
-  './ExecutionBlockedCard' // "Switch to Execute mode and run" card (plan mode refusals)
+  './ExecutionBlockedCard' // one-shot "Submit this job" card (plan mode refusals)
 ], function (
   declare, domConstruct, on, topic, lang, Deferred, request, markdownit, linkAttributes, Dialog, WorkspaceManager, WorkspacePathUtils, PlanCard, ClarificationChips, ExecutionBlockedCard
 ) {
