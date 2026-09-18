@@ -411,6 +411,15 @@ define([
     },
 
     /**
+     * Formats 'execution_blocked' event (gated tool refused in plan mode).
+     * Returns null because CopilotApi.js forwards the card via onData()
+     * directly; ChatMessage renders it as an ExecutionBlockedCard.
+     */
+    format_execution_blocked: function(data) {
+      return null;
+    },
+
+    /**
      * Formats 'plan_created' event (planning agent produced a plan)
      */
     format_plan_created: function(data) {

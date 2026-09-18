@@ -281,12 +281,11 @@ define([
             if (params.workflow_context) {
                 data.workflow_context = params.workflow_context;
             }
-            // Include auto-submit preference if set
-            var autoSubmitPref = window.App.copilotAutoSubmitPreference
-                             || localStorage.getItem('copilot-auto-submit')
-                             || 'always_review';
-            if (autoSubmitPref && autoSubmitPref !== 'always_review') {
-                data.auto_submit_preference = autoSubmitPref;
+            // Plan/Execute toggle — a write-through.  The gateway persists it
+            // on the session before the turn and reads the mode from Mongo,
+            // so a toggle-then-send cannot race the dedicated update call.
+            if (params.execution_mode === 'plan' || params.execution_mode === 'execute') {
+                data.execution_mode = params.execution_mode;
             }
             var streamEndpoint = this.apiUrlBase + '/copilot-agent';
 
@@ -314,7 +313,18 @@ define([
             }).then(response => {
                 if (!response.ok) {
                     response.text().then(text => {
-                        const err = new Error(`HTTP error! status: ${response.status}, message: ${text}`);
+                        var err = new Error(`HTTP error! status: ${response.status}, message: ${text}`);
+                        err.status = response.status;
+                        // Structured refusals (e.g. 409 PLAN_MODE from a plan
+                        // step while the session is in plan mode) carry a
+                        // user-facing message — surface that instead.
+                        try {
+                            var parsed = JSON.parse(text);
+                            if (parsed && parsed.code) {
+                                err.code = parsed.code;
+                                if (parsed.message) { err.message = parsed.message; }
+                            }
+                        } catch (e) { /* not JSON */ }
                         if (onError) onError(err);
                     });
                     return;
@@ -515,6 +525,14 @@ define([
                                 case 'plan_created':
                                     // Planning agent produced a plan for approval.
                                     if (parsed.plan && parsed.card && onData) {
+                                        onData('', { card: parsed.card });
+                                    }
+                                    break;
+
+                                case 'execution_blocked':
+                                    // A gated tool was refused in plan mode.  The
+                                    // card renders "Switch to Execute mode and run".
+                                    if (parsed.card && onData) {
                                         onData('', { card: parsed.card });
                                     }
                                     break;
@@ -874,6 +892,31 @@ define([
          * - Includes session and user IDs
          * - Returns updated session data
          */
+        /**
+         * Persist the Plan/Execute toggle for a session.
+         * @param {string} sessionId
+         * @param {'plan'|'execute'} mode
+         */
+        setSessionExecutionMode: function(sessionId, mode) {
+            if (!this._checkLoggedIn()) return Promise.reject('Not logged in');
+            var _self = this;
+            return request.post(this.apiUrlBase + '/update-session-execution-mode', {
+                data: JSON.stringify({
+                    session_id: sessionId,
+                    execution_mode: mode,
+                    user_id: _self.user_id
+                }),
+                headers: {
+                    'Content-Type': 'application/json',
+                    Authorization: (window.App.authorizationToken || '')
+                },
+                handleAs: 'json'
+            }).catch(function(error) {
+                console.error('Error updating session execution mode:', error);
+                throw error;
+            });
+        },
+
         updateSessionTitle: function(sessionId, newTitle) {
             if (!this._checkLoggedIn()) return Promise.reject('Not logged in');
             var _self = this;

@@ -176,7 +176,8 @@ define([
                                 messages: messages,
                                 workflow_ids: res.workflow_ids || _self.session.workflow_ids || null,
                                 workflow_grid: res.workflow_grid || null,
-                                active_job_id: res.active_job_id || null
+                                active_job_id: res.active_job_id || null,
+                                execution_mode: res.execution_mode || _self.session.execution_mode || 'plan'
                             });
                             topic.publish('ChatSessionTitleUpdated', {
                                 sessionId: _self.session.session_id,

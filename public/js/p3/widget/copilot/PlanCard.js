@@ -149,6 +149,15 @@ define([
       var wfSubHandle = topic.subscribe('CopilotPlanWorkflowSubmitted', lang.hitch(this, '_onWorkflowSubmitted'));
       this._topicHandles.push(wfSubHandle);
 
+      // Plan/Execute toggle — step execution needs Execute mode, so
+      // re-render the action buttons when the mode flips.
+      var modeHandle = topic.subscribe('CopilotExecutionModeChanged', lang.hitch(this, function () {
+        if (this._mode === 'executing') {
+          this._render();
+        }
+      }));
+      this._topicHandles.push(modeHandle);
+
       // Subscribe to workflow completion events (resumes paused plan)
       var wfCompleteHandle = topic.subscribe('CopilotWorkflowComplete', lang.hitch(this, '_onWorkflowComplete'));
       this._topicHandles.push(wfCompleteHandle);
@@ -317,6 +326,19 @@ define([
           self._mode = 'edit';
           self._render();
         });
+
+        // Running a step delegates to the service agent (job submission),
+        // so Continue / Resume need Execute mode.  Pause and Edit stay on.
+        if (!this._canExecute()) {
+          Array.prototype.slice.call(actions.querySelectorAll('.plan-card-btn-primary')).forEach(function (btn) {
+            btn.disabled = true;
+            btn.title = 'Switch to Execute mode to run this plan';
+          });
+          domConstruct.create('div', {
+            'class': 'plan-action-block-hint',
+            innerHTML: 'Switch this chat to <strong>Execute</strong> mode to continue this plan.'
+          }, actions);
+        }
 
       } else {
         // Draft display mode — action buttons are rendered externally
@@ -705,9 +727,22 @@ define([
       });
     },
 
+    /** True when the session's Plan/Execute toggle allows running steps. */
+    _canExecute: function () {
+      return !!(window.App && window.App.copilotExecutionMode === 'execute');
+    },
+
     _executeNextPendingStep: function () {
       // Don't submit if paused (waiting for review)
       if (this._paused) return;
+
+      // Plan mode: the gateway would refuse with 409 PLAN_MODE; stop here
+      // so the card does not flip a step to "running" first.
+      if (!this._canExecute()) {
+        console.warn('[PlanCard] Not executing step: session is in plan mode');
+        this._render();
+        return;
+      }
 
       // Don't submit if a step is already running
       var hasRunning = this.plan.steps.some(function (s) { return s.status === 'running'; });

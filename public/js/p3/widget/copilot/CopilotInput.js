@@ -34,6 +34,17 @@ define([
       /** Selected language model for chat completion */
       model: null,
 
+      /**
+       * Plan/Execute toggle state for the current session.
+       * 'plan' (default): agents prepare jobs but the backend refuses
+       * submit_gowe_job / create_group.  'execute': those tools run.
+       * Persisted on the session (chat_sessions.execution_mode); the
+       * gateway reads it from Mongo on every turn.
+       */
+      executionMode: 'plan',
+      modeToggleNode: null,
+      modeOptionNodes: null,
+
       statePrompt: null,
 
       /** Plan step context waiting for user input (set by needs_input event) */
@@ -704,6 +715,7 @@ define([
           systemPrompt: '',
           model: this.model,
           save_chat: true,
+          execution_mode: this.executionMode,
           target_agent: 'planning',
           workflow_context: workflowContext
         };
@@ -873,6 +885,8 @@ define([
         }, wrapperDiv);
         on(this.imageUploadInput, 'change', lang.hitch(this, this._handleImageUploadChange));
 
+        this._buildModeToggle(composerRow);
+
         var textAreaWrapper = domConstruct.create('div', {
             className: 'copilotTextAreaWrapper'
         }, composerRow);
@@ -884,6 +898,10 @@ define([
             placeholder: 'Ask anything...'
         });
         this.textArea.placeAt(textAreaWrapper);
+        this._composerNode = composer;
+        // Publish the initial (plan) mode so PlanCard / ChatMessage can
+        // read window.App.copilotExecutionMode before any toggle click.
+        this.setExecutionMode(this.executionMode, { silent: true });
 
         this.submitButton = new Button({
             label: '<i class="fa icon-arrow-up"></i>',
@@ -916,6 +934,11 @@ define([
             this._closeAttachMenu();
             this._clearAttachedImage();
             this._pendingPlanStepInput = null;
+            // Restore the stored Plan/Execute state for this session.
+            this.setExecutionMode(
+              (data && data.execution_mode === 'execute') ? 'execute' : 'plan',
+              { silent: true }
+            );
 
             this.selectedWorkspaceItems = [];
             this._renderWorkspaceSelectionIndicator();
@@ -1038,6 +1061,27 @@ define([
               completed_step_results: {}
             }
           );
+        })));
+
+        // CopilotExecutionModeRun — the "Switch to Execute mode and run"
+        // button on an execution_blocked card.  Persist execute mode,
+        // then send a canned follow-up pinned to the agent that was
+        // blocked so the router cannot send it elsewhere.  The prepared
+        // inputs are already in the conversation history.
+        this._topicHandles.push(topic.subscribe('CopilotExecutionModeRun', lang.hitch(this, function(data) {
+          if (!data) { return; }
+          if (data.sessionId && this.sessionId && data.sessionId !== this.sessionId) { return; }
+          if (this.isSubmitting) {
+            console.warn('[CopilotInput] CopilotExecutionModeRun: already submitting, ignoring');
+            return;
+          }
+          var _self = this;
+          this.setExecutionMode('execute').then(function() {
+            _self._setInputTextValue(_self._buildExecuteRunMessage(data.blocked_actions));
+            _self._handleSubmitStream({ target_agent: data.agent || null });
+          }).catch(function(err) {
+            console.error('[CopilotInput] Could not switch to Execute mode', err);
+          });
         })));
 
         // 3. CopilotPlanExecuteNext — execute the next step in plan
@@ -1295,6 +1339,9 @@ define([
         this.session_registered = false;
         this._pendingPlanStepInput = null;
         this._setInputTextValue('');
+        // Every new session starts in plan mode; the gateway writes the
+        // same default when it creates the session document.
+        this.setExecutionMode('plan', { silent: true });
 
         // If an SSE stream was in progress, reset the submit state so the
         // input is re-enabled for the new session.
@@ -1373,6 +1420,159 @@ define([
        */
       setSystemPrompt: function(systemPrompt) {
         this.systemPrompt = systemPrompt;
+      },
+
+      /**
+       * Builds the Plan | Execute segmented control in the composer row.
+       * Both entry points (floating window and /view/Copilot) share this
+       * widget, so one toggle covers both.
+       */
+      _buildModeToggle: function(composerRow) {
+        var _self = this;
+        this.modeToggleNode = domConstruct.create('div', {
+          className: 'copilotModeToggle',
+          role: 'radiogroup',
+          'aria-label': 'Execution mode'
+        }, composerRow);
+
+        this.modeOptionNodes = {};
+        var options = [
+          {
+            mode: 'plan',
+            label: 'Plan',
+            title: 'Plan mode \u2014 the assistant prepares jobs and groups but cannot submit or create them'
+          },
+          {
+            mode: 'execute',
+            label: 'Execute',
+            title: 'Execute mode \u2014 the assistant may submit jobs and create groups'
+          }
+        ];
+        options.forEach(function(opt) {
+          var btn = domConstruct.create('button', {
+            type: 'button',
+            className: 'copilotModeOption copilotModeOption--' + opt.mode,
+            role: 'radio',
+            'aria-checked': 'false',
+            'data-mode': opt.mode,
+            title: opt.title,
+            innerHTML: opt.label
+          }, _self.modeToggleNode);
+          on(btn, 'click', function() {
+            if (_self.executionMode === opt.mode) { return; }
+            _self.setExecutionMode(opt.mode);
+          });
+          _self.modeOptionNodes[opt.mode] = btn;
+        });
+      },
+
+      /**
+       * Reflects executionMode into the toggle, composer styling, and
+       * the textarea placeholder.
+       */
+      _applyExecutionModeToDom: function() {
+        var mode = this.executionMode === 'execute' ? 'execute' : 'plan';
+        if (this.modeOptionNodes) {
+          Object.keys(this.modeOptionNodes).forEach(lang.hitch(this, function(key) {
+            var node = this.modeOptionNodes[key];
+            var active = key === mode;
+            node.setAttribute('aria-checked', active ? 'true' : 'false');
+            if (active) {
+              node.classList.add('copilotModeOption--active');
+            } else {
+              node.classList.remove('copilotModeOption--active');
+            }
+          }));
+        }
+        if (this.modeToggleNode) {
+          this.modeToggleNode.setAttribute('data-mode', mode);
+        }
+        if (this._composerNode) {
+          if (mode === 'execute') {
+            this._composerNode.classList.add('copilotComposer--execute');
+          } else {
+            this._composerNode.classList.remove('copilotComposer--execute');
+          }
+        }
+        if (this.textArea) {
+          this.textArea.set('placeholder', mode === 'execute'
+            ? 'Ask anything\u2026 (execute mode)'
+            : 'Ask anything\u2026 (plan mode)');
+        }
+      },
+
+      /**
+       * Returns the current execution mode ('plan' | 'execute').
+       */
+      getExecutionMode: function() {
+        return this.executionMode === 'execute' ? 'execute' : 'plan';
+      },
+
+      /**
+       * Switches the Plan/Execute mode.
+       *
+       * @param {'plan'|'execute'} mode
+       * @param {Object} [opts]
+       * @param {boolean} [opts.silent] - Do not persist to the backend
+       *   (used when restoring a session's stored mode, or for a new chat
+       *   that has no session document yet).
+       * @returns {Promise} resolves once persisted (or immediately when silent)
+       */
+      setExecutionMode: function(mode, opts) {
+        opts = opts || {};
+        var next = mode === 'execute' ? 'execute' : 'plan';
+        var previous = this.executionMode;
+        this.executionMode = next;
+        this._applyExecutionModeToDom();
+        if (window.App) {
+          window.App.copilotExecutionMode = next;
+        }
+        topic.publish('CopilotExecutionModeChanged', { sessionId: this.sessionId, mode: next });
+
+        if (opts.silent || !this.copilotApi || !this.sessionId) {
+          return Promise.resolve(next);
+        }
+        // A brand-new chat has no session document yet.  Do not register
+        // one just for the toggle (that would add an empty "New Chat" to
+        // the sidebar); the first send carries execution_mode as a
+        // write-through and the gateway persists it then.
+        if (this.new_chat && !this.session_registered) {
+          return Promise.resolve(next);
+        }
+        var _self = this;
+        return this.copilotApi.setSessionExecutionMode(this.sessionId, next).then(function() {
+          return next;
+        }).catch(function(error) {
+          // Revert so the UI never claims a mode the backend did not store.
+          console.warn('[CopilotInput] Failed to persist execution mode, reverting', error);
+          _self.executionMode = previous;
+          _self._applyExecutionModeToDom();
+          if (window.App) {
+            window.App.copilotExecutionMode = previous;
+          }
+          topic.publish('CopilotExecutionModeChanged', { sessionId: _self.sessionId, mode: previous });
+          throw error;
+        });
+      },
+
+      /**
+       * Canned follow-up sent by the execution_blocked card button.
+       * Names the blocked tool so the agent (and router) know what to run.
+       */
+      _buildExecuteRunMessage: function(blockedActions) {
+        var tools = {};
+        (blockedActions || []).forEach(function(a) {
+          if (a && a.tool) { tools[a.tool] = true; }
+        });
+        var hasSubmit = !!tools.submit_gowe_job;
+        var hasGroup = !!tools.create_group;
+        if (hasSubmit && hasGroup) {
+          return 'Execute mode is on. Submit the job and create the group exactly as you prepared them above.';
+        }
+        if (hasGroup) {
+          return 'Execute mode is on. Create the group exactly as you prepared it above.';
+        }
+        return 'Execute mode is on. Submit the job exactly as you prepared it above.';
       },
 
       /**
@@ -1802,7 +2002,13 @@ define([
         }
       },
 
-    _handleSubmitStream: function() {
+    /**
+     * @param {Object} [submitOpts]
+     * @param {string} [submitOpts.target_agent] - Force routing to an agent
+     *   (used by the execution_blocked card's run button).
+     */
+    _handleSubmitStream: function(submitOpts) {
+      submitOpts = submitOpts || {};
       var inputText = this.textArea.get('value');
       var _self = this;
       // Capture session ID and new-chat flag at submit time so title
@@ -1922,8 +2128,12 @@ define([
           sessionId: this.sessionId,
           systemPrompt: systemPrompt,
           model: submitModel,
-          save_chat: true
+          save_chat: true,
+          execution_mode: this.executionMode
       };
+      if (submitOpts.target_agent) {
+        params.target_agent = submitOpts.target_agent;
+      }
 
       if (hasUploadedImage) {
         params.images = uploadedImagePayload.images;

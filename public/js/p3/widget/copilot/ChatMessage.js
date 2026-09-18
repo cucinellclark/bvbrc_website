@@ -12,9 +12,10 @@ define([
   '../../WorkspaceManager', // Workspace manager for file operations
   './WorkspacePathUtils',
   './PlanCard', // Plan card widget for planning agent
-  './ClarificationChips' // Clarification chips for planning agent questions
+  './ClarificationChips', // Clarification chips for planning agent questions
+  './ExecutionBlockedCard' // "Switch to Execute mode and run" card (plan mode refusals)
 ], function (
-  declare, domConstruct, on, topic, lang, Deferred, request, markdownit, linkAttributes, Dialog, WorkspaceManager, WorkspacePathUtils, PlanCard, ClarificationChips
+  declare, domConstruct, on, topic, lang, Deferred, request, markdownit, linkAttributes, Dialog, WorkspaceManager, WorkspacePathUtils, PlanCard, ClarificationChips, ExecutionBlockedCard
 ) {
   /**
    * @class ChatMessage
@@ -500,6 +501,9 @@ define([
           case 'clarification':
             this.renderClarificationChips(messageDiv);
             break;
+          case 'execution_blocked':
+            this.renderExecutionBlockedCard(messageDiv);
+            break;
         }
       }
 
@@ -937,6 +941,26 @@ define([
         innerHTML: 'Regenerate'
       }, actionBlock);
 
+      // Executing a plan delegates to the service agent, which submits
+      // jobs — so Approve needs Execute mode.  The gateway refuses with
+      // 409 PLAN_MODE anyway; this just makes the requirement visible.
+      var modeHint = domConstruct.create('div', {
+        'class': 'plan-action-block-hint',
+        innerHTML: 'Switch this chat to <strong>Execute</strong> mode to run this plan.'
+      }, actionBlock);
+
+      function applyMode(mode) {
+        var canExecute = mode === 'execute';
+        approveBtn.disabled = !canExecute;
+        approveBtn.title = canExecute ? '' : 'Switch to Execute mode to run this plan';
+        modeHint.style.display = canExecute ? 'none' : '';
+      }
+      applyMode(window.App && window.App.copilotExecutionMode);
+      var modeHandle = topic.subscribe('CopilotExecutionModeChanged', function (data) {
+        if (!actionBlock.isConnected) { modeHandle.remove(); return; }
+        applyMode(data && data.mode);
+      });
+
       // Replace the action block content with a completed state
       function setCompleted(label) {
         domConstruct.empty(actionBlock);
@@ -947,6 +971,8 @@ define([
       }
 
       on(approveBtn, 'click', function () {
+        if (approveBtn.disabled) { return; }
+        modeHandle.remove();
         setCompleted('Plan approved');
         planCard._approvePlan();
       });
@@ -964,6 +990,29 @@ define([
           sessionId: self.message.session_id || self.sessionId || null
         });
       });
+    },
+
+    /**
+     * Render the ExecutionBlockedCard for a plan-mode refusal.
+     * @param {HTMLElement} parentNode - The message content node to append to.
+     */
+    renderExecutionBlockedCard: function (parentNode) {
+      try {
+        var payload = (this.message.card && this.message.card.card_payload) || {};
+        var card = new ExecutionBlockedCard({
+          agent: payload.agent || null,
+          blockedActions: payload.blocked_actions || [],
+          originalQuery: payload.original_query || '',
+          sessionId: this.message.session_id || this.sessionId || null
+        });
+        var container = domConstruct.create('div', {
+          'class': 'execution-blocked-card-container'
+        }, parentNode);
+        card.placeAt(container);
+        card.startup();
+      } catch (e) {
+        console.error('[ChatMessage] Error rendering execution blocked card:', e);
+      }
     },
 
     /**
