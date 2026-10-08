@@ -206,12 +206,13 @@ define([
         this._renderWorkflowsPanel();
 
         // Initialize markdown parser with link attributes plugin
+        // No <img> from markdown: it would be fetched on render (see ChatMessage.md).
         this.md = markdownit().use(linkAttributes, {
           attrs: {
             target: '_blank',
             rel: 'noopener noreferrer'
           }
-        });
+        }).disable('image');
 
         // Subscribe to message events
         topic.subscribe('RefreshSessionDisplay', lang.hitch(this, 'showMessages'));
