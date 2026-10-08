@@ -646,22 +646,44 @@ define([
       },
 
       _registerSessionIfNeeded: function() {
-        if (!this.new_chat || this.session_registered || !this.copilotApi || !this.sessionId) {
+        if (this.session_registered || !this.copilotApi || !this.sessionId) {
           return Promise.resolve(false);
         }
 
-        return this.copilotApi.registerSession(this.sessionId, 'New Chat').then(lang.hitch(this, function() {
+        // A session already in the sidebar store exists in Mongo: nothing to do.
+        // Otherwise register even when new_chat is false: an id restored from
+        // localStorage after "delete chat" + reload was never saved, and used
+        // to be created silently by the gateway with no sidebar entry. The
+        // gateway's register is an idempotent upsert, so an older session that
+        // simply isn't on the loaded sidebar page comes back created:false.
+        var store = window && window.App && window.App.chatSessionsStore;
+        if (!this.new_chat && store && store.index && store.index[this.sessionId] !== undefined) {
           this.session_registered = true;
+          return Promise.resolve(false);
+        }
+
+        var sessionId = this.sessionId;
+        return this.copilotApi.registerSession(sessionId, 'New Chat').then(lang.hitch(this, function(result) {
+          this.session_registered = true;
+          var created = !!(result && result.created === true);
+          if (!this.new_chat && !created) {
+            return false;
+          }
+          if (!this.new_chat) {
+            // Restored id with no row: title it like any new chat (the
+            // submit-time new-chat flag was captured before this ran).
+            this._createdOnFirstSendId = sessionId;
+          }
 
           if (window && window.App && window.App.chatSessionsStore) {
             window.App.chatSessionsStore.addSession({
-              session_id: this.sessionId,
+              session_id: sessionId,
               title: 'New Chat',
               created_at: Date.now()
             });
           }
 
-          topic.publish('reloadUserSessions', { highlightSessionId: this.sessionId });
+          topic.publish('reloadUserSessions', { highlightSessionId: sessionId });
           return true;
         }));
       },
@@ -2192,8 +2214,9 @@ define([
               // Use the captured submit-time new-chat flag + session ID so
               // title generation targets the originating session even when
               // the user has already switched to another session.
-              if (submitWasNewChat) {
+              if (submitWasNewChat || _self._createdOnFirstSendId === submitSessionId) {
                   submitWasNewChat = false; // prevent double-fire
+                  _self._createdOnFirstSendId = null;
                   _self._finishNewChat(true, submitSessionId);
               }
               this.isSubmitting = false;
