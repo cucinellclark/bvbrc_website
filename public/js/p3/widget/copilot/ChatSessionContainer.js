@@ -160,6 +160,13 @@ define([
                     this._createInputWidget();
                     this._getPathState();
                     this.changeSessionId(sessionId);
+                    // A fresh id from /start-chat has no Mongo row yet.
+                    // setSessionId() defaults new_chat to false, which made
+                    // _registerSessionIfNeeded skip registration on the
+                    // first send: a new user's first chat got no title and
+                    // stayed out of the sidebar. Same as delete-then-create
+                    // below; the row is still only written on first send.
+                    this.inputWidget.new_chat = true;
                     this._initialized.resolve();
                 })).catch(lang.hitch(this, function(error) {
                     // Handle initialization error
