@@ -86,7 +86,9 @@ app.use(function (req, res, next) {
     copilotEnablePublications: config.get('copilotEnablePublications') || false,
     copilotEnableEnhancePrompt: config.get('copilotEnableEnhancePrompt') || false,
     copilotEnableShowPromptDetails: config.get('copilotEnableShowPromptDetails') || false,
-    localStorageCheckInterval: config.get('localStorageCheckInterval')
+    localStorageCheckInterval: config.get('localStorageCheckInterval'),
+    // Modular Pipeline prototype: URL of the modpipe API (ModularService `bin/modpipe serve`)
+    modularPipelineServiceURL: config.get('modularPipelineServiceURL') || 'http://localhost:8765'
   };
   // console.log("Application Options: ", req.applicationOptions);
   next();
