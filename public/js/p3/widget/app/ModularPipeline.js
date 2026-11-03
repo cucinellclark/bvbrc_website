@@ -374,6 +374,7 @@ define([
           p.ui.disabled = disabled;
         }
         self.graph._rememberSourceOptions(res);
+        self.graph._savedPath = null;
         self.graph.templateSel.set('value', self.current.template, false);
         self.graph.model.load(p);
         self.graph.select(null);

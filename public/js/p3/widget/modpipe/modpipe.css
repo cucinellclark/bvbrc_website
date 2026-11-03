@@ -135,3 +135,7 @@
 .mpErr { color: #c33; }
 .mpWarn { color: #9a6b00; }
 .mpMuted { color: #888; }
+
+.mpMyList { max-height: 220px; overflow-y: auto; border: 1px solid #ddd; padding: 2px; }
+.mpMyItem { padding: 4px 6px; cursor: pointer; border-bottom: 1px solid #eee; }
+.mpMyItem:hover { background: #eef4fb; }

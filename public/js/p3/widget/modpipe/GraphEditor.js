@@ -37,6 +37,9 @@ define([
   var ROW_H = 20;
   var PAD = 8;
 
+  // Custom pipelines are saved here by default: /<user>/home/<PIPELINE_FOLDER> (created on first save).
+  var PIPELINE_FOLDER = 'pipeline';
+
   var STATUS_TEXT = { yes: 'fits', maybe: 'may fit (depends on the actual input)', convert: 'fits via an automatic converter', no: 'not allowed' };
 
   function loadCss() {
@@ -112,17 +115,16 @@ define([
       this._btn('New', 'Start an empty pipeline', function () {
         if (Object.keys(this.model.p.steps).length && !window.confirm('Discard the current pipeline? (Undo can bring it back.)')) { return; }
         this.model.reset();
+        this._savedPath = null;
         this.select(null);
       });
-      var opts = array.map(this.owner.templates || [], function (t) {
-        return { value: t.template, label: esc('[' + (t.category || 'other') + '] ' + t.label) };
-      });
-      opts.sort(function (a, b) { return a.label < b.label ? -1 : 1; });
-      this.templateSel = new Select({ options: opts, style: 'width:260px;', maxHeight: 400 });
+      this.templateSel = new Select({ options: this._templateOptions([]), style: 'width:300px;', maxHeight: 400 });
       this.templateSel.placeAt(this._tbNode);
-      this._btn('Load template', 'Open the selected template as a graph', function () {
-        this.loadTemplate(this.templateSel.get('value'));
+      this._btn('Load', 'Open the selected template, or one of your saved pipelines, as a graph', function () {
+        var v = this.templateSel.get('value');
+        if (v && v.indexOf('ws:') === 0) { this.openWorkspacePipeline(v.slice(3)); } else { this.loadTemplate(v); }
       });
+      this.refreshMyPipelines();
       domConstruct.create('span', { 'class': 'mpSep' }, this._tbNode);
       this._btn('Auto-layout', 'Arrange all nodes left to right', function () { this.autoLayout(); });
       this._btn('Fit', 'Zoom to fit the whole pipeline', function () { this.fit(); });
@@ -136,6 +138,28 @@ define([
       this._btn('Save...', 'Save this pipeline (with its layout) to your workspace', function () { this.saveToWorkspace(); });
       this._btn('Download', 'Download the pipeline JSON', function () { this.download(); });
       self._updateUndo();
+    },
+
+    /* Curated templates, then the user's saved pipelines (value "ws:<path>"). */
+    _templateOptions: function (mine) {
+      var opts = array.map(this.owner.templates || [], function (t) {
+        return { value: t.template, label: esc('[' + (t.category || 'other') + '] ' + t.label) };
+      });
+      opts.sort(function (a, b) { return a.label < b.label ? -1 : 1; });
+      return opts.concat(array.map(mine, function (o) {
+        return { value: 'ws:' + o.path, label: esc('[my pipelines] ' + o.name.replace(/\.json$/, '')) };
+      }));
+    },
+
+    refreshMyPipelines: function () {
+      var self = this;
+      return this.listMyPipelines().then(function (mine) {
+        var cur = self.templateSel.get('value');
+        self._myPipelines = mine;
+        self.templateSel.set('options', self._templateOptions(mine));
+        if (cur) { self.templateSel.set('value', cur, false); }
+        return mine;
+      });
     },
 
     _updateUndo: function () {
@@ -241,6 +265,7 @@ define([
       var self = this;
       this.owner.api('GET', '/api/templates/' + encodeURIComponent(name)).then(function (res) {
         self._rememberSourceOptions(res);
+        self._savedPath = null;
         self.model.load(res.pipeline);
         self.templateSel.set('value', name, false);
         self.select(null);
@@ -277,71 +302,146 @@ define([
       setTimeout(function () { URL.revokeObjectURL(a.href); domConstruct.destroy(a); }, 1000);
     },
 
+    // ---- the user's pipeline folder
+
+    pipelineFolder: function () {
+      var u = WorkspaceManager.userId || (window.App && window.App.user && window.App.user.id) || '';
+      return '/' + u + '/home/' + PIPELINE_FOLDER;
+    },
+
+    /* Resolves with the folder path, creating /<user>/home/pipeline if it does not exist yet. */
+    ensurePipelineFolder: function () {
+      var f = this.pipelineFolder();
+      return WorkspaceManager.getObject(f, true).then(function () { return f; }, function () {
+        return WorkspaceManager.createFolder(f).then(function () { return f; });
+      });
+    },
+
+    /* Saved pipelines in the user's pipeline folder, newest first ([] if the folder does not exist yet). */
+    listMyPipelines: function () {
+      var f = this.pipelineFolder();
+      return WorkspaceManager.getObject(f, true).then(function () {
+        return WorkspaceManager.getFolderContents(f).then(function (rows) {
+          return (rows || []).filter(function (r) { return r.type === 'json' || /\.json$/i.test(r.name); })
+            .sort(function (a, b) { return (b.timestamp || 0) - (a.timestamp || 0); });
+        });
+      }, function () { return []; });
+    },
+
+    openWorkspacePipeline: function (path) {
+      var self = this;
+      return WorkspaceManager.getObject(path).then(function (res) {
+        var p = typeof res.data === 'string' ? JSON.parse(res.data) : res.data;
+        if (!p || p.schema !== 'modpipe/pipeline/v1') { throw new Error('not a modpipe pipeline (schema modpipe/pipeline/v1)'); }
+        self.model.load(p);
+        self._savedPath = path;
+        if (self.templateSel) { self.templateSel.set('value', 'ws:' + path, false); }
+        self.select(null);
+        self.fit();
+        return p;
+      }).then(null, function (e) {
+        self.flash('Could not open ' + path + ': ' + ((e && e.message) || e));
+        throw e;
+      });
+    },
+
     saveToWorkspace: function () {
       var self = this;
-      var d = new Dialog({ title: 'Save pipeline to workspace', style: 'width:480px' });
+      var d = new Dialog({ title: 'Save pipeline to workspace', style: 'width:500px' });
       var box = domConstruct.create('div', {});
       domConstruct.create('div', { innerHTML: 'Folder', 'class': 'mpLabel' }, box);
-      var folder = new WorkspaceObjectSelector({ type: ['folder'], multi: false, required: true, autoSelectCurrent: true,
+      var folder = new WorkspaceObjectSelector({ type: ['folder'], multi: false, required: true,
         allowUpload: false, title: 'Select a folder', selectionText: 'Destination', style: 'width:95%' });
       folder.placeAt(box);
+      domConstruct.create('div', { 'class': 'mpInspText mpMuted',
+        innerHTML: 'Default: your <b>home/' + esc(PIPELINE_FOLDER) + '</b> folder. Pipelines saved there are listed under ' +
+          '"[my pipelines]" next to the templates.' }, box);
       domConstruct.create('div', { innerHTML: 'File name', 'class': 'mpLabel' }, box);
-      var name = new ValidationTextBox({ value: (this.model.p.name || 'pipeline').replace(/[^A-Za-z0-9_.()+ -]+/g, '_') + '.json',
-        regExp: '[A-Za-z0-9_.()+ -]{1,100}', required: true, style: 'width:95%' });
+      var last = this._savedPath ? this._savedPath.split('/') : null;
+      var defName = last ? last[last.length - 1] : (this.model.p.name || 'pipeline').replace(/[^A-Za-z0-9_.()+ -]+/g, '_') + '.json';
+      var name = new ValidationTextBox({ value: defName, regExp: '[A-Za-z0-9_.()+ -]{1,100}', required: true, style: 'width:95%' });
       name.placeAt(box);
       var owRow = domConstruct.create('div', { style: 'margin-top:6px' }, box);
-      var ow = new CheckBox({});
+      var ow = new CheckBox({ checked: !!this._savedPath });
       ow.placeAt(owRow);
       domConstruct.create('label', { innerHTML: ' overwrite if it exists' }, owRow);
       var msg = domConstruct.create('div', { style: 'color:#c00;margin-top:6px;' }, box);
       var row = domConstruct.create('div', { style: 'margin-top:10px;text-align:right;' }, box);
       new Button({ label: 'Cancel', onClick: function () { d.hide(); } }).placeAt(row);
-      new Button({ label: 'Save', onClick: function () {
-        if (!folder.get('value') || !name.isValid()) { msg.innerHTML = 'Choose a folder and a valid name.'; return; }
-        WorkspaceManager.create({ path: folder.get('value'), name: name.get('value'), type: 'json',
+      var saveBtn = new Button({ label: 'Save', onClick: function () {
+        // the picker can lose a just-created folder when its list reloads: fall back to the default folder
+        var dir = (folder.get('value') || defaultDir || '').replace(/\/+$/, '');
+        if (!dir || !name.isValid()) { msg.innerHTML = 'Choose a folder and a valid name.'; return; }
+        var fname = /\.json$/i.test(name.get('value')) ? name.get('value') : name.get('value') + '.json';
+        WorkspaceManager.create({ path: dir, name: fname, type: 'json',
           content: JSON.stringify(self.model.toJSON(), null, 1) }, false, !!ow.get('checked')).then(function () {
           d.hide();
-          self.flash('Saved ' + folder.get('value') + '/' + name.get('value'), true);
+          self._savedPath = dir + '/' + fname;
+          self.flash('Saved ' + self._savedPath, true);
+          self.refreshMyPipelines().then(function () { self.templateSel.set('value', 'ws:' + self._savedPath, false); });
         }, function (e) {
           msg.innerHTML = esc((e && (e.message || e)) || 'save failed') + ' (tick "overwrite" to replace an existing file)';
         });
-      } }).placeAt(row);
+      } });
+      saveBtn.placeAt(row);
       d.set('content', box);
       on(d, 'hide', function () { setTimeout(function () { d.destroyRecursive(); }, 0); });
       d.show();
+      // default folder: the user's pipeline folder (created if needed); a re-save goes back where it came from
+      var target = this._savedPath ? this._savedPath.replace(/\/[^/]*$/, '') : null;
+      var defaultDir = null;
+      saveBtn.set('disabled', true);
+      (target ? { then: function (fn) { fn(target); } } : this.ensurePipelineFolder()).then(function (f) {
+        defaultDir = f;
+        // put the folder in the picker's list (it may have been created just now), then select it
+        folder.set('selection', { path: f, name: f.split('/').pop(), type: 'folder', timestamp: Date.now() });
+        folder.set('path', f);
+        folder.set('value', f);
+        saveBtn.set('disabled', false);
+      }, function (e) {
+        saveBtn.set('disabled', false);
+        msg.innerHTML = 'Could not create your ' + esc(PIPELINE_FOLDER) + ' folder (' + esc((e && e.message) || e) + '); choose a folder.';
+      });
     },
 
     openFromWorkspace: function () {
       var self = this;
-      var d = new Dialog({ title: 'Open pipeline from workspace', style: 'width:480px' });
+      var d = new Dialog({ title: 'Open pipeline from workspace', style: 'width:500px' });
       var box = domConstruct.create('div', {});
-      domConstruct.create('div', { innerHTML: 'Pipeline JSON file', 'class': 'mpLabel' }, box);
-      var file = new WorkspaceObjectSelector({ type: ['json', 'unspecified', 'txt'], multi: false, required: true,
+      domConstruct.create('div', { innerHTML: 'Your pipelines <span class="mpMuted">(home/' + esc(PIPELINE_FOLDER) + ')</span>', 'class': 'mpLabel' }, box);
+      var list = domConstruct.create('div', { 'class': 'mpMyList', innerHTML: '<span class="mpMuted">loading...</span>' }, box);
+      domConstruct.create('div', { innerHTML: 'Or another pipeline JSON file', 'class': 'mpLabel', style: 'margin-top:10px' }, box);
+      var file = new WorkspaceObjectSelector({ type: ['json', 'unspecified', 'txt'], multi: false, required: false,
         allowUpload: true, title: 'Select a pipeline file', style: 'width:95%' });
       file.placeAt(box);
       var msg = domConstruct.create('div', { style: 'color:#c00;margin-top:6px;' }, box);
       var row = domConstruct.create('div', { style: 'margin-top:10px;text-align:right;' }, box);
+      var open = function (path) {
+        self.openWorkspacePipeline(path).then(function () { d.hide(); }, function (e) {
+          msg.innerHTML = esc((e && e.message) || 'could not read the file');
+        });
+      };
       new Button({ label: 'Cancel', onClick: function () { d.hide(); } }).placeAt(row);
       new Button({ label: 'Open', onClick: function () {
-        if (!file.get('value')) { msg.innerHTML = 'Choose a file.'; return; }
-        WorkspaceManager.getObject(file.get('value')).then(function (res) {
-          var p;
-          try {
-            p = typeof res.data === 'string' ? JSON.parse(res.data) : res.data;
-          } catch (e) {
-            msg.innerHTML = 'Not JSON: ' + esc(e.message);
-            return;
-          }
-          if (!p || p.schema !== 'modpipe/pipeline/v1') { msg.innerHTML = 'Not a modpipe pipeline (schema modpipe/pipeline/v1).'; return; }
-          self.model.load(p);
-          self.select(null);
-          self.fit();
-          d.hide();
-        }, function (e) { msg.innerHTML = esc((e && e.message) || 'could not read the file'); });
+        if (!file.get('value')) { msg.innerHTML = 'Choose one of your pipelines above, or a file.'; return; }
+        open(file.get('value'));
       } }).placeAt(row);
       d.set('content', box);
       on(d, 'hide', function () { setTimeout(function () { d.destroyRecursive(); }, 0); });
       d.show();
+      this.refreshMyPipelines().then(function (mine) {
+        domConstruct.empty(list);
+        if (!mine.length) {
+          list.innerHTML = '<span class="mpMuted">None yet: "Save..." puts pipelines here by default.</span>';
+          return;
+        }
+        mine.forEach(function (o) {
+          var it = domConstruct.create('div', { 'class': 'mpMyItem', title: o.path,
+            innerHTML: '<b>' + esc(o.name.replace(/\.json$/i, '')) + '</b> <span class="mpMuted">' +
+              esc(String(o.creation_time || '').replace('T', ' ').replace(/\..*$/, '').replace(/Z$/, '')) + '</span>' }, list);
+          on(it, 'click', function () { open(o.path); });
+        });
+      }, function () { list.innerHTML = '<span class="mpMuted">could not list your pipeline folder</span>'; });
     },
 
     addInputDialog: function (preset) {
