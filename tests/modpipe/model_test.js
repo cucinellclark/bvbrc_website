@@ -124,5 +124,24 @@ test('refused edits change nothing', function () {
   assert.strictEqual(JSON.stringify(m.p), before);
 });
 
+test('new nodes are moved off existing ones (create pipeline input twice for one step)', function () {
+  var m = new PipelineModel(cat);
+  var s = m.addStep('quast', { x: 400, y: 100 });
+  m.addInputFor(s, 'contigs', 'sequences.dna.contigs', false);
+  m.addInputFor(s, 'reference', 'sequences.dna.contigs', false);
+  var size = function () { return { w: 200, h: 70 }; };
+  var keys = PipelineModel.nodeKeys(m);
+  keys.forEach(function (k) { PipelineModel.avoidOverlap(m, k, size); });
+  var pos = m.p.ui.positions;
+  for (var i = 0; i < keys.length; i++) {
+    for (var j = i + 1; j < keys.length; j++) {
+      var a = pos[keys[i]]; var b = pos[keys[j]];
+      var overlap = a.x < b.x + 200 && a.x + 200 > b.x && a.y < b.y + 70 && a.y + 70 > b.y;
+      assert.ok(!overlap, keys[i] + ' overlaps ' + keys[j] + ' ' + JSON.stringify([a, b]));
+    }
+  }
+  assert.strictEqual(PipelineModel.avoidOverlap(m, 'step:' + s, size), false);   // already clear: not moved
+});
+
 console.log(failures ? failures + ' FAILED' : 'all passed');
 process.exit(failures ? 1 : 0);

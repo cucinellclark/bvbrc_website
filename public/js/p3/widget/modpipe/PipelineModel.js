@@ -624,6 +624,41 @@
 
   /* Left-to-right layered layout (longest-path layering + barycenter ordering). Returns {key: {x, y}}.
      `size(key)` -> {w, h}. Small graphs only (pipelines have tens of nodes). */
+  /* All node keys ("in:<name>", "step:<id>") of the pipeline. */
+  PipelineModel.nodeKeys = function (model) {
+    return Object.keys(model.p.inputs).map(function (n) { return 'in:' + n; })
+      .concat(Object.keys(model.p.steps).map(function (s) { return 'step:' + s; }));
+  };
+
+  /* Move node `key` (already positioned) down, in steps, until its box no longer overlaps any other node's box.
+     `size(key)` -> {w, h}. Changes model.p.ui.positions[key] in place (presentation only, no undo entry).
+     Returns true if the node was moved. */
+  PipelineModel.avoidOverlap = function (model, key, size, gap) {
+    gap = gap === undefined ? 20 : gap;
+    var pos = model.p.ui.positions;
+    var me = pos[key];
+    if (!me) { return false; }
+    var others = PipelineModel.nodeKeys(model).filter(function (k) { return k !== key && pos[k]; });
+    var s = size(key);
+    var moved = false;
+    for (var guard = 0; guard < 200; guard++) {
+      var hit = null;
+      for (var i = 0; i < others.length; i++) {
+        var o = pos[others[i]];
+        var os = size(others[i]);
+        if (me.x < o.x + os.w + gap && me.x + s.w + gap > o.x && me.y < o.y + os.h + gap && me.y + s.h + gap > o.y) {
+          hit = { o: o, os: os };
+          break;
+        }
+      }
+      if (!hit) { break; }
+      me.y = hit.o.y + hit.os.h + gap;     // just below the node it collides with, then check again
+      moved = true;
+    }
+    pos[key] = { x: Math.round(me.x), y: Math.round(me.y) };
+    return moved;
+  };
+
   PipelineModel.layout = function (model, size, opts) {
     opts = opts || {};
     var colGap = opts.colGap || 90;

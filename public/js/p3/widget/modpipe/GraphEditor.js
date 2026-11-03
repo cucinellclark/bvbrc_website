@@ -90,6 +90,7 @@ define([
       this._sourceOptions = {};
       this.model = new PipelineModel(this.catalog);
       this.model.onChange(lang.hitch(this, '_onModelChange'));
+      this._knownKeys = {};
       this._buildToolbar();
       this._buildPalette();
       this._bindCanvas();
@@ -394,11 +395,28 @@ define([
       // keep the previous check's badges until the new one answers (no flicker); a load starts clean
       if (what === 'load') { this.autoEdges = {}; this.issues = { byNode: {}, byPort: {}, global: [] }; }
       if (this.sel && this.sel.key && !this._exists(this.sel.key)) { this.sel = null; }
+      this._placeNewNodes(what);
       this.render();
       if (!this._fromInspector) { this.renderInspector(); }
       this._renderPalette();
       this._scheduleValidate();
       if (this.onPipelineChange) { this.onPipelineChange(what); }
+    },
+
+    /* Nodes added by this edit (created inputs, tools from the palette or a menu, explicit converters) must not land on
+       top of existing nodes: nudge each one down until it is clear. Loads, undo and redo keep positions as they are. */
+    _placeNewNodes: function (what) {
+      var keysNow = PipelineModel.nodeKeys(this.model);
+      var known = this._knownKeys;
+      this._knownKeys = {};
+      var self = this;
+      keysNow.forEach(function (k) { self._knownKeys[k] = true; });
+      if (!known || /^(load|undo|redo|renameStep|renameInput)$/.test(what)) { return; }
+      var added = keysNow.filter(function (k) { return !known[k]; });
+      if (!added.length) { return; }
+      this._placeMissing();
+      var size = lang.hitch(this, 'nodeSize');
+      added.forEach(function (k) { PipelineModel.avoidOverlap(self.model, k, size); });
     },
 
     _exists: function (key) {
