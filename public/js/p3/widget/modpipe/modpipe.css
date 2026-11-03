@@ -1,0 +1,137 @@
+/* Modular Pipeline graph editor (p3/widget/modpipe/GraphEditor.js) */
+
+.mpWide .appTemplate { max-width: 1700px; margin: 0 auto; }
+.mpWide .formFieldsContainer { max-width: none; }
+
+.mpGraph { border: 1px solid #aaa; background: #fff; font-size: 12px; margin-bottom: 10px; text-align: left; }
+.mpGraph label { text-transform: none; font-size: inherit; }
+.mpToolbar { padding: 4px 6px; background: #f0f1f3; border-bottom: 1px solid #ccc; }
+.mpToolbar .dijitButton { margin: 1px 2px; }
+.mpSep { display: inline-block; width: 1px; height: 20px; background: #bbb; margin: 0 8px; vertical-align: middle; }
+
+.mpMain { display: flex; height: 640px; }
+.mpPalette { width: 230px; border-right: 1px solid #ccc; display: flex; flex-direction: column; background: #fafafa; }
+.mpPaletteTop { padding: 6px; border-bottom: 1px solid #ddd; }
+.mpPaletteTop .dijitButton { margin-top: 4px; }
+.mpFilterRow { margin-top: 4px; font-size: 11px; }
+.mpDim { opacity: 0.4; }
+.mpPaletteList { overflow-y: auto; flex: 1; padding: 4px 6px; }
+.mpPaletteNote { color: #777; font-size: 11px; margin: 2px 0 6px; }
+.mpCat { font-weight: bold; color: #555; text-transform: capitalize; margin: 8px 0 2px; border-bottom: 1px solid #e3e3e3; }
+.mpPaletteItem { padding: 3px 5px; margin: 2px 0; border: 1px solid #ddd; border-radius: 3px; background: #fff; cursor: grab;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.mpPaletteItem:hover { border-color: #2a6ebb; background: #eef4fb; }
+.mpPaletteItem span, .mpMenuItem span { color: #777; }
+.mpFit-yes { border-left: 4px solid #2e9d47; }
+.mpFit-convert { border-left: 4px solid #2a6ebb; }
+.mpFit-maybe { border-left: 4px solid #d99a00; }
+
+.mpCanvasWrap { flex: 1; position: relative; overflow: hidden; outline: none; cursor: default;
+  background-color: #fbfbfb;
+  background-image: radial-gradient(#dcdcdc 1px, transparent 1px); background-size: 20px 20px; }
+.mpStage { position: absolute; left: 0; top: 0; transform-origin: 0 0; }
+.mpEdges { position: absolute; left: 0; top: 0; width: 1px; height: 1px; overflow: visible; }
+.mpNodes { position: absolute; left: 0; top: 0; }
+
+.mpNode { position: absolute; box-sizing: border-box; background: #fff; border: 1px solid #8a9bb0; border-radius: 5px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.15); user-select: none; }
+.mpNode.mpSelected { border: 2px solid #2a6ebb; box-shadow: 0 0 0 3px rgba(42, 110, 187, 0.2); }
+.mpNode.mpHasIssues { border-color: #c33; }
+.mpNode.mpDisabled { opacity: 0.45; border-style: dashed; }
+.mpNodeHead { height: 38px; padding: 3px 7px; box-sizing: border-box; border-bottom: 1px solid #e3e6ea; cursor: move;
+  border-radius: 5px 5px 0 0; background: #eef2f7; overflow: hidden; }
+.mpInputNode .mpNodeHead { background: #e8f4ea; }
+.mpNodeTitle { font-weight: bold; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.mpNodeSub { color: #666; font-size: 11px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.mpCat-read_qc .mpNodeHead { background: #f3eefa; }
+.mpCat-assembly .mpNodeHead { background: #eef6fb; }
+.mpCat-annotation .mpNodeHead { background: #fbf6ea; }
+.mpCat-taxonomy .mpNodeHead { background: #eefaf6; }
+.mpCat-variants .mpNodeHead { background: #fbeef0; }
+
+.mpBadge { display: inline-block; font-size: 10px; font-weight: normal; padding: 0 4px; border-radius: 7px; margin-left: 2px; }
+.mpBadgeErr { background: #c33; color: #fff; }
+.mpBadgeWarn { background: #e6a700; color: #fff; }
+.mpScatter { background: #dfe9f5; color: #24527f; }
+.mpOff { background: #999; color: #fff; }
+
+.mpPort { position: absolute; height: 20px; line-height: 20px; width: 50%; box-sizing: border-box; white-space: nowrap; }
+.mpPortIn { left: 0; padding-left: 10px; }
+.mpPortOut { right: 0; padding-right: 10px; text-align: right; cursor: crosshair; }
+.mpInputNode .mpPortOut { width: 100%; }
+.mpPortLabel { display: inline-block; max-width: 100%; overflow: hidden; text-overflow: ellipsis; vertical-align: top; }
+.mpPortType { color: #888; font-size: 10px; }
+.mpDot { position: absolute; top: 5px; width: 10px; height: 10px; border-radius: 50%; background: #fff; border: 2px solid #6d7f95;
+  box-sizing: border-box; }
+.mpPortIn .mpDot { left: -6px; }
+.mpPortOut .mpDot { right: -6px; background: #6d7f95; }
+.mpMany .mpDot { border-radius: 2px; }
+.mpNeeds .mpDot { border-color: #c33; }
+.mpPortIssue .mpPortLabel { color: #c33; }
+.mpPortSel .mpDot { box-shadow: 0 0 0 3px rgba(42, 110, 187, 0.35); }
+.mpSaved .mpDot { background: #2e9d47; border-color: #2e9d47; }
+.mpSavedTag { color: #2e9d47; font-size: 10px; }
+.mpPortOut:hover .mpDot { transform: scale(1.3); }
+
+.mpWiring .mpPortIn { opacity: 0.35; }
+.mpWiring .mpPortIn.mpTarget-yes, .mpWiring .mpPortIn.mpTarget-convert, .mpWiring .mpPortIn.mpTarget-maybe { opacity: 1; font-weight: bold; }
+.mpTarget-yes .mpDot { background: #2e9d47; border-color: #2e9d47; transform: scale(1.4); }
+.mpTarget-convert .mpDot { background: #2a6ebb; border-color: #2a6ebb; transform: scale(1.4); }
+.mpTarget-maybe .mpDot { background: #e6a700; border-color: #e6a700; transform: scale(1.4); }
+.mpTarget-no { cursor: not-allowed; }
+
+.mpEdge { fill: none; stroke: #7d8da1; stroke-width: 2; }
+.mpEdgeSel { stroke: #2a6ebb; stroke-width: 3.5; }
+.mpEdgeErr { stroke: #c33; }
+.mpEdgeAuto { stroke: #2a6ebb; stroke-dasharray: 6 4; }
+.mpEdgeOff { stroke: #bbb; stroke-dasharray: 3 3; }
+.mpEdgeTemp { stroke: #2a6ebb; stroke-dasharray: 4 3; pointer-events: none; }
+.mpEdgeHit { fill: none; stroke: transparent; stroke-width: 12; pointer-events: stroke; cursor: pointer; }
+.mpAutoLabel { font-size: 11px; fill: #2a6ebb; cursor: pointer; text-anchor: middle; paint-order: stroke; stroke: #fff; stroke-width: 3px; }
+
+.mpHint { position: absolute; left: 50%; bottom: 10px; transform: translateX(-50%); background: #333; color: #fff;
+  padding: 5px 10px; border-radius: 4px; max-width: 80%; display: none; pointer-events: none; z-index: 5; }
+.mpHint.mpHintShow { display: block; }
+.mpHint.mpHintGood { background: #2e7d40; }
+
+.mpMenu { position: absolute; z-index: 10; background: #fff; border: 1px solid #999; box-shadow: 0 2px 8px rgba(0, 0, 0, 0.25);
+  max-height: 360px; overflow-y: auto; min-width: 240px; }
+.mpMenuHead { padding: 5px 8px; background: #f0f1f3; border-bottom: 1px solid #ddd; }
+.mpMenuItem { padding: 4px 8px; cursor: pointer; white-space: nowrap; }
+.mpMenuItem:hover { background: #eef4fb; }
+
+.mpInspector { width: 330px; border-left: 1px solid #ccc; overflow-y: auto; padding: 6px 8px; background: #fff; }
+.mpInspSection { margin-bottom: 10px; }
+.mpInspTitle { font-weight: bold; font-size: 13px; border-bottom: 1px solid #ddd; margin-bottom: 4px; padding-bottom: 2px; }
+.mpInspText { margin: 4px 0; color: #333; }
+.mpInspPort { margin: 4px 0 6px; padding-left: 4px; border-left: 3px solid #eee; }
+.mpInspPort.mpFocus { border-left-color: #2a6ebb; background: #f3f8fd; }
+.mpInspRef { margin-left: 8px; }
+.mpInspRef a { margin-left: 4px; font-size: 11px; }
+.mpLabel { font-weight: bold; margin-top: 6px; }
+.mpParam { margin-bottom: 4px; }
+.mpAdvToggle { display: block; margin: 6px 0; }
+.mpProblems { color: #c33; font-size: 11px; }
+.mpSourceRow { border-left: 3px solid #ddd; padding-left: 6px; margin-bottom: 6px; }
+.mpHelp { padding-left: 16px; margin: 4px 0; }
+.mpHelp li { margin-bottom: 4px; }
+.mpKey { padding: 0 4px; border-radius: 3px; color: #fff; font-size: 11px; }
+.mpKeyYes { background: #2e9d47; }
+.mpKeyConvert { background: #2a6ebb; }
+.mpKeyMaybe { background: #e6a700; }
+.mpKeyNo { background: #999; }
+.mpFitText-yes { color: #2e9d47; }
+.mpFitText-convert { color: #2a6ebb; }
+.mpFitText-maybe { color: #b07b00; }
+.mpFitText-no { color: #c33; }
+
+.mpStatus { padding: 5px 8px; border-top: 1px solid #ccc; background: #f7f7f7; min-height: 18px; }
+.mpStatus.mpPending { opacity: 0.6; }
+.mpIssueList { margin: 4px 0 0; padding-left: 18px; max-height: 140px; overflow-y: auto; }
+.mpIssueList li { cursor: pointer; }
+.mpSev-error { color: #c33; }
+.mpSev-warning { color: #9a6b00; }
+.mpOk { color: #2e7d40; }
+.mpErr { color: #c33; }
+.mpWarn { color: #9a6b00; }
+.mpMuted { color: #888; }

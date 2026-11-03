@@ -6,35 +6,33 @@
  * production app service yet. The API URL comes from p3-web.conf `modularPipelineServiceURL`
  * (default http://localhost:8765). Jobs run with the signed-in user's token and write to their workspace.
  *
- * Templates, their inputs (with allowed source kinds), optional steps and exposed parameters all come from
- * GET /api/templates, so new templates/modules appear here without changes to this file.
+ * Three views of the work:
+ *  - Template form: pick a curated template, fill its inputs/options (GET /api/templates).
+ *  - Graph editor (../modpipe/GraphEditor): wire tools into a custom pipeline with instant type checks.
+ *  - JSON: the graph editor's pipeline as text.
+ * Templates, modules and types all come from the API, so new ones appear here without changes to this file.
  */
 define([
   'dojo/_base/declare', 'dojo/_base/lang', 'dojo/_base/array', 'dojo/on', 'dojo/dom-class', 'dojo/dom-construct',
   'dojo/request', 'dojo/when', 'dojo/Deferred',
   'dijit/form/Select', 'dijit/form/TextBox', 'dijit/form/ValidationTextBox', 'dijit/form/NumberTextBox',
   'dijit/form/CheckBox', 'dijit/form/SimpleTextarea', 'dijit/form/Button', 'dijit/Dialog', 'dijit/registry',
-  'dojo/text!./templates/ModularPipeline.html', './AppBase', '../WorkspaceObjectSelector'
+  'dojo/text!./templates/ModularPipeline.html', './AppBase', '../WorkspaceObjectSelector',
+  '../modpipe/SourceEditor', '../modpipe/ParamEditor', '../modpipe/GraphEditor', 'dijit/form/RadioButton',
+  '../WorkspaceFilenameValidationTextBox'
 ], function (
   declare, lang, array, on, domClass, domConstruct,
   xhr, when, Deferred,
   Select, TextBox, ValidationTextBox, NumberTextBox,
   CheckBox, SimpleTextarea, Button, Dialog, registry,
-  Template, AppBase, WorkspaceObjectSelector
+  Template, AppBase, WorkspaceObjectSelector,
+  SourceEditor, ParamEditor, GraphEditor
 ) {
-
-  var SRR_RE = /^[SED]RR\d+$/;
-  var GENOME_RE = /^\d+\.\d+$/;
-  var FEATURE_RE = /^fig\|\d+\.\d+\.[a-z_]+\.\d+$/;
 
   function esc(s) {
     return String(s === undefined || s === null ? '' : s).replace(/[&<>"']/g, function (c) {
       return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c];
     });
-  }
-
-  function splitList(v) {
-    return array.filter(String(v || '').split(/[\s,;]+/), function (x) { return x.length > 0; });
   }
 
   return declare([AppBase], {
@@ -54,6 +52,9 @@ define([
     paramWidgets: null,  // key -> widget
     stepBoxes: null,     // step -> CheckBox
     jobsTimer: null,
+    mode: 'form',        // form | graph | json
+    graph: null,         // GraphEditor (created on first use)
+    catalog: null,
 
     apiURL: function (path) {
       var base = (window.App && window.App.modularPipelineServiceURL) || 'http://localhost:8765';
@@ -161,7 +162,6 @@ define([
           state.kind = kind;
           var opt = array.filter(kinds, function (o) { return o.kind === kind; })[0];
           state.impl = this.sourceWidget(inp, opt, body);
-          this.connectChildren && this.connectChildren();
           this.validate();
         });
         on(kindSel, 'change', rebuild);
@@ -172,138 +172,10 @@ define([
       }));
     },
 
-    _wsSelector: function (node, wstypes, placeholder, required) {
-      var w = new WorkspaceObjectSelector({
-        type: wstypes, multi: false, required: required !== false, allowUpload: true,
-        placeHolder: placeholder, promptMessage: placeholder, style: 'width:85%'
-      });
-      w.placeAt(node);
-      w.startup();
-      return w;
-    },
-
-    _text: function (node, placeholder, regExp, width) {
-      var w = new ValidationTextBox({ placeHolder: placeholder, required: true, style: 'width:' + (width || '85%'),
-        regExp: regExp || '.*', trim: true });
-      w.placeAt(node);
-      w.startup();
-      return w;
-    },
-
     /* Returns {getSource: fn -> source object, problems: fn -> [messages]} for one input + source kind. */
     sourceWidget: function (inp, opt, node) {
       var self = this;
-      var coll = inp.collection;
-      var kind = opt.kind;
-      if (kind === 'paired_end_libs' || kind === 'single_end_libs') {
-        var paired = kind === 'paired_end_libs';
-        var rows = [];
-        var list = domConstruct.create('div', {}, node);
-        var addRow = function () {
-          var r = domConstruct.create('div', { style: 'border-left:3px solid #ddd;padding-left:6px;margin-bottom:6px;' }, list);
-          var rec = { node: r };
-          if (coll) {
-            rec.sample = self._text(r, 'Sample ID (letters, digits, . _ -)', '[A-Za-z0-9][A-Za-z0-9_.-]{0,127}', '40%');
-            domConstruct.create('br', {}, r);
-          }
-          rec.r1 = self._wsSelector(r, ['reads'], paired ? 'Read file 1' : 'Read file');
-          if (paired) { rec.r2 = self._wsSelector(r, ['reads'], 'Read file 2'); }
-          if (coll && rows.length > 0) {
-            var rm = new Button({ label: 'Remove', onClick: function () {
-              rows.splice(rows.indexOf(rec), 1);
-              array.forEach(registry.findWidgets(r), function (w) { w.destroyRecursive(); });
-              domConstruct.destroy(r);
-              self.validate();
-            } });
-            rm.placeAt(r);
-          }
-          rows.push(rec);
-          self.connectChildren && self.connectChildren();
-        };
-        addRow();
-        if (coll) {
-          new Button({ label: '+ Add sample', onClick: function () { addRow(); self.validate(); } }).placeAt(node);
-        }
-        return {
-          getSource: function () {
-            var libs = array.map(rows, function (r) {
-              var lib = paired ? { read1: r.r1.get('value'), read2: r.r2.get('value') } : { read: r.r1.get('value') };
-              if (r.sample) { lib.sample_id = r.sample.get('value'); }
-              return lib;
-            });
-            var src = {};
-            src[kind] = libs;
-            return src;
-          },
-          problems: function () {
-            var p = [];
-            array.forEach(rows, function (r, i) {
-              if (!r.r1.get('value') || (paired && !r.r2.get('value'))) { p.push(inp.name + ': choose the read file(s) for row ' + (i + 1)); }
-              if (r.sample && !r.sample.get('value')) { p.push(inp.name + ': sample ID missing in row ' + (i + 1)); }
-            });
-            return p;
-          }
-        };
-      }
-      if (kind === 'srr_ids' || kind === 'genome_ids' || kind === 'feature_ids') {
-        var re = { srr_ids: SRR_RE, genome_ids: GENOME_RE, feature_ids: FEATURE_RE }[kind];
-        var ph = { srr_ids: 'e.g. SRR2838702 SRR2838703', genome_ids: 'e.g. 1206109.14', feature_ids: 'e.g. fig|1206109.14.peg.1' }[kind];
-        var tb = new TextBox({ placeHolder: ph + (coll || kind === 'feature_ids' ? ' (space or comma separated)' : ''), style: 'width:85%' });
-        tb.placeAt(node);
-        tb.startup();
-        return {
-          getSource: function () { var s = {}; s[kind] = splitList(tb.get('value')); return s; },
-          problems: function () {
-            var ids = splitList(tb.get('value'));
-            var bad = array.filter(ids, function (x) { return !re.test(x); });
-            var p = [];
-            if (!ids.length) { p.push(inp.name + ': enter at least one ID'); }
-            if (bad.length) { p.push(inp.name + ': invalid ID(s) ' + bad.join(', ')); }
-            if (!coll && kind !== 'feature_ids' && ids.length > 1) { p.push(inp.name + ': only one ID allowed (this input is not a collection)'); }
-            return p;
-          }
-        };
-      }
-      if (kind === 'wsid' || kind === 'genome_group' || kind === 'feature_group') {
-        var sel = this._wsSelector(node, opt.wstypes || ['unspecified'], opt.label);
-        return {
-          getSource: function () { var s = {}; s[kind] = sel.get('value'); return s; },
-          problems: function () { return sel.get('value') ? [] : [inp.name + ': choose a workspace item']; }
-        };
-      }
-      if (kind === 'wsids') {
-        var sels = [];
-        var box = domConstruct.create('div', {}, node);
-        var add = function () { sels.push(self._wsSelector(box, opt.wstypes || ['unspecified'], opt.label)); self.connectChildren && self.connectChildren(); };
-        add();
-        new Button({ label: '+ Add file', onClick: function () { add(); self.validate(); } }).placeAt(node);
-        return {
-          getSource: function () { return { wsids: array.filter(array.map(sels, function (s) { return s.get('value'); }), function (v) { return !!v; }) }; },
-          problems: function () { return this.getSource().wsids.length ? [] : [inp.name + ': choose at least one file']; }
-        };
-      }
-      if (kind === 'fasta_data') {
-        var ta = new SimpleTextarea({ rows: 6, style: 'width:85%;font-family:monospace;', placeHolder: '>seq1\nACGT...' });
-        ta.placeAt(node);
-        ta.startup();
-        return {
-          getSource: function () { return { fasta_data: ta.get('value') }; },
-          problems: function () { return /^\s*>/.test(ta.get('value') || '') ? [] : [inp.name + ': paste FASTA starting with >']; }
-        };
-      }
-      if (kind === 'database_file') {
-        var choices = opt.choices || [];
-        var ds = new Select({ options: array.map(choices, function (c) { return { value: c.value, label: esc(c.label) }; }), style: 'width:85%' });
-        ds.placeAt(node);
-        ds.startup();
-        if (inp.default_source && inp.default_source.database_file) { ds.set('value', inp.default_source.database_file); }
-        return {
-          getSource: function () { return { database_file: ds.get('value') }; },
-          problems: function () { return ds.get('value') ? [] : [inp.name + ': choose a reference']; }
-        };
-      }
-      domConstruct.create('div', { innerHTML: 'Unsupported source ' + esc(kind) }, node);
-      return { getSource: function () { return {}; }, problems: function () { return [inp.name + ': unsupported source']; } };
+      return SourceEditor.create({ inp: inp, opt: opt, node: node, onChange: function () { self.validate(); } });
     },
 
     // ------------------------------------------------------------------ options & params
@@ -329,28 +201,8 @@ define([
           title: p.description || ''
         }, row);
         domConstruct.create('br', {}, row);
-        var w;
-        if (p.type === 'enum' || p.type === 'database') {
-          var opts = p.type === 'enum'
-            ? array.map(p['enum'], function (v) { return { value: String(v), label: esc(v) }; })
-            : array.map(p.choices || [], function (c) { return { value: c.value, label: esc(c.value + (c.status === 'unverified' ? ' (unverified)' : '')) }; });
-          w = new Select({ options: opts, style: 'width:60%' });
-          if (p['default'] !== undefined && p['default'] !== null) { w.set('value', String(p['default'])); }
-        } else if (p.type === 'bool') {
-          w = new CheckBox({ checked: !!p['default'] });
-        } else if (p.type === 'int' || p.type === 'float') {
-          var c = { places: p.type === 'int' ? 0 : '0,6' };
-          if (p.min !== undefined) { c.min = p.min; }
-          if (p.max !== undefined) { c.max = p.max; }
-          w = new NumberTextBox({ value: p['default'], constraints: c, required: true, style: 'width:30%' });
-        } else {
-          w = new ValidationTextBox({ value: p['default'] || '', regExp: p.pattern || '.*', style: 'width:60%',
-            invalidMessage: 'Allowed: ' + (p.pattern || 'any'), trim: true });
-        }
-        w.placeAt(row);
-        w.startup();
+        var w = ParamEditor.create(p, undefined, row, null);
         if (p.description) { domConstruct.create('div', { innerHTML: esc(p.description), style: 'color:#999;font-size:0.85em;' }, row); }
-        w._mpType = p.type;
         self.paramWidgets[p.key] = w;
       });
       if (!(t.optional_steps || []).length && !(t.params || []).length) {
@@ -373,13 +225,10 @@ define([
       var tp = {};
       Object.keys(this.stepBoxes).forEach(lang.hitch(this, function (s) { tp[s + '.enabled'] = !!this.stepBoxes[s].get('checked'); }));
       Object.keys(this.paramWidgets).forEach(lang.hitch(this, function (k) {
-        var w = this.paramWidgets[k];
-        var v = w._mpType === 'bool' ? !!w.get('checked') : w.get('value');
-        if (w._mpType === 'int' || w._mpType === 'float') {
-          if (isNaN(v)) { problems.push(k + ': enter a number'); return; }
-        }
-        if (w._mpType === 'string' && w.isValid && !w.isValid()) { problems.push(k + ': value not allowed'); return; }
-        tp[k] = v;
+        var ed = this.paramWidgets[k];
+        var pr = ed.problem();
+        if (pr) { problems.push(k + ': ' + pr); return; }
+        tp[k] = ed.getValue();
       }));
       return { body: { template: this.current && this.current.template, inputs: inputs, template_params: tp }, problems: problems };
     },
@@ -393,7 +242,12 @@ define([
     },
 
     currentRequest: function () {
-      return this.jsonModeBox.get('checked') ? this.pipelineRequest() : this.templateRequest();
+      if (this.mode === 'json') { return this.pipelineRequest(); }
+      if (this.mode === 'graph') {
+        if (!this.graph) { return { body: null, problems: ['The graph editor is still loading'] }; }
+        return { body: { pipeline: this.graph.model.toJSON() }, problems: [] };
+      }
+      return this.templateRequest();
     },
 
     // ------------------------------------------------------------------ actions
@@ -421,9 +275,10 @@ define([
     },
 
     onValidateClick: function () {
+      if (this.mode === 'json' && !this._applyJson()) { return null; }
       var req = this.currentRequest();
       if (!req.body) { return this.showCheck(null, req.problems); }
-      var path = this.jsonModeBox.get('checked') ? '/api/validate' : '/api/instantiate';
+      var path = this.mode === 'form' ? '/api/instantiate' : '/api/validate';
       this.checkNode.innerHTML = 'Checking...';
       domClass.remove(this.checkBox, 'dijitHidden');
       this.api('POST', path, req.body).then(lang.hitch(this, function (res) {
@@ -431,26 +286,132 @@ define([
       }), lang.hitch(this, function (err) { this.showCheck(err, req.problems); }));
     },
 
-    onJsonModeChange: function (on_) {
-      domClass.toggle(this.jsonBox, 'dijitHidden', !on_);
-      domClass.toggle(this.inputsBox, 'dijitHidden', !!on_);
-      domClass.toggle(this.optionsBox, 'dijitHidden', !!on_);
-      if (on_ && !this.jsonText.get('value')) { this.onLoadTemplateJson(); }
+    // ------------------------------------------------------------------ modes: form | graph | json
+
+    onModeLabel: function (evt) {
+      var m = evt.currentTarget.getAttribute('data-mode');
+      ({ form: this.modeForm, graph: this.modeGraph, json: this.modeJson })[m].set('checked', true);
     },
 
-    onLoadTemplateJson: function () {
-      var req = this.templateRequest();
-      this.api('POST', '/api/instantiate', req.body).then(lang.hitch(this, function (res) {
-        if (res.pipeline) {
-          this.jsonText.set('value', JSON.stringify(res.pipeline, null, 2));
-        } else {
-          this.showCheck(res, req.problems);
+    onModeRadio: function () {
+      var m = this.modeGraph.get('checked') ? 'graph' : (this.modeJson.get('checked') ? 'json' : 'form');
+      if (m !== this.mode) { this.setMode(m); }
+    },
+
+    setMode: function (m) {
+      var prev = this.mode;
+      if (prev === 'json' && m !== 'json' && !this._applyJson()) {
+        this.modeJson.set('checked', true, false);       // keep the user in the JSON view until it parses
+        return;
+      }
+      this.mode = m;
+      domClass.toggle(this.templateRow, 'dijitHidden', m !== 'form');
+      domClass.toggle(this.inputsBox, 'dijitHidden', m !== 'form');
+      domClass.toggle(this.optionsBox, 'dijitHidden', m !== 'form');
+      domClass.toggle(this.graphBox, 'dijitHidden', m !== 'graph');
+      domClass.toggle(this.jsonBox, 'dijitHidden', m !== 'json');
+      domClass.toggle(this.domNode, 'mpWide', m === 'graph');
+      domClass.add(this.checkBox, 'dijitHidden');
+      this.modeNote.innerHTML = '';
+      if (m === 'graph' || m === 'json') {
+        this.ensureGraph().then(lang.hitch(this, function () {
+          if (m === 'graph') {
+            this.graph.render();
+            this.graph.fit();
+          }
+          if (m === 'json') { this.jsonText.set('value', JSON.stringify(this.graph.model.toJSON(), null, 2)); }
+        }), lang.hitch(this, function (err) {
+          this.modeNote.innerHTML = '<span style="color:#c00">' + esc(err.error || err.message || err) + '</span>';
+        }));
+      }
+    },
+
+    /* Create the graph editor once (needs the catalog); seeded from the template form's current choices. */
+    ensureGraph: function () {
+      if (this._graphReady) { return this._graphReady; }
+      var self = this;
+      this.modeNote.innerHTML = 'loading the tool catalog...';
+      this._graphReady = this.api('GET', '/api/catalog').then(function (cat) {
+        self.catalog = cat;
+        self.graph = new GraphEditor({ owner: self, catalog: cat });
+        self.graph.placeAt(self.graphNode);
+        self.graph.startup();
+        self.own(on(self.graph.domNode, 'keydown', function (evt) {
+          // Enter in an inspector field must not submit the job form
+          if (evt.keyCode === 13 && (evt.target.tagName || '').toLowerCase() === 'input') { evt.preventDefault(); evt.target.blur(); }
+        }));
+        self.modeNote.innerHTML = '';
+        return self.formToGraph();
+      });
+      this._graphReady.then(null, function () { self._graphReady = null; });
+      return this._graphReady;
+    },
+
+    /* Open the form's template in the graph editor, carrying over the inputs, options and parameters chosen so far. */
+    formToGraph: function () {
+      if (!this.current) { return null; }
+      var self = this;
+      var req = this.templateRequest().body;
+      return this.api('GET', '/api/templates/' + encodeURIComponent(this.current.template)).then(function (res) {
+        var p = res.pipeline;
+        Object.keys(req.inputs || {}).forEach(function (name) {
+          var v = req.inputs[name];
+          if (p.inputs[name]) { p.inputs[name].source = v.source || v; }
+        });
+        var disabled = [];
+        Object.keys(req.template_params || {}).forEach(function (k) {
+          var v = req.template_params[k];
+          if (/\.enabled$/.test(k)) {
+            if (!v) { disabled.push(k.replace(/\.enabled$/, '')); }
+            return;
+          }
+          var parts = k.split('.');
+          var st = p.steps[parts[0]];
+          if (st) { st.params = st.params || {}; st.params[parts[2]] = v; }
+        });
+        if (Object.keys(self.stepBoxes).length) {
+          p.ui = p.ui || {};
+          p.ui.disabled = disabled;
         }
-      }), lang.hitch(this, function (err) { this.showCheck(err, []); }));
+        self.graph._rememberSourceOptions(res);
+        self.graph.templateSel.set('value', self.current.template, false);
+        self.graph.model.load(p);
+        self.graph.select(null);
+        self.graph.autoLayout(true);
+        self.graph.fit();
+        self.modeNote.innerHTML = 'opened "' + esc(res.label) + '" from the template form';
+      });
+    },
+
+    _applyJson: function () {
+      if (!this.graph) { return true; }
+      var txt = this.jsonText.get('value') || '';
+      var cur = JSON.stringify(this.graph.model.toJSON(), null, 2);
+      if (txt === cur) { return true; }
+      try {
+        this.graph.model.load(JSON.parse(txt));
+        return true;
+      } catch (e) {
+        this.showCheck(null, ['Pipeline JSON does not parse: ' + e.message + ' (fix it, or "Discard JSON edits")']);
+        return false;
+      }
+    },
+
+    onRevertJson: function () {
+      if (this.graph) { this.jsonText.set('value', JSON.stringify(this.graph.model.toJSON(), null, 2)); }
+    },
+
+    /* The template form's fields only count in form mode (they stay in the DOM, hidden, in the other modes). */
+    validate: function () {
+      if (this.mode === 'form' || !this.output_file) { return this.inherited(arguments); }
+      var ok = !!(this.output_path.get('value') && this.output_file.get('value') && this.output_file.isValid());
+      if (this.submitButton) { this.submitButton.set('disabled', !ok); }
+      return ok;
     },
 
     // AppBase.onSubmit -> validate() -> getValues() -> doSubmit(values)
     getValues: function () {
+      if (this.mode === 'json') { this._applyJson(); }
       var req = this.currentRequest();
       var v = lang.mixin({}, req.body || {});
       v.output_path = this.output_path.get('value');

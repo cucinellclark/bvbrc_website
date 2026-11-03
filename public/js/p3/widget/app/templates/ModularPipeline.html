@@ -17,18 +17,32 @@
       <div class="headerrow">
         <label class="appBoxLabel">Pipeline</label>
       </div>
-      <div class="appRow">
-        <label class="paramlabel">Template</label><br>
-        <select data-dojo-type="dijit/form/Select" data-dojo-attach-point="templateSelect" style="width:85%"
-          data-dojo-attach-event="onChange:onTemplateChange" data-dojo-props="maxHeight:400"></select>
+      <div class="appRow mpModeRow">
+        <input type="radio" data-dojo-type="dijit/form/RadioButton" name="mpMode" value="form" checked="checked"
+          data-dojo-attach-point="modeForm" data-dojo-attach-event="onChange:onModeRadio" />
+        <label class="mpModeLabel" style="cursor:pointer" data-mode="form" data-dojo-attach-event="onclick:onModeLabel">Template form</label>&nbsp;&nbsp;
+        <input type="radio" data-dojo-type="dijit/form/RadioButton" name="mpMode" value="graph"
+          data-dojo-attach-point="modeGraph" data-dojo-attach-event="onChange:onModeRadio" />
+        <label class="mpModeLabel" style="cursor:pointer" data-mode="graph" data-dojo-attach-event="onclick:onModeLabel">Graph editor</label>&nbsp;&nbsp;
+        <input type="radio" data-dojo-type="dijit/form/RadioButton" name="mpMode" value="json"
+          data-dojo-attach-point="modeJson" data-dojo-attach-event="onChange:onModeRadio" />
+        <label class="mpModeLabel" style="cursor:pointer" data-mode="json" data-dojo-attach-event="onclick:onModeLabel">JSON</label>
+        <span data-dojo-attach-point="modeNote" style="color:#888;margin-left:10px;"></span>
       </div>
-      <div class="appRow" data-dojo-attach-point="templateDescriptionNode" style="color:#555;"></div>
-      <div class="appRow" data-dojo-attach-point="stepsNode" style="color:#666;font-size:0.9em;"></div>
-      <div class="appRow">
-        <input type="checkbox" data-dojo-type="dijit/form/CheckBox" data-dojo-attach-point="jsonModeBox"
-          data-dojo-attach-event="onChange:onJsonModeChange" />
-        <label>Advanced: edit the pipeline as JSON (custom pipelines)</label>
+      <div data-dojo-attach-point="templateRow">
+        <div class="appRow">
+          <label class="paramlabel">Template</label><br>
+          <select data-dojo-type="dijit/form/Select" data-dojo-attach-point="templateSelect" style="width:85%"
+            data-dojo-attach-event="onChange:onTemplateChange" data-dojo-props="maxHeight:400"></select>
+        </div>
+        <div class="appRow" data-dojo-attach-point="templateDescriptionNode" style="color:#555;"></div>
+        <div class="appRow" data-dojo-attach-point="stepsNode" style="color:#666;font-size:0.9em;"></div>
       </div>
+    </div>
+
+    <!-- ===== Graph editor ===== -->
+    <div class="dijitHidden" data-dojo-attach-point="graphBox">
+      <div data-dojo-attach-point="graphNode"></div>
     </div>
 
     <!-- ===== Inputs ===== -->
@@ -47,12 +61,13 @@
     <!-- ===== JSON editor ===== -->
     <div class="appBox appShadow dijitHidden" data-dojo-attach-point="jsonBox">
       <div class="headerrow"><label class="appBoxLabel">Pipeline JSON (modpipe/pipeline/v1)</label></div>
+      <div class="appRow" style="color:#666;">The same pipeline as the graph editor: edits here apply to the graph when you switch back.</div>
       <div class="appRow">
-        <textarea data-dojo-type="dijit/form/SimpleTextarea" data-dojo-attach-point="jsonText" rows="22"
+        <textarea data-dojo-type="dijit/form/SimpleTextarea" data-dojo-attach-point="jsonText" rows="26"
           style="width:97%;font-family:monospace;font-size:12px;"></textarea>
       </div>
       <div class="appRow">
-        <div data-dojo-type="dijit/form/Button" data-dojo-attach-event="onClick:onLoadTemplateJson">Load current template as JSON</div>
+        <div data-dojo-type="dijit/form/Button" data-dojo-attach-event="onClick:onRevertJson">Discard JSON edits</div>
       </div>
     </div>
 
