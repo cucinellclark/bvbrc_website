@@ -458,6 +458,7 @@ define([
       this.runStateNode.innerHTML = r.ready ? '<span class="mpOk">&#10004; Ready to run</span>'
         : '<span class="' + (r.problems ? 'mpErr' : 'mpMuted') + '">' + esc(r.reason) + '</span>';
       this.headRunBtn.set('disabled', !!this._submitting);
+      this.headRunBtn.set('label', this._submitting ? 'Submitting...' : 'Run');
     },
 
     /* Header Run: submit when everything is set; otherwise open the run setup and say what is missing. */

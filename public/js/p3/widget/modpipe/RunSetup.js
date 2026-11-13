@@ -4,7 +4,8 @@
  *   Inputs   one data editor per pipeline input (same choices as the inspector's input panel)
  *   Options  the pipeline's optional steps (ui.optional) and exposed parameters (ui.expose)
  *   Results  results folder + run name -> <folder>/<run name>/, one result folder per step (.<step>/)
- *   Check    the live server check (errors, notes, jobs, estimated resources) and Run
+ *   Check    the live server check (errors, notes, jobs, estimated resources) and submission errors; the page
+ *            header's Run button (always visible) submits
  * Edits go through the graph editor's model (graph._inspEdit), so undo, the graph and the check stay in sync.
  *
  *   RunSetup.render(page, graph, node) -> {alive(), updateCheck(res)}
@@ -12,11 +13,11 @@
  */
 define([
   'dojo/_base/array', 'dojo/on', 'dojo/dom-construct', 'dojo/dom-class',
-  'dijit/form/Select', 'dijit/form/ValidationTextBox', 'dijit/form/CheckBox', 'dijit/form/Button',
+  'dijit/form/Select', 'dijit/form/ValidationTextBox', 'dijit/form/CheckBox',
   './SourceEditor', './ParamEditor', '../WorkspaceObjectSelector'
 ], function (
   array, on, domConstruct, domClass,
-  Select, ValidationTextBox, CheckBox, Button,
+  Select, ValidationTextBox, CheckBox,
   SourceEditor, ParamEditor, WorkspaceObjectSelector
 ) {
   var esc = SourceEditor.esc;
@@ -43,8 +44,7 @@ define([
     var root = domConstruct.create('div', { 'class': 'mpSetup' }, node);
     var inputProblems = {};          // input name -> node for its check errors
     var editorProblems = {};         // input name -> [problem] from the data editor itself
-    var runBtn, runMsg, checkNode, previewNode, folderSel, runBox;
-    var submitting = false;
+    var runMsg, checkNode, previewNode, folderSel, runBox;
 
     // ---------------------------------------------------------------- header
     var hb = block(root);
@@ -166,27 +166,10 @@ define([
     on(runBox, 'change', function (v) { page.setup.runName = v; refreshRun(); });
     previewNode = domConstruct.create('div', { 'class': 'mpPathPreview' }, rb);
 
-    // ---------------------------------------------------------------- check + run
+    // ---------------------------------------------------------------- check (Run is the page header's button)
     var cb_ = block(root, 'Check');
     domClass.add(cb_, 'mpSetupRunBlock');
     checkNode = domConstruct.create('div', {}, cb_);
-    var rr = domConstruct.create('div', { 'class': 'mpRunRow' }, cb_);
-    runBtn = new Button({ label: 'Run', disabled: true, onClick: function () {
-      if (runBtn.get('disabled')) { return; }
-      submitting = true;
-      refreshRun();
-      runMsg.innerHTML = '<span class="mpMuted">submitting...</span>';
-      page.submitRun().then(function () {
-        submitting = false;
-      }, function (err) {
-        submitting = false;
-        if (!document.body.contains(root)) { return; }
-        showSubmitError(err);
-        refreshRun();
-      });
-    } });
-    runBtn.placeAt(rr);
-    runBtn.startup();
     runMsg = domConstruct.create('div', { 'class': 'mpRunMsg' }, cb_);
 
     function showSubmitError(err) {
@@ -201,7 +184,7 @@ define([
 
     function refreshRun() {
       // data choices may arrive synchronously (cached), before the results and run widgets exist
-      if (!runBox || !runBtn || !document.body.contains(root)) { return; }
+      if (!runBox || !runMsg || !document.body.contains(root)) { return; }
       var folder = (page.setup.folder || '').replace(/\/+$/, '');
       var run = runBox.isValid() ? page.setup.runName : '';
       var ids = stepIds();
@@ -209,7 +192,6 @@ define([
         esc(array.map(ids.slice(0, 6), function (s) { return '.' + s + '/'; }).join(' ') + (ids.length > 6 ? ' ...' : '')) + '</span>'
         : '<span class="mpMuted">choose a folder and a run name</span>';
       page.setupState({ runValid: !!run, editorProblems: editorProblems });
-      runBtn.set('disabled', submitting || !page.readiness().ready);
     }
 
     function updateCheck(res) {
@@ -232,7 +214,7 @@ define([
         var n = stepIds().length;
         if (res.ok) {
           var r = res.resources || {};
-          h = '<div class="mpCheckLine"><span class="mpOk">&#10004; Ready to run</span></div>' +
+          h = '<div class="mpCheckLine"><span class="mpOk">&#10004; Ready to run</span> <span class="mpMuted">(Run is at the top right)</span></div>' +
             '<div class="mpCheckLine mpMuted">' + n + ' job' + (n === 1 ? '' : 's') + ' (one per step)' +
             (r.cpu ? ' &middot; largest step ~' + esc(r.cpu) + ' CPUs, ' + esc(Math.round(r.memory_gb)) + ' GB' : '') +
             (r.runtime ? ' &middot; ~' + esc(r.runtime) : '') + '</div>';
