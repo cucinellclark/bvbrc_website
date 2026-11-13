@@ -13,11 +13,11 @@
  */
 define([
   'dojo/_base/declare', 'dojo/_base/lang', 'dojo/_base/array', 'dojo/on', 'dojo/dom-class', 'dojo/dom-construct',
-  'dojo/request', 'dojo/Deferred', 'dijit/_WidgetBase', 'dijit/form/Button', 'dijit/form/SimpleTextarea', 'dijit/Dialog',
+  'dojo/request', 'dojo/Deferred', 'dojo/dom-geometry', 'dijit/_WidgetBase', 'dijit/form/Button', 'dijit/form/SimpleTextarea', 'dijit/Dialog',
   '../modpipe/GraphEditor', '../modpipe/RunSetup', '../modpipe/RunsView', '../modpipe/SourceEditor'
 ], function (
   declare, lang, array, on, domClass, domConstruct,
-  xhr, Deferred, _WidgetBase, Button, SimpleTextarea, Dialog,
+  xhr, Deferred, domGeometry, _WidgetBase, Button, SimpleTextarea, Dialog,
   GraphEditor, RunSetup, RunsView, SourceEditor
 ) {
   var esc = SourceEditor.esc;
@@ -120,8 +120,29 @@ define([
       }));
     },
 
-    resize: function () {
-      if (this.graph && this.view === 'build') { this._fitSoon(); }
+    /* The site's ApplicationContainer (a BorderContainer, with the workspace bar as its bottom region) gives the
+       page its box here; the graph then takes the height left in the Build view. */
+    resize: function (changeSize) {
+      if (changeSize) { domGeometry.setMarginBox(this.domNode, changeSize); }
+      this._sizeGraph();
+    },
+
+    _sizeGraph: function () {
+      if (!this.graph || this.view !== 'build') { return; }
+      var main = this.graph.domNode.querySelector('.mpMain');
+      if (!main) { return; }
+      var body = this.bodyNode;
+      var cs = window.getComputedStyle(body);
+      var avail = body.clientHeight - parseFloat(cs.paddingTop) - parseFloat(cs.paddingBottom);
+      var used = this.bannerNode.offsetHeight;
+      var n = this.viewNodes.build;
+      array.forEach(n.childNodes, function (c) { if (c.nodeType === 1 && !c.contains(main)) { used += c.offsetHeight; } });
+      array.forEach(this.graph.domNode.childNodes, function (c) { if (c !== main.parentNode && c !== main) { used += c.offsetHeight; } });
+      var h = Math.max(360, Math.floor(avail - used - 12));   // margin: no scrollbar in the Build view
+      if (main.style.height !== h + 'px') {
+        main.style.height = h + 'px';
+        this._fitSoon();
+      }
     },
 
     destroy: function () {
@@ -136,6 +157,7 @@ define([
         domClass.toggle(this.viewNodes[v[0]], 'mpViewOn', v[0] === view);
       }));
       if (view === 'build' && !this.graph) { this.renderBuildEmpty(); }
+      if (view === 'build') { this._sizeGraph(); }
       if (this.runs) { this.runs.setActive(view === 'runs' && this.signedIn()); }
       if (view === 'pipelines' && this.templates) { this.renderRecent(); }
     },
@@ -277,6 +299,7 @@ define([
         self.graph.placeAt(host);
         self.graph.startup();
         self.setEditing(false);
+        self._sizeGraph();
         return self.graph;
       });
       this._graphReady.then(null, function (err) {
