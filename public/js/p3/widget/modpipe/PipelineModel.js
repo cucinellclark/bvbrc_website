@@ -3,7 +3,8 @@
  *
  * The pipeline JSON is the single source of truth (Form/Graph/JSON views all read it). Editor-only state lives in
  * pipeline.ui: positions {"in:<name>"|"step:<id>": {x, y}}, disabled [optional steps switched off], optional
- * {<step>: {label, default, bypass}}, links {"<step>.params.<id>": "<step>.params.<id>"}. The engine accepts and
+ * {<step>: {label, default, bypass}}, links {"<step>.params.<id>": "<step>.params.<id>"}, expose ["<step>.params.<id>",
+ * the options the run-setup panel shows]. The engine accepts and
  * applies `ui` (ModularService pipeline.apply_ui), so saved pipelines keep their layout.
  *
  * Every edit goes through a method here: it is checked, applied, recorded for undo, and listeners are notified.
@@ -340,6 +341,7 @@
         delete this.p.ui.positions['step:' + sid];
         if (this.p.ui.disabled) { this.p.ui.disabled = this.p.ui.disabled.filter(function (s) { return s !== sid; }); }
         if (this.p.ui.optional) { delete this.p.ui.optional[sid]; }
+        if (this.p.ui.expose) { this.p.ui.expose = this.p.ui.expose.filter(function (k) { return k.split('.')[0] !== sid; }); }
         this._dropLinks(sid);
       });
     },
@@ -371,6 +373,9 @@
           var ren = function (k) { return k.split('.')[0] === oldId ? newId + k.slice(oldId.length) : k; };
           Object.keys(this.p.ui.links).forEach(function (t) { links[ren(t)] = ren(self.p.ui.links[t]); });
           this.p.ui.links = links;
+        }
+        if (this.p.ui.expose) {
+          this.p.ui.expose = this.p.ui.expose.map(function (k) { return k.split('.')[0] === oldId ? newId + k.slice(oldId.length) : k; });
         }
       });
     },

@@ -11,6 +11,10 @@
  * - Layout: positions are stored in pipeline.ui.positions; nodes without one are placed by a layered layout.
  *
  * owner: the ModularPipeline page (api(), templates, catalog cache).
+ * embedded: true when the page provides open/save/JSON and template choice (the workbench): the toolbar keeps
+ *   layout, zoom and undo; with nothing selected the inspector shows owner.renderRunSetup(node, editor); every check
+ *   result goes to owner.onCheck(res) ({pending}, {empty}, {error} or the /api/validate answer);
+ *   setPaletteVisible(false) hides the palette (read-only look; the canvas still edits).
  */
 define([
   'require', 'dojo/_base/declare', 'dojo/_base/lang', 'dojo/_base/array', 'dojo/on', 'dojo/dom-class',
@@ -56,6 +60,7 @@ define([
   return declare([_WidgetBase], {
     owner: null,
     catalog: null,
+    embedded: false,
     model: null,
     sel: null,                // {kind: 'node'|'edge'|'port'|'auto', key, ...}
     view: null,               // {tx, ty, k}
@@ -112,6 +117,17 @@ define([
 
     _buildToolbar: function () {
       var self = this;
+      if (this.embedded) {
+        this._btn('Auto-layout', 'Arrange all nodes left to right', function () { this.autoLayout(); });
+        this._btn('Fit', 'Zoom to fit the whole pipeline', function () { this.fit(); });
+        this._btn('-', 'Zoom out', function () { this.zoomBy(1 / 1.2); });
+        this._btn('+', 'Zoom in', function () { this.zoomBy(1.2); });
+        domConstruct.create('span', { 'class': 'mpSep' }, this._tbNode);
+        this.undoBtn = this._btn('Undo', 'Undo (Ctrl+Z)', function () { this.model.undo(); });
+        this.redoBtn = this._btn('Redo', 'Redo (Ctrl+Shift+Z)', function () { this.model.redo(); });
+        this._updateUndo();
+        return;
+      }
       this._btn('New', 'Start an empty pipeline', function () {
         if (Object.keys(this.model.p.steps).length && !window.confirm('Discard the current pipeline? (Undo can bring it back.)')) { return; }
         this.model.reset();
@@ -154,12 +170,37 @@ define([
     refreshMyPipelines: function () {
       var self = this;
       return this.listMyPipelines().then(function (mine) {
-        var cur = self.templateSel.get('value');
         self._myPipelines = mine;
-        self.templateSel.set('options', self._templateOptions(mine));
-        if (cur) { self.templateSel.set('value', cur, false); }
+        if (self.templateSel) {
+          var cur = self.templateSel.get('value');
+          self.templateSel.set('options', self._templateOptions(mine));
+          if (cur) { self.templateSel.set('value', cur, false); }
+        }
         return mine;
       });
+    },
+
+    setPaletteVisible: function (v) {
+      domClass.toggle(this.domNode, 'mpNoPalette', !v);
+      this.paletteVisible = !!v;
+    },
+
+    /* Path the pipeline was opened from or last saved to (null for templates and new pipelines). */
+    savedPath: function () { return this._savedPath || null; },
+
+    /* Save back to savedPath() without a dialog; resolves with the path. */
+    saveInPlace: function () {
+      var self = this;
+      var path = this._savedPath;
+      if (!path) { return this.saveToWorkspace(); }
+      var dir = path.replace(/\/[^/]*$/, '');
+      var fname = path.split('/').pop();
+      return WorkspaceManager.create({ path: dir, name: fname, type: 'json',
+        content: JSON.stringify(this.model.toJSON(), null, 1) }, false, true).then(function () {
+        self.flash('Saved ' + path, true);
+        if (self.onSaved) { self.onSaved(path); }
+        return path;
+      }, function (e) { self.flash('Save failed: ' + ((e && (e.message || e)) || '')); throw e; });
     },
 
     _updateUndo: function () {
@@ -267,7 +308,7 @@ define([
         self._rememberSourceOptions(res);
         self._savedPath = null;
         self.model.load(res.pipeline);
-        self.templateSel.set('value', name, false);
+        if (self.templateSel) { self.templateSel.set('value', name, false); }
         self.select(null);
         self.autoLayout(true);
         self.fit();
@@ -378,7 +419,10 @@ define([
           d.hide();
           self._savedPath = dir + '/' + fname;
           self.flash('Saved ' + self._savedPath, true);
-          self.refreshMyPipelines().then(function () { self.templateSel.set('value', 'ws:' + self._savedPath, false); });
+          if (self.onSaved) { self.onSaved(self._savedPath); }
+          self.refreshMyPipelines().then(function () {
+            if (self.templateSel) { self.templateSel.set('value', 'ws:' + self._savedPath, false); }
+          });
         }, function (e) {
           msg.innerHTML = esc((e && (e.message || e)) || 'save failed') + ' (tick "overwrite" to replace an existing file)';
         });
@@ -526,9 +570,14 @@ define([
       return true;
     },
 
+    _notifyCheck: function (res) {
+      if (this.owner && this.owner.onCheck) { this.owner.onCheck(res); }
+    },
+
     _scheduleValidate: function () {
       if (this._timer) { clearTimeout(this._timer); }
       this._renderStatus({ pending: true });
+      this._notifyCheck({ pending: true });
       this._timer = setTimeout(lang.hitch(this, 'validateNow'), 600);
     },
 
@@ -536,7 +585,11 @@ define([
       var self = this;
       var seq = ++this._seq;
       var rev = this.model.revision;
-      if (!Object.keys(this.model.p.steps).length) { this._renderStatus({ empty: true }); return null; }
+      if (!Object.keys(this.model.p.steps).length) {
+        this._renderStatus({ empty: true });
+        this._notifyCheck({ empty: true });
+        return null;
+      }
       return this.owner.api('POST', '/api/validate', { pipeline: this.model.toJSON() }).then(function (res) {
         if (seq !== self._seq || rev !== self.model.revision) { return res; }
         self.model.server = res;
@@ -545,9 +598,13 @@ define([
         self._renderStatus(res);
         self._refreshInspectorIssues();
         self._renderPalette();
+        self._notifyCheck(res);
         return res;
       }, function (err) {
-        if (seq === self._seq) { self._renderStatus({ error: err.error || (err.errors || []).join('; ') }); }
+        if (seq === self._seq) {
+          self._renderStatus({ error: err.error || (err.errors || []).join('; ') });
+          self._notifyCheck({ error: err.error || (err.errors || []).join('; ') });
+        }
         return err;
       });
     },
@@ -1173,6 +1230,7 @@ define([
       if (s && s.kind === 'edge' && this._edgeList && this._edgeList[s.index]) { return this._inspectEdge(this._edgeList[s.index]); }
       if (s && s.kind === 'port') { return this._inspectPort(s); }
       if (s && s.kind === 'auto') { return this._inspectAuto(s.step); }
+      if (this.embedded && this.owner && this.owner.renderRunSetup) { return this.owner.renderRunSetup(this.inspectorNode, this); }
       return this._inspectPipeline();
     },
 
