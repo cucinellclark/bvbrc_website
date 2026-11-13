@@ -176,20 +176,24 @@ define([
       submitting = true;
       refreshRun();
       runMsg.innerHTML = '<span class="mpMuted">submitting...</span>';
-      page.submitRun(page.setup.folder, page.setup.runName).then(function () {
+      page.submitRun().then(function () {
         submitting = false;
       }, function (err) {
         submitting = false;
         if (!document.body.contains(root)) { return; }
-        var list = (err && err.errors) || [];
-        runMsg.innerHTML = '<span class="mpErr">' + esc((err && err.error) || 'submission failed') + '</span>' +
-          (list.length ? '<ul class="mpIssueList">' + array.map(list, function (e) { return '<li class="mpSev-error">' + esc(e) + '</li>'; }).join('') + '</ul>' : '');
+        showSubmitError(err);
         refreshRun();
       });
     } });
     runBtn.placeAt(rr);
     runBtn.startup();
     runMsg = domConstruct.create('div', { 'class': 'mpRunMsg' }, cb_);
+
+    function showSubmitError(err) {
+      var list = (err && err.errors) || [];
+      runMsg.innerHTML = '<span class="mpErr">' + esc((err && err.error) || 'submission failed') + '</span>' +
+        (list.length ? '<ul class="mpIssueList">' + array.map(list, function (e) { return '<li class="mpSev-error">' + esc(e) + '</li>'; }).join('') + '</ul>' : '');
+    }
 
     function stepIds() {
       return array.filter(model.order(), function (s) { return !model.isDisabled(s); });
@@ -204,10 +208,8 @@ define([
       previewNode.innerHTML = folder && run ? esc(folder + '/' + run + '/') + '<br><span class="mpMuted">one folder per step: ' +
         esc(array.map(ids.slice(0, 6), function (s) { return '.' + s + '/'; }).join(' ') + (ids.length > 6 ? ' ...' : '')) + '</span>'
         : '<span class="mpMuted">choose a folder and a run name</span>';
-      var res = page.check;
-      var editorBad = Object.keys(editorProblems).some(function (k) { return (editorProblems[k] || []).length; });
-      var ok = !!(res && res.ok) && !!folder && !!run && !editorBad && !submitting;
-      runBtn.set('disabled', !ok);
+      page.setupState({ runValid: !!run, editorProblems: editorProblems });
+      runBtn.set('disabled', submitting || !page.readiness().ready);
     }
 
     function updateCheck(res) {
@@ -257,6 +259,7 @@ define([
     }
 
     updateCheck(page.check);
+    if (page.lastSubmitError) { showSubmitError(page.lastSubmitError); page.lastSubmitError = null; }
     return {
       alive: function () { return document.body.contains(root); },
       updateCheck: updateCheck

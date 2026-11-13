@@ -279,6 +279,11 @@ define([
         self.nameNode = domConstruct.create('span', { 'class': 'mpBuildName' }, head);
         self.originNode = domConstruct.create('span', { 'class': 'mpBuildOrigin' }, head);
         domConstruct.create('span', { 'class': 'mpGrow' }, head);
+        self.runStateNode = domConstruct.create('span', { 'class': 'mpRunState' }, head);
+        self.headRunBtn = new Button({ label: 'Run', 'class': 'mpHeadRun', title: 'Run this pipeline (opens the run setup if something is missing)',
+          onClick: lang.hitch(self, 'onHeadRun') });
+        self.headRunBtn.placeAt(head);
+        domConstruct.create('span', { 'class': 'mpSep' }, head);
         self.editBtn = new Button({ label: 'Edit steps', title: 'Show the tool palette to add, remove and rewire steps',
           onClick: function () { self.setEditing(!self.editing); } });
         self.editBtn.placeAt(head);
@@ -338,6 +343,7 @@ define([
         self.show('build');
         self.origin = origin;
         self.check = null;
+        self._setupState = null;
         return load(g).then(function (x) {
           self.setup.runName = RunSetup.defaultRunName(g.model.p.name);
           self.setEditing(!!editing);
@@ -412,17 +418,84 @@ define([
     onCheck: function (res) {
       this.check = res;
       if (this._setupPanel && this._setupPanel.alive()) { this._setupPanel.updateCheck(res); }
+      this.updateRunBar();
     },
 
-    submitRun: function (folder, runName) {
+    /* The run-setup panel reports what only it knows (run name valid, data editor problems). */
+    setupState: function (st) {
+      this._setupState = st;
+      this.updateRunBar();
+    },
+
+    /* {ready, reason}: the one rule for both Run buttons (header and run-setup panel). */
+    readiness: function () {
+      var c = this.check;
+      var st = this._setupState || {};
+      if (!c || c.pending) { return { ready: false, reason: 'checking...' }; }
+      if (c.empty) { return { ready: false, reason: 'add steps first' }; }
+      if (c.error) { return { ready: false, reason: 'check failed: ' + c.error }; }
+      if (!c.ok) {
+        var n = array.filter(c.issues || [], function (i) { return i.severity === 'error'; }).length;
+        return { ready: false, reason: n + ' problem' + (n === 1 ? '' : 's') + ' to fix', problems: true };
+      }
+      var probs = [];
+      // the data editors' own problems are only current while the run setup is shown (else the server check decides)
+      if (this._setupPanel && this._setupPanel.alive()) {
+        Object.keys(st.editorProblems || {}).forEach(function (k) { probs = probs.concat(st.editorProblems[k] || []); });
+      }
+      if (probs.length) { return { ready: false, reason: probs[0] }; }
+      if (!this.setup.folder) { return { ready: false, reason: 'choose a results folder' }; }
+      var runName = this.setup.runName || '';
+      if (st.runValid === false || !new RegExp('^' + RunSetup.RUN_NAME_RE + '$').test(runName)) {
+        return { ready: false, reason: 'choose a valid run name' };
+      }
+      return { ready: true, reason: 'ready' };
+    },
+
+    updateRunBar: function () {
+      if (!this.runStateNode) { return; }
+      var r = this.readiness();
+      this.runStateNode.innerHTML = r.ready ? '<span class="mpOk">&#10004; Ready to run</span>'
+        : '<span class="' + (r.problems ? 'mpErr' : 'mpMuted') + '">' + esc(r.reason) + '</span>';
+      this.headRunBtn.set('disabled', !!this._submitting);
+    },
+
+    /* Header Run: submit when everything is set; otherwise open the run setup and say what is missing. */
+    onHeadRun: function () {
       var self = this;
+      // show the run setup first: it re-reads the data editors, so the decision below is current
+      if (!(this._setupPanel && this._setupPanel.alive())) { this.graph.select(null); }
+      var r = this.readiness();
+      if (!r.ready) {
+        this.graph.flash('Before running: ' + r.reason);
+        return;
+      }
+      this.submitRun().then(null, function (err) {
+        self.lastSubmitError = err;
+        self.graph.select(null);
+        self.graph.flash((err && err.error) || 'submission failed');
+      });
+    },
+
+    submitRun: function () {
+      var self = this;
+      var folder = this.setup.folder;
+      var runName = this.setup.runName;
+      this._submitting = true;
+      this.updateRunBar();
       try { window.localStorage.setItem('modpipe.resultsFolder', folder); } catch (e) { /* storage blocked */ }
       return this.api('POST', '/api/submit', { pipeline: this.graph.model.toJSON(), output_path: folder,
         output_file: runName }).then(function (res) {
+        self._submitting = false;
+        self.updateRunBar();
         self.show('runs');
         self.runs.refresh(res.job.id);
         if (self.recentNode) { self.renderRecent(); }
         return res.job;
+      }, function (err) {
+        self._submitting = false;
+        self.updateRunBar();
+        throw err;
       });
     }
   });

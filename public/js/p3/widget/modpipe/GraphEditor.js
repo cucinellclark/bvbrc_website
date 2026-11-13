@@ -1225,6 +1225,10 @@ define([
     renderInspector: function () {
       this._clearInspector();
       var s = this.sel;
+      if (this.embedded && s && this.owner && this.owner.renderRunSetup) {
+        var back = domConstruct.create('a', { href: '#', 'class': 'mpBackToSetup', innerHTML: '&lsaquo; Run setup' }, this.inspectorNode);
+        on(back, 'click', lang.hitch(this, function (evt) { evt.preventDefault(); this.select(null); }));
+      }
       if (s && s.kind === 'node' && s.key.indexOf('step:') === 0 && this.model.p.steps[s.key.slice(5)]) { return this._inspectStep(s.key.slice(5), s.focusPort); }
       if (s && s.kind === 'node' && s.key.indexOf('in:') === 0 && this.model.p.inputs[s.key.slice(3)]) { return this._inspectInput(s.key.slice(3)); }
       if (s && s.kind === 'edge' && this._edgeList && this._edgeList[s.index]) { return this._inspectEdge(this._edgeList[s.index]); }
