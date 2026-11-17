@@ -854,7 +854,8 @@ define([
         var h = '<div class="mpNodeHead" data-node="' + esc(key) + '"><div class="mpNodeTitle">' + esc(sid) + self._badges(iss) +
           (scatter ? ' <span class="mpBadge mpScatter" title="runs once per item of ' + esc(scatter) + '">&times;' + esc(scatterN || 'N') + ' per sample</span>' : '') +
           (disabled ? ' <span class="mpBadge mpOff">off</span>' : '') +
-          '</div><div class="mpNodeSub">' + esc(mod ? (mod.label || mod.id) : 'unknown module ' + st.module) + '</div></div>';
+          '</div><div class="mpNodeSub">' + (mod && mod.service ? '<span class="mpServiceNote">[BV-BRC service]</span> ' : '') +
+          esc(mod ? (mod.label || mod.id) : 'unknown module ' + st.module) + '</div></div>';
         if (mod) {
           mod.inputs.forEach(function (port, i) { h += self._portHtml(key, 'in', port, i, null, null, null); });
           mod.outputs.forEach(function (port, i) {
@@ -1360,7 +1361,9 @@ define([
       if (mod) {
         domConstruct.create('div', { 'class': 'mpInspText', innerHTML: esc(mod.description || '') +
           (mod.tool ? '<br><span class="mpMuted">' + esc(mod.tool.id) + ' ' + esc(mod.tool.version || '') + ' &middot; ' +
-            esc((mod.resources || {}).cpu || 1) + ' CPU, ' + esc((mod.resources || {}).memory || '') + ', ' + esc((mod.resources || {}).runtime || '') + '</span>' : '') }, sec);
+            esc((mod.resources || {}).cpu || 1) + ' CPU, ' + esc((mod.resources || {}).memory || '') + ', ' + esc((mod.resources || {}).runtime || '') + '</span>' : '') +
+          (mod.service ? '<br><span class="mpServiceNote">Runs the BV-BRC <b>' + esc(mod.service) + '</b> service as one job ' +
+            '(it appears in your BV-BRC jobs).</span>' : '') }, sec);
       }
       domConstruct.create('div', { 'class': 'mpLabel', innerHTML: 'Step name' }, sec);
       var nm = new ValidationTextBox({ value: sid, regExp: '[A-Za-z][A-Za-z0-9_-]{0,63}', style: 'width:95%' });

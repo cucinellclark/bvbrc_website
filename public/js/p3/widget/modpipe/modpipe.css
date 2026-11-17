@@ -234,3 +234,4 @@
 .mpHeadRun .dijitButtonNode { background: #2e7d32 !important; color: #fff !important; border-color: #256628 !important; padding: 2px 16px; font-weight: 600; }
 .mpHeadRun.dijitButtonDisabled .dijitButtonNode { background: #9bbf9d !important; }
 .mpBackToSetup { display: inline-block; margin: 2px 0 6px; font-weight: 600; }
+.mpServiceNote { color: #6a4c93; }
